@@ -122,11 +122,11 @@ export const employeesOnField = employees
 
 /* ── Notifications ──────────────────────────────────────── */
 export const notifications = [
-  { id: "N-001", type: "payment" as const, message: "Green Earth NGO — ₹95,000 overdue (52 days)", time: "2h ago", read: false },
-  { id: "N-002", type: "payment" as const, message: "Speedway Motors — ₹2,20,000 overdue (37 days)", time: "2h ago", read: false },
-  { id: "N-003", type: "lead" as const, message: "Lead: Mahesh Gowda — Quotation follow-up due", time: "5h ago", read: false },
-  { id: "N-004", type: "shoot" as const, message: "Reel Shoot tomorrow — Adv. Rajesh Kumar", time: "6h ago", read: true },
-  { id: "N-005", type: "general" as const, message: "Monthly reports due — April 30", time: "1d ago", read: true },
-  { id: "N-006", type: "payment" as const, message: "Adv. Rajesh Kumar — ₹1,75,000 overdue (37 days)", time: "1d ago", read: false },
-  { id: "N-007", type: "lead" as const, message: "New lead: Suresh Patil — Patil Industries (via Anil Verma)", time: "2d ago", read: true },
+  { id: "N-001", type: "payment" as const, title: "Payment Overdue", message: "Green Earth NGO — ₹95,000 overdue (52 days)", time: "2h ago", read: false, urgent: true },
+  { id: "N-002", type: "payment" as const, title: "Payment Overdue", message: "Speedway Motors — ₹2,20,000 overdue (37 days)", time: "2h ago", read: false, urgent: true },
+  { id: "N-003", type: "lead" as const, title: "Follow-up Due", message: "Lead: Mahesh Gowda — Quotation follow-up due", time: "5h ago", read: false, urgent: false },
+  { id: "N-004", type: "shoot" as const, title: "Upcoming Shoot", message: "Reel Shoot tomorrow — Adv. Rajesh Kumar", time: "6h ago", read: true, urgent: false },
+  { id: "N-005", type: "general" as const, title: "Report Due", message: "Monthly reports due — April 30", time: "1d ago", read: true, urgent: false },
+  { id: "N-006", type: "payment" as const, title: "Payment Overdue", message: "Adv. Rajesh Kumar — ₹1,75,000 overdue (37 days)", time: "1d ago", read: false, urgent: true },
+  { id: "N-007", type: "lead" as const, title: "New Lead", message: "New lead: Suresh Patil — Patil Industries (via Anil Verma)", time: "2d ago", read: true, urgent: false },
 ];

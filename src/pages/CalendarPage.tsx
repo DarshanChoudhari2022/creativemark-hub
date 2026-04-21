@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 import { calendarEvents as dataCalendarEvents } from "@/data/calendar";
 import { leads } from "@/data/leads";
-import type { CalendarEventType } from "@/types";
+import type { CalendarEventType, EventType } from "@/types";
 
 interface PageCalendarEvent {
   id: string;

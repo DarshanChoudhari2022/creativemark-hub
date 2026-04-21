@@ -11,8 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/shared";
-import { employees as initialEmployees } from "@/data/employees";
-import { clients } from "@/data/clients";
+import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -25,14 +24,23 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const Employees = () => {
-  const [employees, setEmployees] = useState(initialEmployees);
+  const { data: employeesData, loading, insert: insertEmployee } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name))');
+  const { data: clients } = useSupabaseTable<any>('clients', 'id, name, whatsapp');
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null);
+  const [selectedEmp, setSelectedEmp] = useState<any | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", role: "Graphic Designer" as EmployeeRole, phone: "", email: "", salary: 0 });
   const [logForm, setLogForm] = useState({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, notes: "" });
+
+  const employees = useMemo(() => {
+    return employeesData.map(e => ({
+      ...e,
+      assignedClients: e.client_assignments?.map((ca: any) => ca.client_id) || [],
+      assignedClientNames: e.client_assignments?.map((ca: any) => ca.clients?.name).filter(Boolean) || [],
+    }));
+  }, [employeesData]);
 
   const filtered = useMemo(() =>
     employees.filter(e =>
@@ -41,39 +49,55 @@ const Employees = () => {
       e.role.toLowerCase().includes(search.toLowerCase())
     ), [employees, search]);
 
-  const addEmployee = () => {
+  const addEmployee = async () => {
     if (!form.name) { toast.error("Employee name is required"); return; }
-    const newEmp: Employee = {
-      id: `E-${String(employees.length + 1).padStart(3, "0")}`,
-      name: form.name, role: form.role, phone: form.phone, email: form.email,
-      salary: form.salary, advanceTaken: 0, duesPending: 0,
-      joiningDate: new Date().toISOString().slice(0, 10),
-      status: "Active", onFieldToday: false, assignedClients: [], workLogs: [],
-    };
-    setEmployees([...employees, newEmp]);
-    setAddOpen(false);
-    setForm({ name: "", role: "Graphic Designer", phone: "", email: "", salary: 0 });
-    toast.success("Employee added successfully");
+    
+    const { error } = await insertEmployee({
+      name: form.name,
+      role: form.role,
+      phone: form.phone,
+      whatsapp: form.phone,
+      email: form.email,
+      salary: form.salary,
+      status: "Active",
+    });
+
+    if (error) {
+      toast.error("Failed to add employee: " + error.message);
+    } else {
+      setAddOpen(false);
+      setForm({ name: "", role: "Graphic Designer", phone: "", email: "", salary: 0 });
+      toast.success("Employee added successfully");
+    }
   };
 
-  const addWorkLog = () => {
+  const addWorkLog = async () => {
     if (!selectedEmp || !logForm.clientId || !logForm.workType) { toast.error("Fill all required fields"); return; }
-    const client = clients.find(c => c.id === logForm.clientId);
-    const newLog: WorkLog = {
-      date: logForm.date, clientId: logForm.clientId,
-      clientName: client?.name || "—", workType: logForm.workType,
-      location: logForm.location, hours: logForm.hours, notes: logForm.notes,
-    };
-    setEmployees(employees.map(e => e.id === selectedEmp.id ? { ...e, workLogs: [newLog, ...e.workLogs] } : e));
-    setLogOpen(false);
-    setLogForm({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, notes: "" });
-    toast.success("Work log added");
+    
+    const { error } = await supabase.from('work_logs').insert({
+      employee_id: selectedEmp.id,
+      date: logForm.date,
+      client_id: logForm.clientId,
+      work_type: logForm.workType,
+      location: logForm.location,
+      hours: logForm.hours,
+      notes: logForm.notes,
+      status: "Completed",
+    });
+
+    if (error) {
+      toast.error("Failed to add work log: " + error.message);
+    } else {
+      setLogOpen(false);
+      setLogForm({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, notes: "" });
+      toast.success("Work log added");
+    }
   };
 
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").slice(0, 2);
-  const sendWorkLogToClient = (emp: Employee, log: WorkLog) => {
+  const sendWorkLogToClient = (emp: any, log: any) => {
     const msg = `Hi, this is to confirm that ${emp.name} (${emp.role}) worked on "${log.workType}" at ${log.location} on ${formatDateDDMMYYYY(new Date(log.date))} for ${log.hours} hours. — CreativeMark`;
-    const client = clients.find(c => c.id === log.clientId);
+    const client = clients?.find((c: any) => c.id === log.client_id);
     if (client?.whatsapp) window.open(waLink(client.whatsapp, msg), "_blank");
   };
 
@@ -131,12 +155,19 @@ const Employees = () => {
         </div>
       </div>
 
-      {/* Employee Cards */}
-      <div className="space-y-3">
         {filtered.map((emp) => {
           const isOpen = detailId === emp.id;
-          const assignedClientsList = clients.filter(c => emp.assignedClients.includes(c.id));
-          const totalHours = emp.workLogs.reduce((s, l) => s + l.hours, 0);
+          const assignedClientsList = clients?.filter((c: any) => emp.assignedClients.includes(c.id)) || [];
+          const salary = emp.salary ?? 0;
+          const advanceTaken = emp.advance_taken ?? 0;
+          const duesPending = emp.dues_pending ?? 0;
+          const netPayable = salary - advanceTaken + duesPending;
+          const joiningDateVal = emp.date_joined || new Date().toISOString();
+
+          const totalHours = emp.work_logs?.reduce((s, l) => {
+            if (l.hours) return s + l.hours;
+            return s;
+          }, 0) || 0;
 
           return (
             <Collapsible key={emp.id} open={isOpen} onOpenChange={(open) => setDetailId(open ? emp.id : null)}>
@@ -149,7 +180,7 @@ const Employees = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-bold">{emp.name}</span>
-                        <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[emp.status]}`}>{emp.status}</Badge>
+                        <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[emp.status] || ""}`}>{emp.status}</Badge>
                         {emp.onFieldToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">On Field</span>}
                       </div>
                       <div className="text-sm text-muted-foreground">{emp.role}</div>
@@ -157,11 +188,11 @@ const Employees = () => {
                     <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
                       <div className="text-center">
                         <div className="text-xs uppercase">Salary</div>
-                        <div className="font-semibold text-foreground">{formatINR(emp.salary)}</div>
+                        <div className="font-semibold text-foreground">{formatINR(salary)}</div>
                       </div>
                       <div className="text-center">
                         <div className="text-xs uppercase">Dues</div>
-                        <div className={`font-semibold ${emp.duesPending > 0 ? "text-primary" : "text-foreground"}`}>{formatINR(emp.duesPending)}</div>
+                        <div className={`font-semibold ${duesPending > 0 ? "text-primary" : "text-foreground"}`}>{formatINR(duesPending)}</div>
                       </div>
                       <div className="text-center">
                         <div className="text-xs uppercase">Clients</div>
@@ -175,13 +206,13 @@ const Employees = () => {
                 <CollapsibleContent>
                   <div className="border-t border-border p-5 bg-muted/10">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                      {/* Info */}
+                      {/* Info Section */}
                       <div className="space-y-3">
-                        <h4 className="font-bold text-sm flex items-center gap-1.5"><UsersIcon className="h-4 w-4" /> Contact & Details</h4>
+                        <h4 className="font-bold text-sm flex items-center gap-1.5"><UsersIcon className="h-4 w-4" /> Contact &amp; Details</h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-muted-foreground" /> {emp.phone}</div>
                           <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /> {emp.email}</div>
-                          <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 text-muted-foreground" /> Joined {formatDateDDMMYYYY(new Date(emp.joiningDate))}</div>
+                          <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 text-muted-foreground" /> Joined {formatDateDDMMYYYY(joiningDateVal)}</div>
                         </div>
                         <div className="pt-2">
                           <h5 className="text-xs font-semibold text-muted-foreground mb-1.5">Assigned Clients</h5>
@@ -195,63 +226,63 @@ const Employees = () => {
                         </div>
                       </div>
 
-                      {/* Salary & Dues */}
+                      {/* Salary Section */}
                       <div className="space-y-3">
-                        <h4 className="font-bold text-sm flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Salary & Dues</h4>
+                        <h4 className="font-bold text-sm flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Salary &amp; Dues</h4>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Monthly Salary</div>
-                            <div className="text-lg font-bold">{formatINR(emp.salary)}</div>
+                            <div className="text-lg font-bold">{formatINR(salary)}</div>
                           </div>
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Advance Taken</div>
-                            <div className={`text-lg font-bold ${emp.advanceTaken > 0 ? "text-amber-600" : ""}`}>{formatINR(emp.advanceTaken)}</div>
+                            <div className={`text-lg font-bold ${advanceTaken > 0 ? "text-amber-600" : ""}`}>{formatINR(advanceTaken)}</div>
                           </div>
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Dues Pending</div>
-                            <div className={`text-lg font-bold ${emp.duesPending > 0 ? "text-primary" : ""}`}>{formatINR(emp.duesPending)}</div>
+                            <div className={`text-lg font-bold ${duesPending > 0 ? "text-primary" : ""}`}>{formatINR(duesPending)}</div>
                           </div>
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Net Payable</div>
-                            <div className="text-lg font-bold">{formatINR(emp.salary - emp.advanceTaken + emp.duesPending)}</div>
+                            <div className="text-lg font-bold">{formatINR(netPayable)}</div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Work Log */}
+                      {/* Work Log Section */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <h4 className="font-bold text-sm flex items-center gap-1.5"><Clock className="h-4 w-4" /> Recent Work Log</h4>
-                          <Button
+                          <h4 className="font-bold text-sm flex items-center gap-1.5"><Clock className="h-4 w-4" /> Recent Work</h4>
+                          <Button 
                             size="sm" variant="outline" className="text-xs h-7"
                             onClick={() => { setSelectedEmp(emp); setLogOpen(true); }}
                           >
                             <Plus className="h-3 w-3" /> Log Work
                           </Button>
                         </div>
-                        <div className="text-xs text-muted-foreground mb-1">{totalHours} total hours logged</div>
+                        <div className="text-xs text-muted-foreground mb-1">{totalHours.toFixed(1)} total hours logged</div>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                          {emp.workLogs.slice(0, 5).map((log, i) => (
-                            <div key={i} className="flex items-start justify-between p-2 rounded border border-border text-xs hover:bg-muted/30 transition-colors">
-                              <div>
-                                <div className="font-semibold">{log.workType}</div>
-                                <div className="text-muted-foreground">{log.clientName} · {log.location}</div>
+                          {emp.workLogs.slice(0, 5).map((log, i) => {
+                            const duration = log.hours ?? (log.reportingTime && log.endTime ? ((new Date(`2000-01-01T${log.endTime}`).getTime() - new Date(`2000-01-01T${log.reportingTime}`).getTime()) / (1000 * 60 * 60)).toFixed(1) : null);
+                            return (
+                              <div key={i} className="flex items-start justify-between p-2 rounded border border-border text-xs hover:bg-muted/30 transition-colors">
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-semibold truncate">{log.workType}</div>
+                                  <div className="text-muted-foreground truncate">{log.clientName} · {log.location}</div>
+                                </div>
+                                <div className="text-right shrink-0 ml-2">
+                                  <div className="font-mono">{formatDateDDMMYYYY(log.date)}</div>
+                                  <div className="text-muted-foreground">{duration ?? "—"}h</div>
+                                </div>
                               </div>
-                              <div className="text-right shrink-0 ml-2">
-                                <div className="font-mono">{formatDateDDMMYYYY(new Date(log.date))}</div>
-                                <div className="text-muted-foreground">{log.hours}h</div>
-                              </div>
-                            </div>
-                          ))}
-                          {emp.workLogs.length === 0 && <div className="text-xs text-muted-foreground text-center py-3">No work logs yet</div>}
+                            );
+                          })}
+                          {emp.workLogs.length === 0 && <div className="text-xs text-muted-foreground text-center py-3">No work logged yet</div>}
                         </div>
                         {emp.workLogs.length > 0 && (
-                          <Button
+                          <Button 
                             size="sm" variant="ghost" className="text-xs w-full"
-                            onClick={() => {
-                              const latestLog = emp.workLogs[0];
-                              sendWorkLogToClient(emp, latestLog);
-                            }}
+                            onClick={() => sendWorkLogToClient(emp, emp.workLogs[0])}
                           >Share Latest Log via WhatsApp</Button>
                         )}
                       </div>

@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader, PaymentBadge } from "@/components/shared";
-import { clients, Client } from "@/data/clients";
+import { clients } from "@/data/clients";
+import type { Client } from "@/types";
 import { employees } from "@/data/employees";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 
@@ -67,7 +68,7 @@ const ClientDetail = () => {
               <div className="flex items-center gap-1 text-sm text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> {client.area}</div>
             )}
             <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {client.contact}</span>
+              <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {client.phone}</span>
               <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {client.email}</span>
             </div>
           </div>
@@ -127,12 +128,16 @@ const ClientDetail = () => {
             <Card className="p-5">
               <h3 className="font-bold text-base mb-3">Active Services</h3>
               <div className="space-y-2">
-                {client.services.map(s => (
-                  <div key={s} className="flex items-center gap-2 p-2 rounded-lg border border-border">
-                    <span className="h-2 w-2 rounded-full bg-primary" />
-                    <span className="text-sm font-medium">{s}</span>
-                  </div>
-                ))}
+                {client.services.map(s => {
+                  const serviceName = typeof s === 'string' ? s : s.serviceName;
+                  const serviceId = typeof s === 'string' ? s : s.id;
+                  return (
+                    <div key={serviceId} className="flex items-center gap-2 p-2 rounded-lg border border-border">
+                      <span className="h-2 w-2 rounded-full bg-primary" />
+                      <span className="text-sm font-medium">{serviceName}</span>
+                    </div>
+                  );
+                })}
               </div>
             </Card>
             <Card className="p-5">
@@ -156,15 +161,15 @@ const ClientDetail = () => {
         <TabsContent value="social">
           <Card className="p-5">
             <h3 className="font-bold text-base mb-3 flex items-center gap-2"><Calendar className="h-4 w-4 text-primary" /> Upcoming Social Calendar Events</h3>
-            {client.socialCalendar.length > 0 ? (
+            {client.posts.length > 0 ? (
               <div className="space-y-2">
-                {client.socialCalendar.map((ev, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                {client.posts.map((post) => (
+                  <div key={post.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
                     <div>
-                      <div className="text-sm font-semibold">{ev.title}</div>
-                      <Badge variant="outline" className="text-[10px] mt-0.5">{ev.type}</Badge>
+                      <div className="text-sm font-semibold">{post.caption}</div>
+                      <Badge variant="outline" className="text-[10px] mt-0.5">{post.postType}</Badge>
                     </div>
-                    <div className="text-xs font-mono text-muted-foreground">{formatDateDDMMYYYY(new Date(ev.date))}</div>
+                    <div className="text-xs font-mono text-muted-foreground">{formatDateDDMMYYYY(new Date(post.date))}</div>
                   </div>
                 ))}
               </div>
@@ -186,14 +191,14 @@ const ClientDetail = () => {
                 {client.posts.length > 0 ? client.posts.map((post, i) => {
                   const PlatformIcon = PLATFORM_ICONS[post.platform] || Instagram;
                   return (
-                    <TableRow key={i}>
+                    <TableRow key={post.id}>
                       <TableCell className="font-mono text-xs">{formatDateDDMMYYYY(new Date(post.date))}</TableCell>
                       <TableCell>
                         <span className={`flex items-center gap-1.5 ${PLATFORM_COLORS[post.platform] || ""}`}>
                           <PlatformIcon className="h-4 w-4" /> {post.platform}
                         </span>
                       </TableCell>
-                      <TableCell className="text-sm">{post.type}</TableCell>
+                      <TableCell className="text-sm">{post.postType}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{post.caption}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={`text-[10px] ${POST_STATUS_COLORS[post.status] || ""}`}>{post.status}</Badge>
@@ -219,14 +224,14 @@ const ClientDetail = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {client.reelShoots.length > 0 ? client.reelShoots.map((shoot, i) => (
-                  <TableRow key={i}>
+                {client.shoots.length > 0 ? client.shoots.map((shoot) => (
+                  <TableRow key={shoot.id}>
                     <TableCell className="font-mono text-xs">{formatDateDDMMYYYY(new Date(shoot.date))}</TableCell>
-                    <TableCell className="font-mono text-sm">{shoot.time}</TableCell>
+                    <TableCell className="font-mono text-sm">{shoot.reportingTime}</TableCell>
                     <TableCell className="text-sm">{shoot.location}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {shoot.crew.map(eid => {
+                        {shoot.assignedEmployees.map(eid => {
                           const emp = employees.find(e => e.id === eid);
                           return <span key={eid} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted font-medium">{emp?.name.split(" ")[0] || eid}</span>;
                         })}

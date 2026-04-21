@@ -159,7 +159,7 @@ const Partners = () => {
               <TableRow key={p.id} className="cursor-pointer" onClick={() => setDetailPartner(p)}>
                 <TableCell className="font-semibold">{p.name}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{p.category}</TableCell>
-                <TableCell className="text-sm">{p.commissionType === "Percentage" ? `${p.commissionRate}%` : `${formatINR(p.commissionRate)} flat`}</TableCell>
+                <TableCell className="text-sm">{(p.commissionType ?? "Percentage") === "Percentage" ? `${p.commissionRate ?? 10}%` : `${formatINR(p.commissionRate ?? 0)} flat`}</TableCell>
                 <TableCell className="text-center font-semibold">{p.totalLeadsReferred}</TableCell>
                 <TableCell className="text-right font-semibold text-green-600">{formatINR(p.totalCommissionEarned)}</TableCell>
                 <TableCell className={`text-right font-semibold ${p.pendingCommission > 0 ? "text-primary" : ""}`}>{formatINR(p.pendingCommission)}</TableCell>
@@ -191,9 +191,9 @@ const Partners = () => {
             </DialogHeader>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-              <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Category</div><div className="font-semibold">{detailPartner.category}</div></div>
-              <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Commission</div><div className="font-semibold">{detailPartner.commissionType === "Percentage" ? `${detailPartner.commissionRate}%` : formatINR(detailPartner.commissionRate)}</div></div>
-              <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Agreement</div><div className="font-mono text-xs">{formatDateDDMMYYYY(new Date(detailPartner.agreementDate))}</div></div>
+              <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Category</div><div className="font-semibold">{detailPartner.category || "General Partner"}</div></div>
+              <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Commission</div><div className="font-semibold">{(detailPartner.commissionType ?? "Percentage") === "Percentage" ? `${detailPartner.commissionRate ?? 10}%` : formatINR(detailPartner.commissionRate ?? 0)}</div></div>
+              <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Agreement</div><div className="font-mono text-xs">{formatDateDDMMYYYY(new Date(detailPartner.agreementDate ?? detailPartner.partnerSince ?? new Date()))}</div></div>
               <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Phone</div><div className="text-xs">{detailPartner.phone}</div></div>
             </div>
 

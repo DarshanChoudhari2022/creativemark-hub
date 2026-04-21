@@ -307,6 +307,87 @@ CREATE TABLE quotation_items (
     amount NUMERIC(12, 2) NOT NULL
 );
 
+-- PARTNERS
+CREATE TABLE partners (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    business_name TEXT,
+    phone TEXT,
+    whatsapp TEXT,
+    email TEXT,
+    address TEXT,
+    pan TEXT,
+    bank_account TEXT,
+    ifsc TEXT,
+    account_holder TEXT,
+    bank_name TEXT,
+    upi TEXT,
+    partner_since DATE DEFAULT CURRENT_DATE,
+    status TEXT DEFAULT 'Active',
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- PARTNER COMMISSION RATES
+CREATE TABLE partner_commission_rates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    partner_id UUID REFERENCES partners(id) ON DELETE CASCADE,
+    service_name TEXT NOT NULL,
+    default_percent NUMERIC(5, 2) DEFAULT 0,
+    partner_percent NUMERIC(5, 2) DEFAULT 0,
+    notes TEXT
+);
+
+-- PARTNER LEADS (Referred Leads)
+CREATE TABLE partner_leads (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    partner_id UUID REFERENCES partners(id) ON DELETE CASCADE,
+    lead_name TEXT NOT NULL,
+    date_referred DATE DEFAULT CURRENT_DATE,
+    current_stage lead_stage DEFAULT 'New',
+    converted BOOLEAN DEFAULT false,
+    deal_value NUMERIC(12, 2) DEFAULT 0,
+    commission NUMERIC(12, 2) DEFAULT 0,
+    status TEXT DEFAULT 'Pending'
+);
+
+-- PARTNER LEDGER
+CREATE TABLE partner_ledger (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    partner_id UUID REFERENCES partners(id) ON DELETE CASCADE,
+    date DATE DEFAULT CURRENT_DATE,
+    client_name TEXT,
+    invoice_number TEXT,
+    service_name TEXT,
+    invoice_amount NUMERIC(12, 2) DEFAULT 0,
+    commission_percent NUMERIC(5, 2) DEFAULT 0,
+    commission_amount NUMERIC(12, 2) DEFAULT 0,
+    status TEXT DEFAULT 'Pending',
+    payment_date DATE,
+    reference TEXT,
+    notes TEXT
+);
+
+-- RECOVERY REMINDERS
+CREATE TABLE recovery_reminders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    quotation_id UUID REFERENCES quotations(id) ON DELETE CASCADE,
+    type reminder_type,
+    template_used TEXT,
+    sent_by TEXT,
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    notes TEXT
+);
+
+-- RECOVERY NOTES
+CREATE TABLE recovery_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    quotation_id UUID REFERENCES quotations(id) ON DELETE CASCADE,
+    note TEXT NOT NULL,
+    created_by TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
 -- ==============================================================================
 -- 3. Row Level Security (RLS) Enablement
 -- ==============================================================================
@@ -316,6 +397,8 @@ ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE client_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE work_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE partners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quotations ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================================================
 -- 4. Basic RLS Policies
@@ -345,3 +428,13 @@ CREATE POLICY "View Clients based on Assignment" ON clients
 CREATE POLICY "Employee can manage their own work logs" ON work_logs
     FOR ALL
     USING (employee_id = auth.uid());
+
+-- Partners: Admins see all, others nothing for now (or partners see their own)
+CREATE POLICY "Admins manage partners" ON partners
+    FOR ALL
+    USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+
+-- Quotations: Admins see all, others see what they need
+CREATE POLICY "Admins manage quotations" ON quotations
+    FOR ALL
+    USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));

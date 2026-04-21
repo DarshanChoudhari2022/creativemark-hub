@@ -12,8 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader, PaymentBadge } from "@/components/shared";
-import { clients as initialClients } from "@/data/clients";
-import { employees } from "@/data/employees";
+import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR } from "@/lib/format";
 import { toast } from "sonner";
 import type { ClientCategory, PaymentStatus, Client } from "@/types";
@@ -40,7 +39,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Clients = () => {
   const { user } = useAuth();
-  const [clients, setClients] = useState(initialClients);
+  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name))');
   const [view, setView] = useState<"cards" | "table">("cards");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -50,6 +49,16 @@ const Clients = () => {
     name: "", category: "Other" as ClientCategory, contact: "", email: "",
     area: "", whatsapp: "", monthlyRetainer: 0, notes: "",
   });
+
+  const clients = useMemo(() => {
+    return clientsData.map(c => ({
+      ...c,
+      serviceLabels: c.client_services?.filter((s: any) => s.active).map((s: any) => s.service_name) || [],
+      assignedEmployees: c.client_assignments?.map((a: any) => a.employee_id) || [],
+      assignedEmployeeNames: c.client_assignments?.map((a: any) => a.employees?.name).filter(Boolean) || [],
+      paymentStatus: c.payment_status, // map snake_case to camelCase if needed
+    }));
+  }, [clientsData]);
 
   const filtered = useMemo(() => {
     return clients.filter(c => {
@@ -69,37 +78,29 @@ const Clients = () => {
     });
   }, [clients, catFilter, payFilter, search, user]);
 
-  const addClient = () => {
+  const addClient = async () => {
     if (!form.name) { toast.error("Client name is required"); return; }
-    const newClient: Client = {
-      id: `C-${String(clients.length + 1).padStart(3, "0")}`,
+    
+    const { error } = await insert({
       name: form.name,
       category: form.category,
-      contactPerson: form.name,
+      contact_person: form.name,
       phone: form.contact,
       whatsapp: form.whatsapp || form.contact.replace(/[^0-9]/g, ""),
       email: form.email,
-      address: "",
-      contractStart: new Date().toISOString().slice(0, 10),
-      monthlyRetainer: form.monthlyRetainer,
+      monthly_retainer: form.monthlyRetainer,
       notes: form.notes,
       area: form.area,
       status: "Active",
-      services: [],
-      serviceLabels: [],
-      totalBilled: 0,
-      outstanding: 0,
-      paymentStatus: "Paid",
-      assignedEmployees: [],
-      assignedEmployeeNames: [],
-      posts: [],
-      shoots: [],
-      paymentHistory: [],
-    };
-    setClients([...clients, newClient]);
-    setOpen(false);
-    setForm({ name: "", category: "Other", contact: "", email: "", area: "", whatsapp: "", monthlyRetainer: 0, notes: "" });
-    toast.success("Client added successfully");
+    });
+
+    if (error) {
+      toast.error("Failed to add client: " + error.message);
+    } else {
+      setOpen(false);
+      setForm({ name: "", category: "Other", contact: "", email: "", area: "", whatsapp: "", monthlyRetainer: 0, notes: "" });
+      toast.success("Client added successfully");
+    }
   };
 
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").slice(0, 2);
@@ -176,7 +177,12 @@ const Clients = () => {
         </div>
       </Card>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <Card className="p-12 text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading clients...</p>
+        </Card>
+      ) : filtered.length === 0 ? (
         <Card className="p-12 text-center">
           <Users className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
           <h3 className="text-lg font-semibold text-muted-foreground">No clients found</h3>
@@ -185,7 +191,6 @@ const Clients = () => {
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((c) => {
-            const assigned = employees.filter(e => c.assignedEmployees.includes(e.id));
             return (
               <Card key={c.id} className="p-5 hover:shadow-md transition-shadow group">
                 <div className="flex items-start justify-between mb-3">
@@ -193,27 +198,27 @@ const Clients = () => {
                     <Link to={`/clients/${c.id}`} className="font-bold text-lg hover:text-primary transition-colors">{c.name}</Link>
                     {c.area && <div className="text-xs text-muted-foreground mt-0.5">{c.area}</div>}
                   </div>
-                  <Badge variant="outline" className={`font-semibold text-xs ${CATEGORY_COLORS[c.category]}`}>{c.category}</Badge>
+                  <Badge variant="outline" className={`font-semibold text-xs ${CATEGORY_COLORS[c.category as ClientCategory] || CATEGORY_COLORS.Other}`}>{c.category}</Badge>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mb-3">
-                  {c.serviceLabels.map((s) => (
+                  {c.serviceLabels.map((s: string) => (
                     <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${SERVICE_COLORS[s] || "bg-muted text-muted-foreground"}`}>{s}</span>
                   ))}
                 </div>
-                {c.monthlyRetainer > 0 && (
-                  <div className="text-xs text-muted-foreground mb-2">Monthly Retainer: <span className="font-semibold text-foreground">{formatINR(c.monthlyRetainer)}</span></div>
+                {c.monthly_retainer > 0 && (
+                  <div className="text-xs text-muted-foreground mb-2">Monthly Retainer: <span className="font-semibold text-foreground">{formatINR(c.monthly_retainer)}</span></div>
                 )}
                 <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
                   <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>
                 </div>
-                {assigned.length > 0 && (
+                {c.assignedEmployeeNames?.length > 0 && (
                   <div className="flex items-center gap-1 mb-3">
-                    {assigned.slice(0, 3).map(e => (
-                      <Avatar key={e.id} className="h-6 w-6 border-2 border-background">
-                        <AvatarFallback className="text-[9px] bg-muted font-bold">{getInitials(e.name)}</AvatarFallback>
+                    {c.assignedEmployeeNames.slice(0, 3).map((name: string) => (
+                      <Avatar key={name} className="h-6 w-6 border-2 border-background">
+                        <AvatarFallback className="text-[9px] bg-muted font-bold">{getInitials(name)}</AvatarFallback>
                       </Avatar>
                     ))}
-                    {assigned.length > 3 && <span className="text-[10px] text-muted-foreground ml-1">+{assigned.length - 3}</span>}
+                    {c.assignedEmployeeNames.length > 3 && <span className="text-[10px] text-muted-foreground ml-1">+{c.assignedEmployeeNames.length - 3}</span>}
                   </div>
                 )}
                 <div className="flex items-center justify-between pt-3 border-t border-border">
@@ -256,7 +261,7 @@ const Clients = () => {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{c.phone}</TableCell>
-                  <TableCell className="text-sm">{c.monthlyRetainer > 0 ? formatINR(c.monthlyRetainer) : "—"}</TableCell>
+                  <TableCell className="text-sm">{c.monthly_retainer > 0 ? formatINR(c.monthly_retainer) : "—"}</TableCell>
                   <TableCell className={`text-right font-semibold ${c.outstanding > 0 ? "text-primary" : ""}`}>{formatINR(c.outstanding)}</TableCell>
                   <TableCell><PaymentBadge status={c.paymentStatus} /></TableCell>
                   <TableCell><Link to={`/clients/${c.id}`}><Button size="sm" variant="ghost" className="text-xs">View</Button></Link></TableCell>

@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# CreativeMark Hub CRM Project
 
 TODO: Document your project here

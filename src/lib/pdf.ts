@@ -1,9 +1,12 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { Quotation } from "@/data/quotations";
-import type { Partner } from "@/data/partners";
+import type { Quotation, Partner } from "@/types";
 
 const BRAND_RED_R = 232, BRAND_RED_G = 25, BRAND_RED_B = 44;
+
+function formatDate(date: Date | string) {
+  return new Date(date).toLocaleDateString("en-IN");
+}
 
 function addLetterhead(doc: jsPDF) {
   // Red header bar
@@ -70,7 +73,7 @@ export function generateQuotationPDF(q: Quotation) {
     head: [["#", "Description", "Qty", "Rate (₹)", "Amount (₹)"]],
     body: q.items.map((item, i) => [
       String(i + 1),
-      item.description,
+      item.serviceName,
       String(item.quantity),
       item.rate.toLocaleString("en-IN"),
       item.amount.toLocaleString("en-IN"),
@@ -111,7 +114,7 @@ export function generateQuotationPDF(q: Quotation) {
   doc.setFontSize(12);
   doc.setTextColor(BRAND_RED_R, BRAND_RED_G, BRAND_RED_B);
   doc.text("Total:", totalsX, y);
-  doc.text(`₹${q.total.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  doc.text(`₹${(q.total || q.grandTotal)?.toLocaleString("en-IN")}`, 195, y, { align: "right" });
   doc.setTextColor(26, 26, 26);
   y += 12;
 
@@ -137,7 +140,7 @@ export function generateQuotationPDF(q: Quotation) {
   doc.text("Account: CreativeMark Pvt Ltd | Bank: HDFC Bank, Baner | A/C: 50100123456789 | IFSC: HDFC0001234", 15, y);
 
   addFooter(doc, 1);
-  doc.save(`${q.number}.pdf`);
+  doc.save(`${q.number || q.quoteNumber}.pdf`);
 }
 
 export function generatePartnerAgreementPDF(partner: Partner) {
@@ -153,7 +156,7 @@ export function generatePartnerAgreementPDF(partner: Partner) {
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Date: ${formatDate(partner.agreementDate)}`, 15, y);
+  doc.text(`Date: ${formatDateDDMMYYYY(partner.agreementDate || "")}`, 15, y);
   y += 8;
 
   doc.setFont("helvetica", "bold");
@@ -172,7 +175,7 @@ export function generatePartnerAgreementPDF(partner: Partner) {
   if (partner.commissionType === "Percentage") {
     doc.text(`Type: Percentage — ${partner.commissionRate}% of project value`, 15, y);
   } else {
-    doc.text(`Type: Flat Amount — ₹${partner.commissionRate.toLocaleString("en-IN")} per referred lead`, 15, y);
+    doc.text(`Type: Flat Amount — ₹${partner.commissionRate?.toLocaleString("en-IN")} per referred lead`, 15, y);
   }
   y += 10;
 
@@ -213,7 +216,8 @@ export function generatePartnerAgreementPDF(partner: Partner) {
   doc.save(`Agreement-${partner.name.replace(/\s+/g, "-")}.pdf`);
 }
 
-function formatDate(dateStr: string): string {
+function formatDateDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return "";
   const d = new Date(dateStr);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }

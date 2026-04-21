@@ -35,7 +35,8 @@ export type WorkType =
   | "Graphic Design"
   | "Event Coverage"
   | "Office Work"
-  | "Other";
+  | "Other"
+  | string;
 export type WorkLogStatus = "Completed" | "Scheduled" | "Cancelled";
 export type LeadStage = "New" | "Contacted" | "Quotation Sent" | "Negotiation" | "Converted" | "Lost";
 export type LeadHeat = "Hot" | "Warm" | "Cold";
@@ -49,10 +50,12 @@ export type ReminderType = "whatsapp" | "email";
 export type ReminderTemplate = "Friendly" | "Firm" | "Final Notice";
 export type PartnerStatus = "Active" | "Inactive";
 export type CommissionStatus = "Pending" | "Paid";
+export type CommissionType = "Percentage" | "Fixed";
 export type RecoveryStatus = "Not Due Yet" | "Due Soon" | "Overdue" | "Reminder Sent" | "Partially Paid" | "Paid";
 
 // Calendar event types
 export type CalendarEventType = "Shoot" | "Meeting" | "Deadline" | "Holiday" | "Internal";
+export type EventType = CalendarEventType;
 
 // ── Client ──────────────────────────────────────────────────
 
@@ -122,7 +125,7 @@ export interface Client {
   partnerId?: string; // referrer
   partnerName?: string;
   status: ClientStatus;
-  services: ClientService[];
+  services: (ClientService | string)[];
   serviceLabels: string[]; // quick display
   totalBilled: number;
   outstanding: number;
@@ -132,6 +135,9 @@ export interface Client {
   posts: SocialPost[];
   shoots: ShootSchedule[];
   paymentHistory: PaymentEntry[];
+  contact?: string; // Added missing contact
+  socialCalendar?: SocialPost[]; // Added missing socialCalendar
+  reelShoots?: ShootSchedule[]; // Added missing reelShoots
 }
 
 // ── Employee ────────────────────────────────────────────────
@@ -149,6 +155,7 @@ export interface WorkLog {
   agreedAmount: number;
   notes?: string;
   status: WorkLogStatus;
+  hours?: number; 
 }
 
 export interface SalaryPayment {
@@ -192,6 +199,10 @@ export interface Employee {
   assignedClientNames: string[];
   workLogs: WorkLog[];
   salaryPayments: SalaryPayment[];
+  salary?: number; 
+  joiningDate?: string; 
+  advanceTaken?: number;
+  duesPending?: number;
 }
 
 // ── Leads ───────────────────────────────────────────────────
@@ -258,26 +269,36 @@ export interface Lead {
   commLog: CommLog[];
   tasks: LeadTask[];
   reassignments: LeadReassignment[];
+  company?: string; // Added missing company
 }
 
 // ── Quotations & Bills ──────────────────────────────────────
 
-export interface QuotationItem {
+export interface LineItem {
   id: string;
   serviceName: string;
+  description?: string; // Support both naming conventions
   quantity: number;
-  unit: string;
+  unit?: string;
   rate: number;
   amount: number;
 }
 
+export type QuotationItem = LineItem;
+
+export type QuotationBillStatus = QuotationStatus;
+
 export interface Quotation {
   id: string;
   quoteNumber: string;
+  number?: string; // Alternate naming
   type: QuotationType;
   clientId?: string;
+  recipientId?: string; // Added field
   leadId?: string;
   clientName: string;
+  recipientName?: string; // Alternate naming
+  isClient?: boolean;
   clientAddress?: string;
   clientPhone?: string;
   clientEmail?: string;
@@ -294,24 +315,35 @@ export interface Quotation {
   gstRate: number;
   cgst: number;
   sgst: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
   gstAmount: number;
   grandTotal: number;
+  total?: number; // Alternate naming
   status: QuotationStatus;
   notes?: string;
+  internalNotes?: string;
   terms: string;
   sentVia?: "WhatsApp" | "Email";
   createdAt: string;
 }
 
+export type QuotationBill = Quotation;
+
 // ── Recovery ────────────────────────────────────────────────
 
 export interface ReminderLog {
-  id: string;
-  quotationId: string;
-  type: ReminderType;
-  templateUsed: ReminderTemplate;
+  id?: string;
+  quotationId?: string;
+  type?: ReminderType;
+  templateUsed?: ReminderTemplate | string;
   sentBy?: string;
-  sentAt: string;
+  sentAt?: string;
+  channel?: string;
+  note?: string;
+  date?: string;
 }
 
 export interface RecoveryNote {
@@ -339,6 +371,7 @@ export interface Recovery {
   lastReminderSent?: string;
   reminderHistory: ReminderLog[];
   notes: RecoveryNote[];
+  received?: boolean; // Added missing received
 }
 
 // ── Partners ────────────────────────────────────────────────
@@ -365,6 +398,7 @@ export interface CommissionLedgerEntry {
   paymentDate?: string;
   reference?: string;
   notes?: string;
+  projectValue?: number; // Added missing projectValue
 }
 
 export interface LeadReferred {
@@ -401,6 +435,10 @@ export interface Partner {
   pendingCommission: number;
   leadsReferred: LeadReferred[];
   ledger: CommissionLedgerEntry[];
+  category?: string; // Added missing fields
+  commissionType?: CommissionType;
+  commissionRate?: number;
+  agreementDate?: string;
 }
 
 // ── Calendar ────────────────────────────────────────────────
@@ -464,10 +502,13 @@ export interface TopPartnerItem {
 }
 
 export interface Notification {
-  id: number;
+  id: string; // Changed to string to match data
   title: string;
   time: string;
   urgent: boolean;
+  type?: "payment" | "lead" | "shoot" | "general" | string;
+  message?: string;
+  read?: boolean;
 }
 
 // ── Settings ────────────────────────────────────────────────
@@ -491,9 +532,10 @@ export interface AccessRole {
 // ── WhatsApp Templates ──────────────────────────────────────
 
 export interface WATemplates {
-  friendly: (client: string, invoiceNo: string, amount: string, dueDate: string) => string;
-  firm: (client: string, invoiceNo: string, amount: string, date: string) => string;
-  finalNotice: (client: string, invoiceNo: string, amount: string, date: string) => string;
+  friendly: (client: string, amount: string, invoiceNo: string) => string;
+  firm: (client: string, amount: string, invoiceNo: string) => string;
+  finalNotice: (client: string, amount: string, invoiceNo: string) => string;
+  soft: (client: string, amount: string, invoiceNo: string) => string;
   shootShare: (client: string, date: string, startTime: string, endTime: string, shootType: string, teamNames: string) => string;
   workShare: (client: string, employee: string, role: string, date: string, startTime: string, endTime: string, workType: string, phone: string) => string;
   quotationShare: (client: string, quoteNumber: string, total: string, validDate: string) => string;

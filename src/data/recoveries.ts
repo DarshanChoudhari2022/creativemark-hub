@@ -78,19 +78,14 @@ export const recoveries: Recovery[] = [
   },
 ];
 
-export const WA_TEMPLATES: WATemplates = {
-  friendly: (client, invoiceNo, amount, dueDate) =>
-    `Dear ${client}, Hope all is well! This is a gentle reminder that Invoice #${invoiceNo} for ₹${amount} from CreativeMark is due on ${dueDate}. Please process at your earliest convenience. Thank you! — CreativeMark Team`,
-  firm: (client, invoiceNo, amount, date) =>
-    `Dear ${client}, We wish to bring to your attention that Invoice #${invoiceNo} for ₹${amount} issued on ${date} is now overdue. Kindly clear the payment immediately to avoid service disruption. — CreativeMark`,
-  finalNotice: (client, invoiceNo, amount, date) =>
-    `Dear ${client}, Despite previous reminders, Invoice #${invoiceNo} for ₹${amount} remains unpaid since ${date}. This is our final notice before we proceed with legal/recovery action. Please contact us immediately. — CreativeMark Advertising`,
-  shootShare: (client, date, startTime, endTime, shootType, teamNames) =>
-    `Dear ${client}, Our team will be at your service on ${date} from ${startTime} to ${endTime} for ${shootType}. Team: ${teamNames}. — CreativeMark`,
-  workShare: (client, employee, role, date, startTime, endTime, workType, phone) =>
-    `Dear ${client}, This is to confirm that our team member ${employee} (${role}) will be at your service on ${date} from ${startTime} to ${endTime} for ${workType}. For queries: ${phone}. — CreativeMark Team`,
-  quotationShare: (client, quoteNumber, total, validDate) =>
-    `Dear ${client}, Please find your quotation ${quoteNumber} for ₹${total} from CreativeMark. Valid till ${validDate}. — CreativeMark Team`,
-  partnerAgreement: (partner) =>
-    `Dear ${partner}, Please find your Partnership Agreement with CreativeMark Advertising. Kindly review, sign, and return a copy. Thank you for partnering with us! — CreativeMark Team`,
+export const WA_TEMPLATES: Record<string, any> = {
+  soft: (client: string, amount: string, invoiceNo: string) =>
+    `Hi ${client}, a gentle reminder about your payment of ₹${amount} for Inv #${invoiceNo}. Please ignore if already paid. Thanks!`,
+  friendly: (client: string, amount: string, invoiceNo: string) =>
+    `Hi ${client}, hope you are doing well. Just a friendly note that the payment for Inv #${invoiceNo} (₹${amount}) was due. Could you please check on this?`,
+  firm: (client: string, amount: string, invoiceNo: string) =>
+    `Dear ${client}, your payment of ₹${amount} for Inv #${invoiceNo} is now overdue. We request you to process the payment at the earliest to avoid service interruption.`,
+  finalNotice: (client: string, amount: string, invoiceNo: string) =>
+    `URGENT: ${client}, Inv #${invoiceNo} (₹${amount}) is severely overdue. This is our final notice before we proceed with further action. Please settle this immediately.`,
 };
+

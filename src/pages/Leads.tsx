@@ -10,8 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader, StageBadge } from "@/components/shared";
-import { leads as initialLeads, kanbanStages } from "@/data/leads";
-import { employees } from "@/data/employees";
+import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { toast } from "sonner";
 import type { Lead, LeadStage, LeadHeat, ClientCategory } from "@/types";
@@ -42,9 +41,12 @@ const STAGE_HEADER_COLORS: Record<LeadStage, string> = {
 
 import { useAuth } from "@/contexts/AuthContext";
 
+const kanbanStages: LeadStage[] = ["New", "Contacted", "Quotation Sent", "Negotiation", "Converted", "Lost"];
+
 const Leads = () => {
   const { user } = useAuth();
-  const [leads, setLeads] = useState(initialLeads);
+  const { data: leadsData, loading, insert, update: updateLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
+  const { data: employees } = useSupabaseTable<any>('employees', 'id, name');
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -52,8 +54,25 @@ const Leads = () => {
   const [form, setForm] = useState({
     name: "", company: "", category: "Other" as ClientCategory, phone: "", email: "", estimatedValue: 0,
     source: "Walk-in" as Lead["source"], heat: "Warm" as LeadHeat,
-    assignedTo: "E-004", services: "", notes: "", partnerRef: ""
+    assignedTo: "", services: "", notes: "", partnerRef: ""
   });
+
+  const leads = useMemo(() => {
+    return leadsData.map(l => ({
+      ...l,
+      organization: l.organization, // map if different
+      assignedToName: l.assigned_to?.name || "—",
+      servicesInterested: l.lead_services?.map((s: any) => s.service_name) || [],
+      commLog: l.comm_logs?.map((log: any) => ({
+        ...log,
+        contactPerson: log.contact_person_id // would need another join for name if needed
+      })) || [],
+      tasks: l.lead_tasks || [],
+      dateReceived: l.date_received,
+      estimatedValue: l.estimated_value,
+      nextFollowupDate: l.next_followup_date,
+    }));
+  }, [leadsData]);
 
   const filtered = useMemo(() => {
     return leads.filter(l => {
@@ -71,41 +90,44 @@ const Leads = () => {
     });
   }, [leads, search, user]);
 
-  const addLead = () => {
+  const addLead = async () => {
     if (!form.name || !form.company) { toast.error("Name and company are required"); return; }
-    const emp = employees.find(e => e.id === form.assignedTo);
-    const newLead: Lead = {
-      id: `L-${String(leads.length + 1).padStart(3, "0")}`,
+    
+    const { error } = await insert({
       name: form.name, 
       organization: form.company, 
       category: form.category,
       phone: form.phone, 
       whatsapp: form.phone.replace(/[^0-9]/g, ""),
       email: form.email,
-      address: "",
       source: form.source, 
       stage: "New", 
       heat: form.heat,
-      assignedTo: form.assignedTo,
-      assignedToName: emp?.name || "—",
-      estimatedValue: form.estimatedValue,
-      servicesInterested: form.services.split(",").map(s => s.trim()).filter(Boolean),
+      assigned_to: form.assignedTo || null,
+      estimated_value: form.estimatedValue,
       notes: form.notes,
-      dateReceived: new Date().toISOString().slice(0, 10),
-      lastContactDate: new Date().toISOString().slice(0, 10),
-      commLog: [],
-      tasks: [],
-      reassignments: [],
-      partnerId: form.source === "Partner" ? form.partnerRef : undefined,
-    };
-    setLeads([...leads, newLead]);
-    setAddOpen(false);
-    toast.success("Lead added successfully");
+      partner_id: form.source === "Partner" ? form.partnerRef : null,
+    });
+
+    if (error) {
+      toast.error("Failed to add lead: " + error.message);
+    } else {
+      setAddOpen(false);
+      setForm({
+        name: "", company: "", category: "Other", phone: "", email: "", estimatedValue: 0,
+        source: "Walk-in", heat: "Warm", assignedTo: "", services: "", notes: "", partnerRef: ""
+      });
+      toast.success("Lead added successfully");
+    }
   };
 
-  const moveLeadStage = (leadId: string, newStage: LeadStage) => {
-    setLeads(leads.map(l => l.id === leadId ? { ...l, stage: newStage } : l));
-    toast.success(`Lead moved to ${newStage}`);
+  const moveLeadStage = async (leadId: string, newStage: LeadStage) => {
+    const { error } = await updateLead(leadId, { stage: newStage });
+    if (error) {
+      toast.error("Failed to move lead: " + error.message);
+    } else {
+      toast.success(`Lead moved to ${newStage}`);
+    }
   };
 
   const getDaysInStage = (lead: Lead): number => {
@@ -185,7 +207,12 @@ const Leads = () => {
         }
       />
 
-      {view === "kanban" ? (
+      {loading ? (
+        <Card className="p-12 text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading leads...</p>
+        </Card>
+      ) : view === "kanban" ? (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 overflow-x-auto">
           {kanbanStages.map((stage) => {
             const stageLeads = filtered.filter((l) => l.stage === stage);

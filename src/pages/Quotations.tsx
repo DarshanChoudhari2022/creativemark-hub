@@ -19,17 +19,17 @@ import { generateQuotationPDF } from "@/lib/pdf";
 import { toast } from "sonner";
 import type { QuotationBill, QuotationBillStatus, LineItem } from "@/types";
 
-const STATUS_COLORS: Record<QuotationBillStatus, string> = {
+const STATUS_COLORS: Record<string, string> = {
   Draft: "bg-gray-100 text-gray-600 border-gray-200",
   Sent: "bg-blue-100 text-blue-700 border-blue-200",
   Approved: "bg-green-100 text-green-700 border-green-200",
   Rejected: "bg-red-100 text-red-700 border-red-200",
-  Converted: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  "Converted to Bill": "bg-emerald-100 text-emerald-700 border-emerald-200",
   Paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
   Overdue: "bg-red-100 text-red-700 border-red-200",
 };
 
-const emptyItem = (): LineItem => ({ description: "", quantity: 1, rate: 0, amount: 0 });
+const emptyItem = (): LineItem => ({ id: crypto.randomUUID(), serviceName: "", description: "", quantity: 1, rate: 0, amount: 0 });
 
 const Quotations = () => {
   const [quotations, setQuotations] = useState(initialQuotations);
@@ -76,7 +76,7 @@ const Quotations = () => {
 
   const createQuotation = () => {
     const recipient = allRecipients.find(r => r.id === recipientId);
-    if (!recipient || items.every(i => !i.description)) { toast.error("Select recipient and add items"); return; }
+    if (!recipient || items.every(i => !i.serviceName && !i.description)) { toast.error("Select recipient and add items"); return; }
     
     // In actual system we would differentiate Q vs B numbering
     const prefix = type === "Quotation" ? "QT" : "BL";
@@ -94,7 +94,7 @@ const Quotations = () => {
       recipientName: recipient.name,
       isClient: recipient.isClient,
       
-      items: items.filter(i => i.description),
+      items: items.filter(i => i.serviceName || i.description),
       subtotal,
       discountPercent,
       discountAmount,
@@ -187,7 +187,7 @@ const Quotations = () => {
                     <div className="space-y-2">
                       {items.map((item, i) => (
                         <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                          <div className="col-span-5"><Input placeholder="Description" value={item.description} onChange={(e) => updateItem(i, "description", e.target.value)} /></div>
+                          <div className="col-span-5"><Input placeholder="Description" value={item.serviceName || item.description} onChange={(e) => updateItem(i, "description", e.target.value)} /></div>
                           <div className="col-span-2"><Input type="number" placeholder="Qty" min={1} value={item.quantity} onChange={(e) => updateItem(i, "quantity", +e.target.value)} /></div>
                           <div className="col-span-2"><Input type="number" placeholder="Rate ₹" value={item.rate} onChange={(e) => updateItem(i, "rate", +e.target.value)} /></div>
                           <div className="col-span-2 text-right font-semibold text-sm pt-2">{formatINR(item.amount)}</div>

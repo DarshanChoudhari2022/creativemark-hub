@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 
 export type Role = "Admin" | "Employee";
 
@@ -11,39 +13,56 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (u: User) => void;
-  logout: () => void;
+  loading: boolean;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const USERS: User[] = [
-  { id: "E-001", name: "Vikram Joshi", role: "Admin", email: "admin@creativemark.com" },
-  { id: "E-004", name: "Neha Kapoor", role: "Employee", email: "neha@creativemark.com" },
-];
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("crm_auth_user");
-    if (stored) {
-      setUser(JSON.parse(stored));
-    }
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        mapUser(session.user);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        mapUser(session.user);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = (u: User) => {
-    setUser(u);
-    localStorage.setItem("crm_auth_user", JSON.stringify(u));
+  const mapUser = (sbUser: SupabaseUser) => {
+    // In a real app, you'd fetch the role from a profiles table
+    setUser({
+      id: sbUser.id,
+      name: sbUser.user_metadata?.full_name || sbUser.email?.split("@")[0] || "User",
+      role: (sbUser.user_metadata?.role as Role) || "Admin",
+      email: sbUser.email || "",
+    });
+    setLoading(false);
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("crm_auth_user");
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -56,3 +75,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
