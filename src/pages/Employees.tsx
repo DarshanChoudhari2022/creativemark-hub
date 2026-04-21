@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/shared";
 import { useSupabaseTable } from "@/hooks/useSupabase";
+import { supabase } from "@/lib/supabase";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -155,6 +156,7 @@ const Employees = () => {
         </div>
       </div>
 
+      <div className="space-y-3">
         {filtered.map((emp) => {
           const isOpen = detailId === emp.id;
           const assignedClientsList = clients?.filter((c: any) => emp.assignedClients.includes(c.id)) || [];
@@ -262,13 +264,13 @@ const Employees = () => {
                         </div>
                         <div className="text-xs text-muted-foreground mb-1">{totalHours.toFixed(1)} total hours logged</div>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                          {emp.workLogs.slice(0, 5).map((log, i) => {
+                          {(emp.work_logs || []).slice(0, 5).map((log: any, i: number) => {
                             const duration = log.hours ?? (log.reportingTime && log.endTime ? ((new Date(`2000-01-01T${log.endTime}`).getTime() - new Date(`2000-01-01T${log.reportingTime}`).getTime()) / (1000 * 60 * 60)).toFixed(1) : null);
                             return (
                               <div key={i} className="flex items-start justify-between p-2 rounded border border-border text-xs hover:bg-muted/30 transition-colors">
                                 <div className="min-w-0 flex-1">
-                                  <div className="font-semibold truncate">{log.workType}</div>
-                                  <div className="text-muted-foreground truncate">{log.clientName} · {log.location}</div>
+                                  <div className="font-semibold truncate">{log.work_type}</div>
+                                  <div className="text-muted-foreground truncate">{log.client_name || ''} · {log.location}</div>
                                 </div>
                                 <div className="text-right shrink-0 ml-2">
                                   <div className="font-mono">{formatDateDDMMYYYY(log.date)}</div>
@@ -277,12 +279,12 @@ const Employees = () => {
                               </div>
                             );
                           })}
-                          {emp.workLogs.length === 0 && <div className="text-xs text-muted-foreground text-center py-3">No work logged yet</div>}
+                          {(emp.work_logs || []).length === 0 && <div className="text-xs text-muted-foreground text-center py-3">No work logged yet</div>}
                         </div>
-                        {emp.workLogs.length > 0 && (
+                        {(emp.work_logs || []).length > 0 && (
                           <Button 
                             size="sm" variant="ghost" className="text-xs w-full"
-                            onClick={() => sendWorkLogToClient(emp, emp.workLogs[0])}
+                            onClick={() => sendWorkLogToClient(emp, emp.work_logs[0])}
                           >Share Latest Log via WhatsApp</Button>
                         )}
                       </div>
