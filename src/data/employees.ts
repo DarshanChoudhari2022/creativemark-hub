@@ -1,92 +1,161 @@
-export type EmployeeRole = "Reel Shooter" | "Graphic Designer" | "Photographer" | "Videographer";
-
-export interface WorkLog {
-  date: string;
-  clientId: string;
-  clientName: string;
-  workType: string;
-  agreedAmount: number;
-  reportingTime: string;
-  status: "Completed" | "Scheduled" | "In Progress";
-}
-
-export interface Employee {
-  id: string;
-  name: string;
-  role: EmployeeRole;
-  contact: string;
-  email: string;
-  duesCleared: number;
-  duesPending: number;
-  onFieldToday: boolean;
-  workLog: WorkLog[];
-}
+import type { Employee } from "@/types";
 
 export const employees: Employee[] = [
   {
     id: "E-001",
-    name: "Arjun Mehta",
-    role: "Reel Shooter",
-    contact: "+91 98111 22233",
-    email: "arjun.m@creativemark.in",
-    duesCleared: 85000,
-    duesPending: 12000,
+    name: "Vikram Joshi",
+    role: "Photographer",
+    phone: "+91 95551 00001",
+    whatsapp: "9555100001",
+    email: "vikram@creativemark.in",
+    address: "Kothrud, Pune",
+    emergencyContact: "+91 98765 11111",
+    aadhar: "1234 5678 9012",
+    bankAccount: "1234567890",
+    ifsc: "SBIN0001234",
+    accountHolder: "Vikram Joshi",
+    bankName: "State Bank of India",
+    upi: "vikram@upi",
+    contractType: "Monthly",
+    baseRate: 35000,
+    dateJoined: "2024-06-15",
+    notes: "Senior photographer. Handles all political & automotive clients.",
+    status: "Active",
     onFieldToday: true,
-    workLog: [
-      { date: "20/04/2026", clientId: "C-001", clientName: "Adv. Rajesh Kumar", workType: "Reel Shoot", agreedAmount: 8000, reportingTime: "10:00 AM", status: "Scheduled" },
-      { date: "18/04/2026", clientId: "C-003", clientName: "Speedway Motors", workType: "Reel Shoot", agreedAmount: 9000, reportingTime: "11:00 AM", status: "Completed" },
+    assignedClients: ["C-001", "C-005", "C-007"],
+    assignedClientNames: ["MLA Priya Deshmukh", "Speedway Motors", "Bansal Wheels"],
+    workLogs: [
+      { id: "WL-001", employeeId: "E-001", clientId: "C-001", clientName: "MLA Priya Deshmukh", date: "2026-04-20", workType: "Photography", reportingTime: "09:30", endTime: "13:00", location: "Yerawada Community Hall", agreedAmount: 5000, notes: "Rally event coverage", status: "Completed" },
+      { id: "WL-002", employeeId: "E-001", clientId: "C-001", clientName: "MLA Priya Deshmukh", date: "2026-04-18", workType: "Reel Shoot", reportingTime: "10:00", endTime: "13:00", location: "Office Studio", agreedAmount: 3000, status: "Completed" },
+      { id: "WL-003", employeeId: "E-001", clientId: "C-005", clientName: "Speedway Motors", date: "2026-04-16", workType: "Photography", reportingTime: "10:00", endTime: "15:00", location: "Showroom — Hinjewadi", agreedAmount: 5000, status: "Completed" },
+      { id: "WL-004", employeeId: "E-001", clientId: "C-003", clientName: "Vastra Couture", date: "2026-04-15", workType: "Photography", reportingTime: "08:00", endTime: "16:00", location: "Studio — KP", agreedAmount: 8000, status: "Completed" },
+      { id: "WL-005", employeeId: "E-001", clientId: "C-001", clientName: "MLA Priya Deshmukh", date: "2026-04-14", workType: "Photography", reportingTime: "14:00", endTime: "17:00", location: "Event Ground", agreedAmount: 3000, status: "Completed" },
+      { id: "WL-006", employeeId: "E-001", clientId: "C-007", clientName: "Bansal Wheels", date: "2026-04-12", workType: "Photography", reportingTime: "10:00", endTime: "14:00", location: "Showroom — Wakad", agreedAmount: 4000, status: "Completed" },
+    ],
+    salaryPayments: [
+      { id: "SAL-001", employeeId: "E-001", month: 3, year: 2026, monthLabel: "Mar 2026", totalAssignments: 12, totalEarned: 35000, amountPaid: 35000, amountPending: 0, paymentDate: "2026-04-02", paymentMethod: "Bank Transfer", reference: "NEFT-MAR-001" },
+      { id: "SAL-002", employeeId: "E-001", month: 2, year: 2026, monthLabel: "Feb 2026", totalAssignments: 10, totalEarned: 35000, amountPaid: 35000, amountPending: 0, paymentDate: "2026-03-03", paymentMethod: "Bank Transfer", reference: "NEFT-FEB-001" },
+      { id: "SAL-003", employeeId: "E-001", month: 4, year: 2026, monthLabel: "Apr 2026", totalAssignments: 8, totalEarned: 28000, amountPaid: 0, amountPending: 28000 },
     ],
   },
   {
     id: "E-002",
-    name: "Sneha Iyer",
-    role: "Graphic Designer",
-    contact: "+91 98222 33344",
-    email: "sneha.i@creativemark.in",
-    duesCleared: 60000,
-    duesPending: 0,
-    onFieldToday: false,
-    workLog: [
-      { date: "19/04/2026", clientId: "C-002", clientName: "Vastra Couture", workType: "Lookbook Layout", agreedAmount: 6500, reportingTime: "Remote", status: "Completed" },
+    name: "Arjun Mehta",
+    role: "Video Editor",
+    phone: "+91 95551 00002",
+    whatsapp: "9555100002",
+    email: "arjun@creativemark.in",
+    address: "Aundh, Pune",
+    contractType: "Monthly",
+    baseRate: 30000,
+    dateJoined: "2024-09-01",
+    status: "Active",
+    onFieldToday: true,
+    assignedClients: ["C-002", "C-005"],
+    assignedClientNames: ["Adv. Rajesh Kumar", "Speedway Motors"],
+    workLogs: [
+      { id: "WL-010", employeeId: "E-002", clientId: "C-002", clientName: "Adv. Rajesh Kumar", date: "2026-04-20", workType: "Reel Shoot", reportingTime: "10:00", endTime: "14:00", location: "Hadapsar Office", agreedAmount: 3000, status: "Completed" },
+      { id: "WL-011", employeeId: "E-002", clientId: "C-005", clientName: "Speedway Motors", date: "2026-04-19", workType: "Video Shoot", reportingTime: "09:00", endTime: "16:00", location: "Showroom", agreedAmount: 5000, status: "Completed" },
+      { id: "WL-012", employeeId: "E-002", clientId: "C-002", clientName: "Adv. Rajesh Kumar", date: "2026-04-17", workType: "Reel Shoot", reportingTime: "10:00", endTime: "13:00", location: "Hadapsar Office", agreedAmount: 3000, status: "Completed" },
+    ],
+    salaryPayments: [
+      { id: "SAL-004", employeeId: "E-002", month: 3, year: 2026, monthLabel: "Mar 2026", totalAssignments: 15, totalEarned: 30000, amountPaid: 30000, amountPending: 0, paymentDate: "2026-04-02", paymentMethod: "UPI" },
+      { id: "SAL-005", employeeId: "E-002", month: 4, year: 2026, monthLabel: "Apr 2026", totalAssignments: 6, totalEarned: 11000, amountPaid: 0, amountPending: 11000 },
     ],
   },
   {
     id: "E-003",
-    name: "Vikram Joshi",
-    role: "Photographer",
-    contact: "+91 98333 44455",
-    email: "vikram.j@creativemark.in",
-    duesCleared: 110000,
-    duesPending: 22000,
-    onFieldToday: true,
-    workLog: [
-      { date: "20/04/2026", clientId: "C-004", clientName: "MLA Priya Deshmukh", workType: "Event Photography", agreedAmount: 12000, reportingTime: "9:30 AM", status: "In Progress" },
+    name: "Sneha Iyer",
+    role: "Social Media Manager",
+    phone: "+91 95551 00003",
+    whatsapp: "9555100003",
+    email: "sneha@creativemark.in",
+    address: "Baner, Pune",
+    contractType: "Monthly",
+    baseRate: 32000,
+    dateJoined: "2025-01-10",
+    status: "Active",
+    onFieldToday: false,
+    assignedClients: ["C-001", "C-003", "C-005"],
+    assignedClientNames: ["MLA Priya Deshmukh", "Vastra Couture", "Speedway Motors"],
+    workLogs: [
+      { id: "WL-020", employeeId: "E-003", clientId: "C-003", clientName: "Vastra Couture", date: "2026-04-20", workType: "Office Work", reportingTime: "10:00", endTime: "13:00", location: "Office", agreedAmount: 0, notes: "Content scheduling & calendar planning", status: "Completed" },
+      { id: "WL-021", employeeId: "E-003", clientId: "C-001", clientName: "MLA Priya Deshmukh", date: "2026-04-19", workType: "Office Work", reportingTime: "14:00", endTime: "16:00", location: "Client Office", agreedAmount: 0, notes: "Social media review meeting", status: "Completed" },
+      { id: "WL-022", employeeId: "E-003", clientId: "C-005", clientName: "Speedway Motors", date: "2026-04-18", workType: "Graphic Design", reportingTime: "10:00", endTime: "14:00", location: "Office", agreedAmount: 0, status: "Completed" },
+    ],
+    salaryPayments: [
+      { id: "SAL-006", employeeId: "E-003", month: 3, year: 2026, monthLabel: "Mar 2026", totalAssignments: 20, totalEarned: 32000, amountPaid: 32000, amountPending: 0, paymentDate: "2026-04-02", paymentMethod: "Bank Transfer" },
+      { id: "SAL-007", employeeId: "E-003", month: 4, year: 2026, monthLabel: "Apr 2026", totalAssignments: 10, totalEarned: 32000, amountPaid: 22000, amountPending: 10000 },
     ],
   },
   {
     id: "E-004",
-    name: "Riya Sharma",
-    role: "Videographer",
-    contact: "+91 98444 55566",
-    email: "riya.s@creativemark.in",
-    duesCleared: 92000,
-    duesPending: 8000,
-    onFieldToday: true,
-    workLog: [
-      { date: "20/04/2026", clientId: "C-001", clientName: "Adv. Rajesh Kumar", workType: "Rally Coverage", agreedAmount: 14000, reportingTime: "10:00 AM", status: "Scheduled" },
+    name: "Neha Kapoor",
+    role: "Sales Executive",
+    phone: "+91 95551 00004",
+    whatsapp: "9555100004",
+    email: "neha@creativemark.in",
+    address: "Viman Nagar, Pune",
+    contractType: "Monthly",
+    baseRate: 28000,
+    dateJoined: "2025-03-20",
+    status: "Active",
+    onFieldToday: false,
+    assignedClients: ["C-002", "C-004"],
+    assignedClientNames: ["Adv. Rajesh Kumar", "Green Earth NGO"],
+    workLogs: [
+      { id: "WL-030", employeeId: "E-004", clientId: "C-004", clientName: "Green Earth NGO", date: "2026-04-20", workType: "Office Work", reportingTime: "10:00", endTime: "11:00", location: "Office", agreedAmount: 0, notes: "Follow-up call — payment pending", status: "Completed" },
+      { id: "WL-031", employeeId: "E-004", clientId: "C-002", clientName: "Adv. Rajesh Kumar", date: "2026-04-19", workType: "Other", reportingTime: "14:00", endTime: "16:00", location: "Hadapsar", agreedAmount: 0, notes: "Client meeting — payment discussion", status: "Completed" },
+    ],
+    salaryPayments: [
+      { id: "SAL-008", employeeId: "E-004", month: 3, year: 2026, monthLabel: "Mar 2026", totalAssignments: 18, totalEarned: 28000, amountPaid: 23000, amountPending: 5000 },
+      { id: "SAL-009", employeeId: "E-004", month: 4, year: 2026, monthLabel: "Apr 2026", totalAssignments: 8, totalEarned: 28000, amountPaid: 0, amountPending: 28000 },
     ],
   },
   {
     id: "E-005",
-    name: "Karthik Rao",
+    name: "Rohan Das",
     role: "Graphic Designer",
-    contact: "+91 98555 66677",
-    email: "karthik.r@creativemark.in",
-    duesCleared: 45000,
-    duesPending: 5000,
+    phone: "+91 95551 00005",
+    whatsapp: "9555100005",
+    email: "rohan@creativemark.in",
+    address: "Pashan, Pune",
+    contractType: "Monthly",
+    baseRate: 28000,
+    dateJoined: "2025-06-01",
+    status: "Active",
     onFieldToday: false,
-    workLog: [
-      { date: "17/04/2026", clientId: "C-006", clientName: "Green Earth NGO", workType: "Brand Identity", agreedAmount: 15000, reportingTime: "Remote", status: "Completed" },
+    assignedClients: ["C-003", "C-006"],
+    assignedClientNames: ["Vastra Couture", "Urban Threads"],
+    workLogs: [
+      { id: "WL-040", employeeId: "E-005", clientId: "C-006", clientName: "Urban Threads", date: "2026-04-20", workType: "Graphic Design", reportingTime: "10:00", endTime: "16:00", location: "Office", agreedAmount: 0, notes: "Social media graphics batch", status: "Completed" },
+      { id: "WL-041", employeeId: "E-005", clientId: "C-003", clientName: "Vastra Couture", date: "2026-04-18", workType: "Graphic Design", reportingTime: "10:00", endTime: "15:00", location: "Office", agreedAmount: 0, notes: "Brand collateral", status: "Completed" },
+    ],
+    salaryPayments: [
+      { id: "SAL-010", employeeId: "E-005", month: 3, year: 2026, monthLabel: "Mar 2026", totalAssignments: 22, totalEarned: 28000, amountPaid: 25000, amountPending: 3000 },
+      { id: "SAL-011", employeeId: "E-005", month: 4, year: 2026, monthLabel: "Apr 2026", totalAssignments: 9, totalEarned: 28000, amountPaid: 0, amountPending: 28000 },
+    ],
+  },
+  {
+    id: "E-006",
+    name: "Priti Nair",
+    role: "Content Writer",
+    phone: "+91 95551 00006",
+    whatsapp: "9555100006",
+    email: "priti@creativemark.in",
+    address: "Hadapsar, Pune",
+    contractType: "Per Assignment",
+    baseRate: 500, // per piece
+    dateJoined: "2025-08-15",
+    status: "On Leave",
+    onFieldToday: false,
+    assignedClients: [],
+    assignedClientNames: [],
+    workLogs: [
+      { id: "WL-050", employeeId: "E-006", clientId: "C-001", clientName: "MLA Priya Deshmukh", date: "2026-04-17", workType: "Office Work", reportingTime: "10:00", endTime: "14:00", location: "Remote", agreedAmount: 2000, notes: "Speech writing (4 pieces)", status: "Completed" },
+    ],
+    salaryPayments: [
+      { id: "SAL-012", employeeId: "E-006", month: 3, year: 2026, monthLabel: "Mar 2026", totalAssignments: 8, totalEarned: 4000, amountPaid: 4000, amountPending: 0, paymentDate: "2026-04-05", paymentMethod: "UPI" },
     ],
   },
 ];

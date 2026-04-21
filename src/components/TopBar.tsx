@@ -1,4 +1,4 @@
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, LogOut } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,10 +6,21 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDateDDMMYYYY } from "@/lib/format";
 import { notifications } from "@/data/dashboard";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export const TopBar = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const today = formatDateDDMMYYYY();
   const unread = notifications.filter((n) => n.urgent).length;
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
+  if (!user) return null;
 
   return (
     <header className="h-16 border-b border-border bg-background flex items-center gap-3 px-4 sticky top-0 z-30">
@@ -46,14 +57,28 @@ export const TopBar = () => {
             </div>
           </PopoverContent>
         </Popover>
-        <div className="flex items-center gap-2 pl-2 border-l border-border">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">SK</AvatarFallback>
-          </Avatar>
-          <div className="hidden sm:block leading-tight">
-            <div className="text-sm font-semibold">Sandeep Khurana</div>
-            <div className="text-[11px] text-muted-foreground">Owner</div>
-          </div>
+        <div className="pl-2 border-l border-border">
+          <Popover>
+            <PopoverTrigger asChild>
+              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
+                    {user.name.split(" ").map((n) => n[0]).join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden sm:block leading-tight text-left">
+                  <div className="text-sm font-semibold">{user.name}</div>
+                  <div className="text-[11px] text-muted-foreground">{user.role}</div>
+                </div>
+              </div>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-48 p-2">
+              <Button variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </Button>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
     </header>

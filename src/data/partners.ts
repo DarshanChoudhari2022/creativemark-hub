@@ -1,77 +1,100 @@
-export interface CommissionRate {
-  service: string;
-  percent: number;
-}
+import type { Partner } from "@/types";
 
-export interface CommissionEntry {
-  invoiceNo: string;
-  client: string;
-  service: string;
-  dealValue: number;
-  percent: number;
-  amount: number;
-  status: "Paid" | "Pending";
-}
-
-export interface Partner {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  pan?: string;
-  gst?: string;
-  bankName?: string;
-  bankAccount?: string;
-  bankIFSC?: string;
-  status: "Active" | "Inactive";
-  leadsReferred: number;
-  totalCommission: number;
-  pendingCommission: number;
-  commissionStructure: CommissionRate[];
-  referredLeadIds: string[];
-  ledger: CommissionEntry[];
-}
+const defaultCommissionRates = [
+  { id: "CR-01", serviceName: "Social Media Management", defaultPercent: 10, partnerPercent: 10 },
+  { id: "CR-02", serviceName: "Reel Production (per piece)", defaultPercent: 8, partnerPercent: 8 },
+  { id: "CR-03", serviceName: "Photography (per day)", defaultPercent: 8, partnerPercent: 8 },
+  { id: "CR-04", serviceName: "Graphic Design Monthly", defaultPercent: 10, partnerPercent: 10 },
+  { id: "CR-05", serviceName: "Videography", defaultPercent: 8, partnerPercent: 8 },
+  { id: "CR-06", serviceName: "Banner Design", defaultPercent: 5, partnerPercent: 5 },
+  { id: "CR-07", serviceName: "Political Campaign Package", defaultPercent: 12, partnerPercent: 12 },
+  { id: "CR-08", serviceName: "Full Service Retainer", defaultPercent: 10, partnerPercent: 10 },
+];
 
 export const partners: Partner[] = [
   {
-    id: "P-01", name: "Anil Verma", phone: "+91 99100 11223", email: "anil.verma@partners.in",
-    pan: "ABCPV1234E", gst: "27ABCPV1234E1Z5",
-    bankName: "HDFC Bank", bankAccount: "501010101010", bankIFSC: "HDFC0001234",
-    status: "Active", leadsReferred: 8, totalCommission: 245000, pendingCommission: 65000,
-    commissionStructure: [
-      { service: "Campaign Management", percent: 8 },
-      { service: "Branding", percent: 10 },
-      { service: "Social Media", percent: 7 },
-      { service: "Photography", percent: 6 },
+    id: "P-001",
+    name: "Anil Verma",
+    businessName: "Verma Business Solutions",
+    phone: "+91 91001 00001",
+    whatsapp: "9100100001",
+    email: "anil.verma@email.com",
+    address: "Kothrud, Pune 411038",
+    pan: "ABCPV1234F",
+    bankAccount: "9876543210",
+    ifsc: "HDFC0001234",
+    accountHolder: "Anil Verma",
+    bankName: "HDFC Bank",
+    upi: "anilverma@upi",
+    partnerSince: "2025-06-01",
+    status: "Active",
+    notes: "Most active referral partner. Strong network in automotive and construction sectors.",
+    commissionRates: defaultCommissionRates.map(r => ({ ...r, partnerPercent: r.serviceName === "Full Service Retainer" ? 12 : r.partnerPercent })),
+    totalLeadsReferred: 8,
+    totalCommissionEarned: 245000,
+    pendingCommission: 65000,
+    leadsReferred: [
+      { id: "LR-001", leadName: "Suresh Patil", dateReferred: "2026-04-15", currentStage: "New", converted: false, dealValue: 350000, commission: 35000, status: "Pending" },
+      { id: "LR-002", leadName: "Rajendra Pawar", dateReferred: "2026-02-01", currentStage: "Converted", converted: true, dealValue: 500000, commission: 50000, status: "Paid" },
+      { id: "LR-003", leadName: "Speedway Motors (original)", dateReferred: "2025-08-10", currentStage: "Converted", converted: true, dealValue: 720000, commission: 72000, status: "Paid" },
     ],
-    referredLeadIds: ["L-101", "L-104", "L-107"],
     ledger: [
-      { invoiceNo: "INV-2026-0210", client: "Adv. Rajesh Kumar", service: "Campaign Management", dealValue: 450000, percent: 8, amount: 36000, status: "Pending" },
-      { invoiceNo: "INV-2026-0198", client: "Speedway Motors", service: "Social Media", dealValue: 280000, percent: 7, amount: 19600, status: "Pending" },
-      { invoiceNo: "INV-2026-0182", client: "Vastra Couture", service: "Branding", dealValue: 320000, percent: 10, amount: 32000, status: "Paid" },
+      { id: "CLE-001", partnerId: "P-001", date: "2026-04-10", clientName: "Patil Industries", invoiceNumber: "CM-B-2026-018", serviceName: "Digital Marketing", invoiceAmount: 350000, commissionPercent: 10, commissionAmount: 35000, status: "Pending" },
+      { id: "CLE-002", partnerId: "P-001", date: "2026-03-15", clientName: "Desai Textiles", invoiceNumber: "CM-B-2026-013", serviceName: "Social Media Management", invoiceAmount: 300000, commissionPercent: 10, commissionAmount: 30000, status: "Pending" },
+      { id: "CLE-003", partnerId: "P-001", date: "2026-02-01", clientName: "Mehta Electronics", invoiceNumber: "CM-B-2026-006", serviceName: "Full Service Retainer", invoiceAmount: 450000, commissionPercent: 10, commissionAmount: 45000, status: "Paid", paymentDate: "2026-02-15", reference: "NEFT-FEB-P001" },
+      { id: "CLE-004", partnerId: "P-001", date: "2026-01-10", clientName: "Sharma Builders", invoiceNumber: "CM-B-2026-002", serviceName: "Videography", invoiceAmount: 600000, commissionPercent: 10, commissionAmount: 60000, status: "Paid", paymentDate: "2026-01-25", reference: "NEFT-JAN-P001" },
+      { id: "CLE-005", partnerId: "P-001", date: "2025-12-05", clientName: "Kulkarni Foods", invoiceNumber: "CM-B-2025-048", serviceName: "Social Media Management", invoiceAmount: 200000, commissionPercent: 10, commissionAmount: 20000, status: "Paid", paymentDate: "2025-12-20" },
+      { id: "CLE-006", partnerId: "P-001", date: "2025-11-10", clientName: "Jain Motors", invoiceNumber: "CM-B-2025-042", serviceName: "Full Service Retainer", invoiceAmount: 550000, commissionPercent: 10, commissionAmount: 55000, status: "Paid", paymentDate: "2025-11-25" },
     ],
   },
   {
-    id: "P-02", name: "Priya Deshmukh", phone: "+91 99200 22334", email: "priya@partners.in",
-    pan: "DEFPV5678F",
-    bankName: "ICICI Bank", bankAccount: "602020202020", bankIFSC: "ICIC0005678",
-    status: "Active", leadsReferred: 5, totalCommission: 180000, pendingCommission: 45000,
-    commissionStructure: [
-      { service: "Campaign Management", percent: 10 },
-      { service: "Branding", percent: 8 },
+    id: "P-002",
+    name: "Priya Deshmukh",
+    businessName: "Political Network",
+    phone: "+91 91002 00002",
+    whatsapp: "9100200002",
+    email: "priya.d@email.com",
+    address: "Shivajinagar, Pune 411005",
+    partnerSince: "2025-03-15",
+    status: "Active",
+    notes: "Political aide. Refers political clients exclusively. Flat commission structure.",
+    commissionRates: defaultCommissionRates.map(r => ({ ...r, partnerPercent: r.serviceName === "Political Campaign Package" ? 15 : r.partnerPercent })),
+    totalLeadsReferred: 5,
+    totalCommissionEarned: 180000,
+    pendingCommission: 25000,
+    leadsReferred: [
+      { id: "LR-004", leadName: "Corporator Yadav", dateReferred: "2026-04-05", currentStage: "Contacted", converted: false, dealValue: 200000, commission: 25000, status: "Pending" },
+      { id: "LR-005", leadName: "MLA Patil", dateReferred: "2026-02-20", currentStage: "Converted", converted: true, dealValue: 500000, commission: 25000, status: "Paid" },
     ],
-    referredLeadIds: ["L-103"],
     ledger: [
-      { invoiceNo: "INV-2026-0205", client: "MLA Priya Deshmukh", service: "Campaign Management", dealValue: 600000, percent: 10, amount: 60000, status: "Paid" },
+      { id: "CLE-007", partnerId: "P-002", date: "2026-04-05", clientName: "Corporator Yadav", invoiceNumber: "—", serviceName: "Political Campaign Package", invoiceAmount: 200000, commissionPercent: 12.5, commissionAmount: 25000, status: "Pending" },
+      { id: "CLE-008", partnerId: "P-002", date: "2026-02-20", clientName: "MLA Patil", invoiceNumber: "CM-B-2026-008", serviceName: "Political Campaign Package", invoiceAmount: 500000, commissionPercent: 5, commissionAmount: 25000, status: "Paid", paymentDate: "2026-03-05" },
+      { id: "CLE-009", partnerId: "P-002", date: "2025-12-15", clientName: "Sarpanch Jadhav", invoiceNumber: "CM-B-2025-045", serviceName: "Social Media Management", invoiceAmount: 150000, commissionPercent: 16.7, commissionAmount: 25000, status: "Paid", paymentDate: "2026-01-05" },
+      { id: "CLE-010", partnerId: "P-002", date: "2025-10-01", clientName: "Councilor More", invoiceNumber: "CM-B-2025-038", serviceName: "Political Campaign Package", invoiceAmount: 300000, commissionPercent: 8.3, commissionAmount: 25000, status: "Paid", paymentDate: "2025-10-20" },
     ],
   },
   {
-    id: "P-03", name: "Rohit Khanna", phone: "+91 99300 33445", email: "rohit.k@partners.in",
-    status: "Inactive", leadsReferred: 2, totalCommission: 28000, pendingCommission: 0,
-    commissionStructure: [
-      { service: "Photography", percent: 5 },
+    id: "P-003",
+    name: "Rohit Khanna",
+    businessName: "Khanna Consulting",
+    phone: "+91 91003 00003",
+    whatsapp: "9100300003",
+    email: "rohit.k@email.com",
+    address: "Baner, Pune 411045",
+    partnerSince: "2025-09-10",
+    status: "Active",
+    notes: "Freelance consultant. Occasional referrals from his network.",
+    commissionRates: defaultCommissionRates.map(r => ({ ...r, partnerPercent: 8 })),
+    totalLeadsReferred: 2,
+    totalCommissionEarned: 28000,
+    pendingCommission: 0,
+    leadsReferred: [
+      { id: "LR-006", leadName: "Sharma Optics", dateReferred: "2026-01-20", currentStage: "Converted", converted: true, dealValue: 200000, commission: 16000, status: "Paid" },
+      { id: "LR-007", leadName: "Gupta Jewellers", dateReferred: "2025-11-05", currentStage: "Converted", converted: true, dealValue: 150000, commission: 12000, status: "Paid" },
     ],
-    referredLeadIds: [],
-    ledger: [],
+    ledger: [
+      { id: "CLE-011", partnerId: "P-003", date: "2026-01-20", clientName: "Sharma Optics", invoiceNumber: "CM-B-2026-003", serviceName: "Photography", invoiceAmount: 200000, commissionPercent: 8, commissionAmount: 16000, status: "Paid", paymentDate: "2026-02-05" },
+      { id: "CLE-012", partnerId: "P-003", date: "2025-11-05", clientName: "Gupta Jewellers", invoiceNumber: "CM-B-2025-040", serviceName: "Social Media Management", invoiceAmount: 150000, commissionPercent: 8, commissionAmount: 12000, status: "Paid", paymentDate: "2025-11-20" },
+    ],
   },
 ];

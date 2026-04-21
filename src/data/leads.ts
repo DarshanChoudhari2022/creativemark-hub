@@ -1,72 +1,158 @@
-export type LeadStage = "New" | "Contacted" | "Quotation Sent" | "Negotiation" | "Converted" | "Lost";
+import type { Lead, LeadStage } from "@/types";
 
-export interface Lead {
-  id: string;
-  name: string;
-  company: string;
-  referrer: string;
-  salesperson: string;
-  nextCallDate: string;
-  lastAction: string;
-  stage: LeadStage;
-  value: number;
-  contact: string;
-  email: string;
-  communicationLog: { date: string; type: "Call" | "Email" | "Meeting" | "WhatsApp"; note: string }[];
-  actionItems: { task: string; due: string; done: boolean }[];
-}
+export const kanbanStages: LeadStage[] = ["New", "Contacted", "Quotation Sent", "Negotiation", "Converted", "Lost"];
 
 export const leads: Lead[] = [
   {
-    id: "L-101", name: "Suresh Patil", company: "Patil Industries", referrer: "Anil Verma",
-    salesperson: "Neha Kapoor", nextCallDate: "21/04/2026", lastAction: "Intro call done",
-    stage: "New", value: 150000, contact: "+91 90011 22334", email: "suresh@patil.in",
-    communicationLog: [{ date: "19/04/2026", type: "Call", note: "First introduction, interested in branding" }],
-    actionItems: [{ task: "Send service brochure", due: "21/04/2026", done: false }],
-  },
-  {
-    id: "L-102", name: "Geeta Naik", company: "Naik Sarees", referrer: "Walk-in",
-    salesperson: "Rohan Das", nextCallDate: "22/04/2026", lastAction: "Sent intro deck",
-    stage: "Contacted", value: 85000, contact: "+91 90022 33445", email: "geeta@naiksarees.in",
-    communicationLog: [
-      { date: "17/04/2026", type: "WhatsApp", note: "Shared agency portfolio" },
-      { date: "19/04/2026", type: "Email", note: "Sent service catalogue" },
+    id: "L-001", name: "Suresh Patil", organization: "Patil Industries",
+    category: "Other",
+    phone: "+91 99001 11111", whatsapp: "9900111111", email: "suresh@patilind.com",
+    address: "MIDC, Bhosari, Pune",
+    source: "Partner", stage: "New", heat: "Hot",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 350000, servicesInterested: ["Digital Marketing", "Social Media"],
+    dateReceived: "2026-04-15", expectedClose: "2026-05-15",
+    lastContactDate: "2026-04-18",
+    nextFollowupDate: "2026-04-21",
+    notes: "Referred by Anil Verma. Interested in 6-month retainer.",
+    partnerId: "P-001", referrerName: "Anil Verma", referrerPhone: "+91 91001 00001",
+    commLog: [
+      { id: "CL-001", leadId: "L-001", datetime: "2026-04-18 14:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Call", summary: "Discussed service packages. Interested in social media + digital marketing.", actionItems: "Send detailed proposal with case studies", pendingItems: "Waiting for budget confirmation", nextFollowupDate: "2026-04-21", nextFollowupAssigned: "Neha Kapoor", nextFollowupAssignedId: "E-004" },
+      { id: "CL-002", leadId: "L-001", datetime: "2026-04-15 10:30", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "WhatsApp", summary: "Initial introduction. Shared company profile.", actionItems: "Schedule call for detailed discussion" },
     ],
-    actionItems: [{ task: "Follow up on deck", due: "22/04/2026", done: false }],
+    tasks: [
+      { id: "LT-001", leadId: "L-001", description: "Send proposal with pricing", assignedTo: "Neha Kapoor", assignedToId: "E-004", dueDate: "2026-04-22", status: "Pending" },
+      { id: "LT-002", leadId: "L-001", description: "Share case studies from Motors clients", assignedTo: "Sneha Iyer", assignedToId: "E-003", dueDate: "2026-04-21", status: "Done" },
+    ],
+    reassignments: [],
   },
   {
-    id: "L-103", name: "Mahesh Gowda", company: "Gowda Motors", referrer: "Priya Deshmukh",
-    salesperson: "Neha Kapoor", nextCallDate: "23/04/2026", lastAction: "Quotation emailed",
-    stage: "Quotation Sent", value: 320000, contact: "+91 90033 44556", email: "m.gowda@gowdamotors.in",
-    communicationLog: [{ date: "18/04/2026", type: "Meeting", note: "Discussed annual retainer" }],
-    actionItems: [{ task: "Confirm quotation receipt", due: "21/04/2026", done: true }],
+    id: "L-002", name: "Geeta Naik", organization: "Naik Sarees",
+    category: "Clothing",
+    phone: "+91 99002 22222", whatsapp: "9900222222", email: "geeta@naiksarees.com",
+    source: "Walk-in", stage: "Contacted", heat: "Warm",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 180000, servicesInterested: ["Photography", "Social Media"],
+    dateReceived: "2026-04-10", expectedClose: "2026-05-10",
+    lastContactDate: "2026-04-16",
+    nextFollowupDate: "2026-04-22",
+    notes: "Looking for e-commerce shoot. Has 200+ products.",
+    commLog: [
+      { id: "CL-003", leadId: "L-002", datetime: "2026-04-16 11:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Meeting", summary: "Showed portfolio. She wants sample shoot first.", actionItems: "Arrange sample shoot with 10 products", nextFollowupDate: "2026-04-22", nextFollowupAssigned: "Neha Kapoor", nextFollowupAssignedId: "E-004" },
+      { id: "CL-004", leadId: "L-002", datetime: "2026-04-10 15:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Call", summary: "Walk-in inquiry. Set meeting for next week." },
+    ],
+    tasks: [
+      { id: "LT-003", leadId: "L-002", description: "Arrange sample shoot (10 products)", assignedTo: "Vikram Joshi", assignedToId: "E-001", dueDate: "2026-04-23", status: "Pending" },
+    ],
+    reassignments: [],
   },
   {
-    id: "L-104", name: "Divya Reddy", company: "Reddy Boutique", referrer: "Anil Verma",
-    salesperson: "Rohan Das", nextCallDate: "24/04/2026", lastAction: "Negotiating scope",
-    stage: "Negotiation", value: 210000, contact: "+91 90044 55667", email: "divya@reddyboutique.in",
-    communicationLog: [{ date: "20/04/2026", type: "Call", note: "Wants 10% off, discussing scope cut" }],
-    actionItems: [{ task: "Revised quotation", due: "22/04/2026", done: false }],
+    id: "L-003", name: "Mahesh Gowda", organization: "Gowda Motors",
+    category: "Motors",
+    phone: "+91 99003 33333", whatsapp: "9900333333", email: "mahesh@gowdamotors.com",
+    address: "Pimpri-Chinchwad, Pune",
+    source: "Referral", stage: "Quotation Sent", heat: "Hot",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 480000, servicesInterested: ["Digital Marketing", "Photography", "Banner Work"],
+    dateReceived: "2026-04-02", expectedClose: "2026-04-30",
+    lastContactDate: "2026-04-17",
+    nextFollowupDate: "2026-04-23",
+    notes: "Sent quotation CM-Q-2026-002. Waiting for approval.",
+    commLog: [
+      { id: "CL-005", leadId: "L-003", datetime: "2026-04-17 16:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Email", summary: "Sent revised quotation with 10% discount.", actionItems: "Wait for approval, follow up in 5 days" },
+      { id: "CL-006", leadId: "L-003", datetime: "2026-04-10 14:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Meeting", summary: "Discussed scope. Includes showroom shoot + monthly social media management." },
+      { id: "CL-007", leadId: "L-003", datetime: "2026-04-02 10:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Call", summary: "Initial call. Referred by existing client." },
+    ],
+    tasks: [
+      { id: "LT-004", leadId: "L-003", description: "Follow up on quotation approval", assignedTo: "Neha Kapoor", assignedToId: "E-004", dueDate: "2026-04-23", status: "Pending" },
+    ],
+    reassignments: [],
   },
   {
-    id: "L-105", name: "Hon. Ravi Shinde", company: "Shinde Foundation", referrer: "Direct",
-    salesperson: "Neha Kapoor", nextCallDate: "—", lastAction: "Onboarded",
-    stage: "Converted", value: 480000, contact: "+91 90055 66778", email: "office@shindefoundation.in",
-    communicationLog: [{ date: "15/04/2026", type: "Meeting", note: "Signed retainer agreement" }],
-    actionItems: [],
+    id: "L-004", name: "Divya Reddy", organization: "Reddy Boutique",
+    category: "Clothing",
+    phone: "+91 99004 44444", whatsapp: "9900444444", email: "divya@reddyboutique.com",
+    source: "Instagram", stage: "Negotiation", heat: "Warm",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 220000, servicesInterested: ["Social Media", "Reel Production"],
+    dateReceived: "2026-03-25", expectedClose: "2026-05-01",
+    lastContactDate: "2026-04-18",
+    nextFollowupDate: "2026-04-24",
+    notes: "Negotiating on influencer tie-up budget.",
+    commLog: [
+      { id: "CL-008", leadId: "L-004", datetime: "2026-04-18 11:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Call", summary: "Price negotiation. She wants 3 influencers under ₹80K.", actionItems: "Prepare revised influencer package" },
+      { id: "CL-009", leadId: "L-004", datetime: "2026-04-12 15:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "WhatsApp", summary: "Shared influencer options and pricing." },
+    ],
+    tasks: [],
+    reassignments: [],
   },
   {
-    id: "L-106", name: "Ankit Bansal", company: "Bansal Wheels", referrer: "Walk-in",
-    salesperson: "Rohan Das", nextCallDate: "—", lastAction: "Went with competitor",
-    stage: "Lost", value: 120000, contact: "+91 90066 77889", email: "ankit@bansalwheels.in",
-    communicationLog: [{ date: "16/04/2026", type: "Email", note: "Declined our proposal" }],
-    actionItems: [],
+    id: "L-005", name: "Farhan Sheikh", organization: "Sheikh Garments",
+    category: "Clothing",
+    phone: "+91 99005 55555", whatsapp: "9900555555", email: "farhan@sheikhgarments.com",
+    source: "Cold Call", stage: "New", heat: "Cold",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 100000, servicesInterested: ["Graphic Design"],
+    dateReceived: "2026-04-12",
+    lastContactDate: "2026-04-12",
+    nextFollowupDate: "2026-04-21",
+    notes: "Not very responsive. Follow-up needed.",
+    commLog: [
+      { id: "CL-010", leadId: "L-005", datetime: "2026-04-12 09:30", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Call", summary: "Cold call. Mildly interested, asked to call back next week." },
+    ],
+    tasks: [],
+    reassignments: [],
   },
   {
-    id: "L-107", name: "Farhan Sheikh", company: "Sheikh Garments", referrer: "Anil Verma",
-    salesperson: "Neha Kapoor", nextCallDate: "21/04/2026", lastAction: "Awaiting reply",
-    stage: "Quotation Sent", value: 95000, contact: "+91 90077 88990", email: "farhan@sheikhgarments.in",
-    communicationLog: [{ date: "19/04/2026", type: "Email", note: "Quotation sent" }],
-    actionItems: [{ task: "Reminder call", due: "21/04/2026", done: false }],
+    id: "L-006", name: "Anita Joshi", organization: "Joshi Electronics",
+    category: "Other",
+    phone: "+91 99006 66666", whatsapp: "9900666666", email: "anita@joshielec.com",
+    source: "Website", stage: "Contacted", heat: "Warm",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 150000, servicesInterested: ["Digital Marketing", "Social Media"],
+    dateReceived: "2026-04-08",
+    lastContactDate: "2026-04-14",
+    notes: "Filled inquiry form. Wants to boost online presence.",
+    commLog: [
+      { id: "CL-011", leadId: "L-006", datetime: "2026-04-14 14:30", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Email", summary: "Sent company deck and case studies." },
+      { id: "CL-012", leadId: "L-006", datetime: "2026-04-09 10:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Call", summary: "Follow-up on website inquiry. Interested." },
+    ],
+    tasks: [
+      { id: "LT-005", leadId: "L-006", description: "Schedule in-person meeting", assignedTo: "Neha Kapoor", assignedToId: "E-004", dueDate: "2026-04-22", status: "Pending" },
+    ],
+    reassignments: [],
+  },
+  {
+    id: "L-007", name: "Rajendra Pawar", organization: "Pawar Constructions",
+    category: "Other",
+    phone: "+91 99007 77777", whatsapp: "9900777777", email: "rajendra@pawarconstruction.in",
+    source: "Partner", stage: "Converted", heat: "Hot",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 500000, servicesInterested: ["Digital Marketing", "Videography", "Photography"],
+    dateReceived: "2026-02-01", expectedClose: "2026-03-15",
+    lastContactDate: "2026-03-10",
+    partnerId: "P-001", referrerName: "Anil Verma",
+    notes: "Converted. Now active client.",
+    commLog: [
+      { id: "CL-013", leadId: "L-007", datetime: "2026-03-10 11:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Meeting", summary: "Contract signed. Onboarding next week." },
+    ],
+    tasks: [],
+    reassignments: [],
+  },
+  {
+    id: "L-008", name: "Meena Kulkarni", organization: "Kulkarni Textiles",
+    category: "Clothing",
+    phone: "+91 99008 88888", whatsapp: "9900888888", email: "meena@kulkarnitextiles.com",
+    source: "Facebook", stage: "Lost", heat: "Cold",
+    assignedTo: "E-004", assignedToName: "Neha Kapoor",
+    estimatedValue: 120000, servicesInterested: ["Social Media"],
+    dateReceived: "2026-03-01",
+    lastContactDate: "2026-03-20",
+    notes: "Went with a competitor. Budget was too low.",
+    commLog: [
+      { id: "CL-014", leadId: "L-008", datetime: "2026-03-20 15:00", contactPerson: "Neha Kapoor", contactPersonId: "E-004", method: "Call", summary: "Client chose competitor. Not interested." },
+    ],
+    tasks: [],
+    reassignments: [],
   },
 ];

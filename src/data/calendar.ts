@@ -1,23 +1,83 @@
-export type EventType = "shoot" | "meeting" | "internal";
-
-export interface CalendarEvent {
-  id: string;
-  title: string;
-  date: string; // YYYY-MM-DD for sorting
-  time: string;
-  type: EventType;
-  clientId?: string;
-  employeeId?: string;
-}
+import type { CalendarEvent } from "@/types";
 
 export const calendarEvents: CalendarEvent[] = [
-  { id: "EV-1", title: "Reel shoot — Adv. Rajesh Kumar", date: "2026-04-20", time: "10:00", type: "shoot", clientId: "C-001", employeeId: "E-001" },
-  { id: "EV-2", title: "MLA Priya — Event coverage", date: "2026-04-20", time: "09:30", type: "shoot", clientId: "C-004", employeeId: "E-003" },
-  { id: "EV-3", title: "Client review — Vastra Couture", date: "2026-04-22", time: "14:00", type: "meeting", clientId: "C-002" },
-  { id: "EV-4", title: "Team standup", date: "2026-04-21", time: "11:00", type: "internal" },
-  { id: "EV-5", title: "Speedway showroom shoot", date: "2026-04-28", time: "10:30", type: "shoot", clientId: "C-003", employeeId: "E-001" },
-  { id: "EV-6", title: "Strategy — Patil Industries", date: "2026-04-23", time: "15:00", type: "meeting", clientId: "C-001" },
-  { id: "EV-7", title: "Internal review", date: "2026-04-24", time: "16:00", type: "internal" },
-  { id: "EV-8", title: "Reel shoot — Urban Threads", date: "2026-04-25", time: "11:00", type: "shoot", clientId: "C-005", employeeId: "E-001" },
-  { id: "EV-9", title: "MLA Priya — Rally", date: "2026-04-26", time: "08:00", type: "shoot", clientId: "C-004", employeeId: "E-004" },
+  {
+    id: "EV-001", title: "Rally Coverage — MLA Deshmukh",
+    type: "Shoot", start: "2026-04-20T09:30:00", end: "2026-04-20T13:00:00",
+    clientId: "C-001", clientName: "MLA Priya Deshmukh",
+    assignedEmployees: ["E-001", "E-003"], assignedEmployeeNames: ["Vikram Joshi", "Sneha Iyer"],
+    location: "Yerawada Community Hall", notes: "Full event coverage — photos + reels",
+    status: "Completed",
+  },
+  {
+    id: "EV-002", title: "Reel Shoot — Adv. Rajesh",
+    type: "Shoot", start: "2026-04-21T10:00:00", end: "2026-04-21T12:30:00",
+    clientId: "C-002", clientName: "Adv. Rajesh Kumar",
+    assignedEmployees: ["E-002"], assignedEmployeeNames: ["Arjun Mehta"],
+    location: "Hadapsar Office", notes: "Monthly reel batch",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-003", title: "Maharashtra Day Shoot — Deshmukh",
+    type: "Shoot", start: "2026-04-25T10:00:00", end: "2026-04-25T12:00:00",
+    clientId: "C-001", clientName: "MLA Priya Deshmukh",
+    assignedEmployees: ["E-002"], assignedEmployeeNames: ["Arjun Mehta"],
+    location: "Ward Office, Yerawada", notes: "Maharashtra Day special content",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-004", title: "Summer Collection Shoot — Vastra Couture",
+    type: "Shoot", start: "2026-04-25T08:00:00", end: "2026-04-25T14:00:00",
+    clientId: "C-003", clientName: "Vastra Couture",
+    assignedEmployees: ["E-001", "E-005"], assignedEmployeeNames: ["Vikram Joshi", "Rohan Das"],
+    location: "Studio — KP", notes: "Full-day studio shoot for summer drop",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-005", title: "Showroom Shoot — Speedway Motors",
+    type: "Shoot", start: "2026-04-28T10:00:00", end: "2026-04-28T15:00:00",
+    clientId: "C-005", clientName: "Speedway Motors",
+    assignedEmployees: ["E-001", "E-003"], assignedEmployeeNames: ["Vikram Joshi", "Sneha Iyer"],
+    location: "Showroom — Hinjewadi", notes: "Quarterly showroom + outdoor shots",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-006", title: "Payment Follow-up — Green Earth",
+    type: "Meeting", start: "2026-04-22T11:00:00", end: "2026-04-22T12:00:00",
+    clientId: "C-004", clientName: "Green Earth NGO",
+    assignedEmployees: ["E-004"], assignedEmployeeNames: ["Neha Kapoor"],
+    location: "Office", notes: "₹95,000 overdue. Discuss payment plan.",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-007", title: "Client Meeting — Gowda Motors (Lead)",
+    type: "Meeting", start: "2026-04-23T14:00:00", end: "2026-04-23T15:30:00",
+    clientName: "Gowda Motors",
+    assignedEmployees: ["E-004"], assignedEmployeeNames: ["Neha Kapoor"],
+    location: "Pimpri-Chinchwad", notes: "Quotation discussion. Follow-up meeting.",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-008", title: "Monthly Report — All Clients",
+    type: "Deadline", start: "2026-04-30T18:00:00", end: "2026-04-30T18:00:00",
+    assignedEmployees: ["E-003"], assignedEmployeeNames: ["Sneha Iyer"],
+    location: "Office", notes: "Monthly social media reports due for all active clients.",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-009", title: "Team Meeting — May Planning",
+    type: "Meeting", start: "2026-04-29T10:00:00", end: "2026-04-29T11:30:00",
+    assignedEmployees: ["E-001", "E-002", "E-003", "E-004", "E-005"],
+    assignedEmployeeNames: ["Vikram Joshi", "Arjun Mehta", "Sneha Iyer", "Neha Kapoor", "Rohan Das"],
+    location: "Office — Conference Room", notes: "May planning, resource allocation, and client review.",
+    status: "Scheduled",
+  },
+  {
+    id: "EV-010", title: "Sample Shoot — Naik Sarees (Lead)",
+    type: "Shoot", start: "2026-04-23T10:00:00", end: "2026-04-23T13:00:00",
+    clientName: "Naik Sarees",
+    assignedEmployees: ["E-001"], assignedEmployeeNames: ["Vikram Joshi"],
+    location: "Client Studio", notes: "10-product sample shoot for lead conversion.",
+    status: "Scheduled",
+  },
 ];

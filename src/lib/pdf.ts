@@ -1,222 +1,219 @@
-import { jsPDF } from "jspdf";
+import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Quotation, quotationTerms } from "@/data/quotations";
-import { Partner } from "@/data/partners";
-import { formatINR, formatDateDDMMYYYY } from "@/lib/format";
+import type { Quotation } from "@/data/quotations";
+import type { Partner } from "@/data/partners";
 
-const RED: [number, number, number] = [232, 25, 44];
-const BLACK: [number, number, number] = [26, 26, 26];
-const GRAY: [number, number, number] = [120, 120, 120];
+const BRAND_RED_R = 232, BRAND_RED_G = 25, BRAND_RED_B = 44;
 
-function letterhead(doc: jsPDF, title: string) {
+function addLetterhead(doc: jsPDF) {
   // Red header bar
-  doc.setFillColor(...RED);
-  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 28, "F");
+  doc.setFillColor(BRAND_RED_R, BRAND_RED_G, BRAND_RED_B);
+  doc.rect(0, 0, 210, 30, "F");
 
+  // Company name
   doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
-  doc.text("CREATIVE MARK", 14, 13);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text("Advertising  |  Digital Marketing  |  Branding  |  Multimedia", 14, 19);
-
-  // Right side title
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text(title, doc.internal.pageSize.getWidth() - 14, 17, { align: "right" });
+  doc.text("CreativeMark", 15, 16);
 
-  // Footer line
-  const ph = doc.internal.pageSize.getHeight();
-  doc.setDrawColor(...RED);
-  doc.setLineWidth(0.6);
-  doc.line(14, ph - 18, doc.internal.pageSize.getWidth() - 14, ph - 18);
-  doc.setTextColor(...GRAY);
+  // Tagline
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.text("CreativeMark Advertising  •  Mumbai, Maharashtra, India  •  hello@creativemarkadvertising.com  •  +91 99999 00000", 14, ph - 12);
-  doc.text("www.creativemarkadvertising.com", doc.internal.pageSize.getWidth() - 14, ph - 12, { align: "right" });
+  doc.text("Advertising | Digital Marketing | Branding | Multimedia", 15, 23);
+
+  // Contact info right
+  doc.setFontSize(7);
+  doc.text("+91 98765 43210 | hello@creativemark.in", 195, 16, { align: "right" });
+  doc.text("301, Baner Road, Pune — 411045", 195, 21, { align: "right" });
+
+  // Reset color
+  doc.setTextColor(26, 26, 26);
+  doc.setFont("helvetica", "normal");
 }
 
-export function downloadQuotationPDF(q: Quotation, kind: "Quotation" | "Bill" = "Quotation") {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  letterhead(doc, kind.toUpperCase());
-
-  doc.setTextColor(...BLACK);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text(`${kind} No: ${q.id}`, 14, 40);
-  doc.text(`Date: ${q.date}`, doc.internal.pageSize.getWidth() - 14, 40, { align: "right" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...GRAY);
-  doc.text("BILL TO", 14, 50);
-  doc.setTextColor(...BLACK);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text(q.clientName, 14, 56);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...GRAY);
-  doc.text(`Client ID: ${q.clientId}   •   Validity: ${q.validity}`, 14, 61);
-
-  const subtotal = q.items.reduce((s, i) => s + i.qty * i.rate, 0);
-  const gst = Math.round(subtotal * 0.18);
-  const total = subtotal + gst;
-
-  autoTable(doc, {
-    startY: 70,
-    head: [["#", "Description", "Qty", "Rate (₹)", "Amount (₹)"]],
-    body: q.items.map((it, idx) => [
-      String(idx + 1),
-      it.description,
-      String(it.qty),
-      it.rate.toLocaleString("en-IN"),
-      (it.qty * it.rate).toLocaleString("en-IN"),
-    ]),
-    headStyles: { fillColor: RED, textColor: 255, fontStyle: "bold" },
-    bodyStyles: { textColor: BLACK },
-    alternateRowStyles: { fillColor: [248, 248, 248] },
-    columnStyles: {
-      0: { cellWidth: 12 },
-      2: { halign: "right", cellWidth: 18 },
-      3: { halign: "right", cellWidth: 30 },
-      4: { halign: "right", cellWidth: 35 },
-    },
-    margin: { left: 14, right: 14 },
-  });
-
-  // @ts-expect-error autoTable adds lastAutoTable
-  let y = doc.lastAutoTable.finalY + 8;
-
-  const labelX = doc.internal.pageSize.getWidth() - 70;
-  const valX = doc.internal.pageSize.getWidth() - 14;
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.text("Subtotal", labelX, y);
-  doc.text(`₹ ${subtotal.toLocaleString("en-IN")}`, valX, y, { align: "right" });
-  y += 6;
-  doc.text("GST @ 18%", labelX, y);
-  doc.text(`₹ ${gst.toLocaleString("en-IN")}`, valX, y, { align: "right" });
-  y += 7;
-  doc.setDrawColor(...RED);
-  doc.line(labelX, y - 3, valX, y - 3);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(...RED);
-  doc.text("TOTAL", labelX, y + 3);
-  doc.text(`₹ ${total.toLocaleString("en-IN")}`, valX, y + 3, { align: "right" });
-  y += 14;
-
-  // T&C
-  doc.setTextColor(...BLACK);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("Terms & Conditions", 14, y);
-  doc.setDrawColor(...RED);
-  doc.line(14, y + 1.5, 60, y + 1.5);
-  y += 7;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(60, 60, 60);
-  quotationTerms.forEach((t, i) => {
-    const lines = doc.splitTextToSize(`${i + 1}. ${t}`, doc.internal.pageSize.getWidth() - 28);
-    doc.text(lines, 14, y);
-    y += lines.length * 4.5;
-  });
-
-  doc.save(`${kind}-${q.id}.pdf`);
+function addFooter(doc: jsPDF, pageNum: number) {
+  const y = 280;
+  doc.setDrawColor(200, 200, 200);
+  doc.line(15, y, 195, y);
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.text("CreativeMark — www.creativemark.in", 15, y + 5);
+  doc.text(`Page ${pageNum}`, 195, y + 5, { align: "right" });
+  doc.setTextColor(26, 26, 26);
 }
 
-export function downloadPartnerAgreementPDF(p: Partner) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  letterhead(doc, "PARTNERSHIP AGREEMENT");
+export function generateQuotationPDF(q: Quotation) {
+  const doc = new jsPDF();
+  addLetterhead(doc);
 
-  const pw = doc.internal.pageSize.getWidth();
   let y = 40;
 
-  doc.setTextColor(...BLACK);
+  // Title
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("REFERRAL PARTNERSHIP AGREEMENT", pw / 2, y, { align: "center" });
+  doc.text("QUOTATION", 15, y);
   y += 8;
-  doc.setFont("helvetica", "normal");
+
+  // Quotation details
   doc.setFontSize(10);
-  doc.setTextColor(...GRAY);
-  doc.text(`Effective Date: ${formatDateDDMMYYYY()}   •   Agreement Ref: AG-${p.id}-${Date.now().toString().slice(-5)}`, pw / 2, y, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.text(`Quotation #: ${q.number}`, 15, y);
+  doc.text(`Date: ${formatDate(q.date)}`, 130, y);
+  y += 6;
+  doc.text(`To: ${q.clientName}`, 15, y);
+  doc.text(`Valid Until: ${formatDate(q.validUntil)}`, 130, y);
   y += 10;
 
-  const section = (title: string) => {
-    doc.setTextColor(...RED);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(title, 14, y);
-    doc.setDrawColor(...RED);
-    doc.setLineWidth(0.4);
-    doc.line(14, y + 1.5, 14 + doc.getTextWidth(title), y + 1.5);
-    y += 6;
-    doc.setTextColor(60, 60, 60);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-  };
-
-  const para = (text: string) => {
-    const lines = doc.splitTextToSize(text, pw - 28);
-    doc.text(lines, 14, y);
-    y += lines.length * 4.6 + 3;
-  };
-
-  section("1. PARTIES");
-  para(`This Agreement is made between CreativeMark Advertising ("Agency"), having its registered office in Mumbai, Maharashtra, India, and ${p.name} ("Partner"), residing at the address on record, contactable at ${p.phone} / ${p.email}.`);
-
-  section("2. SCOPE OF ENGAGEMENT");
-  para("The Partner agrees to refer prospective clients to the Agency for advertising, digital marketing, branding, and multimedia services. The Agency retains sole discretion to accept or reject any referred prospect.");
-
-  section("3. COMMISSION STRUCTURE");
-  y += 1;
+  // Line items table
   autoTable(doc, {
     startY: y,
-    head: [["Service", "Commission %"]],
-    body: p.commissionStructure.map((c) => [c.service, `${c.percent}%`]),
-    headStyles: { fillColor: RED, textColor: 255 },
-    columnStyles: { 1: { halign: "right", cellWidth: 35 } },
-    margin: { left: 14, right: 14 },
-    styles: { fontSize: 9 },
+    head: [["#", "Description", "Qty", "Rate (₹)", "Amount (₹)"]],
+    body: q.items.map((item, i) => [
+      String(i + 1),
+      item.description,
+      String(item.quantity),
+      item.rate.toLocaleString("en-IN"),
+      item.amount.toLocaleString("en-IN"),
+    ]),
+    headStyles: {
+      fillColor: [BRAND_RED_R, BRAND_RED_G, BRAND_RED_B],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 9,
+    },
+    bodyStyles: { fontSize: 9 },
+    alternateRowStyles: { fillColor: [250, 250, 250] },
+    columnStyles: {
+      0: { cellWidth: 10, halign: "center" },
+      2: { cellWidth: 15, halign: "center" },
+      3: { cellWidth: 30, halign: "right" },
+      4: { cellWidth: 30, halign: "right" },
+    },
+    margin: { left: 15, right: 15 },
   });
-  // @ts-expect-error finalY
-  y = doc.lastAutoTable.finalY + 5;
-  para("Commission is computed on the net deal value (excluding taxes) of each successfully closed engagement that originated from a Partner referral.");
 
-  section("4. PAYMENT TERMS");
-  para("Commission shall be paid to the Partner within fifteen (15) business days after the Agency has received full payment from the referred client for the relevant invoice. Payments will be made by bank transfer to the account details provided by the Partner.");
+  y = (doc as any).lastAutoTable.finalY + 8;
 
-  section("5. CONFIDENTIALITY");
-  para("Each party shall keep all non-public information of the other party strictly confidential and shall not disclose such information to any third party without prior written consent, both during the term of this Agreement and for two (2) years thereafter.");
-
-  section("6. TERM & TERMINATION");
-  para("This Agreement is effective from the date first written above and shall continue until terminated by either party with thirty (30) days' written notice. Commissions accrued but unpaid as on the termination date shall remain payable.");
-
-  section("7. GOVERNING LAW");
-  para("This Agreement shall be governed by the laws of India. Any dispute shall be subject to the exclusive jurisdiction of the courts of Mumbai, Maharashtra.");
-
-  // Signatures
-  if (y > 230) { doc.addPage(); letterhead(doc, "PARTNERSHIP AGREEMENT"); y = 40; }
-  y += 10;
-  doc.setDrawColor(...BLACK);
-  doc.setLineWidth(0.3);
-  doc.line(20, y, 90, y);
-  doc.line(pw - 90, y, pw - 20, y);
-  doc.setTextColor(...BLACK);
-  doc.setFont("helvetica", "bold");
+  // Totals
+  const totalsX = 130;
   doc.setFontSize(10);
-  doc.text("For CreativeMark Advertising", 20, y + 5);
-  doc.text("Partner", pw - 90, y + 5);
+  doc.text("Subtotal:", totalsX, y);
+  doc.text(`₹${q.subtotal.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  y += 6;
+
+  if (q.gstRate > 0) {
+    doc.text(`GST (${q.gstRate}%):`, totalsX, y);
+    doc.text(`₹${q.gstAmount.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+    y += 6;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(BRAND_RED_R, BRAND_RED_G, BRAND_RED_B);
+  doc.text("Total:", totalsX, y);
+  doc.text(`₹${q.total.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  doc.setTextColor(26, 26, 26);
+  y += 12;
+
+  // Terms
+  if (q.terms) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Terms & Conditions", 15, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    const lines = doc.splitTextToSize(q.terms, 170);
+    doc.text(lines, 15, y);
+    y += lines.length * 4 + 8;
+  }
+
+  // Bank details
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.text("Bank Details", 15, y);
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.text("Account: CreativeMark Pvt Ltd | Bank: HDFC Bank, Baner | A/C: 50100123456789 | IFSC: HDFC0001234", 15, y);
+
+  addFooter(doc, 1);
+  doc.save(`${q.number}.pdf`);
+}
+
+export function generatePartnerAgreementPDF(partner: Partner) {
+  const doc = new jsPDF();
+  addLetterhead(doc);
+
+  let y = 40;
+
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text("PARTNERSHIP AGREEMENT", 15, y);
+  y += 10;
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Date: ${formatDate(partner.agreementDate)}`, 15, y);
+  y += 8;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Partner Details", 15, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.text(`Name: ${partner.name}`, 15, y); y += 5;
+  doc.text(`Category: ${partner.category}`, 15, y); y += 5;
+  doc.text(`Phone: ${partner.phone}`, 15, y); y += 5;
+  doc.text(`Email: ${partner.email}`, 15, y); y += 10;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Commission Structure", 15, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  if (partner.commissionType === "Percentage") {
+    doc.text(`Type: Percentage — ${partner.commissionRate}% of project value`, 15, y);
+  } else {
+    doc.text(`Type: Flat Amount — ₹${partner.commissionRate.toLocaleString("en-IN")} per referred lead`, 15, y);
+  }
+  y += 10;
+
+  // Agreement terms
+  doc.setFont("helvetica", "bold");
+  doc.text("Terms", 15, y);
+  y += 6;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.setTextColor(...GRAY);
-  doc.text("Authorised Signatory", 20, y + 10);
-  doc.text(p.name, pw - 90, y + 10);
+  const terms = [
+    "1. Commission is payable only after the referred client's invoice is fully paid.",
+    "2. Commission is calculated on the net project value (excluding GST).",
+    "3. Payment will be processed within 15 working days of client payment.",
+    "4. This agreement is valid for 12 months from the date above and is renewable.",
+    "5. Either party may terminate with 30 days written notice.",
+    "6. All referrals must be communicated in writing (email/WhatsApp) before the first client contact.",
+  ];
+  terms.forEach(term => {
+    const lines = doc.splitTextToSize(term, 170);
+    doc.text(lines, 15, y);
+    y += lines.length * 4 + 2;
+  });
 
-  doc.save(`Agreement-${p.name.replace(/\s+/g, "_")}-${p.id}.pdf`);
+  y += 15;
+  doc.setFontSize(10);
+  doc.text("For CreativeMark", 15, y);
+  doc.text(`Partner: ${partner.name}`, 110, y);
+  y += 12;
+  doc.setDrawColor(100, 100, 100);
+  doc.line(15, y, 80, y);
+  doc.line(110, y, 175, y);
+  y += 5;
+  doc.setFontSize(8);
+  doc.text("Authorized Signatory", 15, y);
+  doc.text("Partner Signature", 110, y);
+
+  addFooter(doc, 1);
+  doc.save(`Agreement-${partner.name.replace(/\s+/g, "-")}.pdf`);
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }

@@ -1,63 +1,136 @@
-export type QuotationStatus = "Draft" | "Sent" | "Approved" | "Billed";
+import type { Quotation } from "@/types";
 
-export interface QuotationItem {
-  description: string;
-  qty: number;
-  rate: number;
-}
+export const DEFAULT_TERMS = `1. Payment is due within 15 days of invoice date.
+2. 50% advance required before work commencement.
+3. Delay beyond 30 days will attract interest at 2% per month.
+4. Cancellation after work commencement will not be refunded.
+5. All creative assets remain property of CreativeMark until full payment is received.
+6. Non-payment beyond 60 days may result in suspension of services and legal action under applicable Indian law.
+7. Disputes subject to jurisdiction of Pune courts.
+8. This quotation is valid for 30 days from date of issue.`;
 
-export interface Quotation {
-  id: string;
-  clientId: string;
-  clientName: string;
-  date: string;
-  items: QuotationItem[];
-  status: QuotationStatus;
-  validity: string;
-  notes?: string;
-}
+export const SERVICE_PRESETS = [
+  "Social Media Management",
+  "Reel Production (per piece)",
+  "Photography (per day)",
+  "Graphic Design (monthly)",
+  "Videography",
+  "Banner Design",
+  "Political Campaign Package",
+  "Full Service Retainer",
+  "Custom",
+];
 
 export const quotations: Quotation[] = [
   {
-    id: "QT-2026-0014", clientId: "C-001", clientName: "Adv. Rajesh Kumar", date: "12/04/2026",
-    status: "Approved", validity: "30 days",
+    id: "Q-001", quoteNumber: "CM-Q-2026-001", type: "Quotation",
+    clientName: "Vastra Couture", clientId: "C-003",
+    clientAddress: "12, Lane 6, Koregaon Park, Pune 411001",
+    clientPhone: "+91 88001 23456", clientEmail: "hello@vastracouture.com",
+    clientGst: "27AABCV5678G1ZQ",
+    date: "2026-04-10", validUntil: "2026-05-10",
     items: [
-      { description: "Monthly Social Media Management", qty: 3, rate: 35000 },
-      { description: "Reel Production (10 reels)", qty: 1, rate: 60000 },
-      { description: "Campaign Strategy", qty: 1, rate: 45000 },
+      { id: "QI-001", serviceName: "E-commerce Product Photography (200 products)", quantity: 1, unit: "lot", rate: 150000, amount: 150000 },
+      { id: "QI-002", serviceName: "Social Media Management — 3 months", quantity: 3, unit: "month", rate: 45000, amount: 135000 },
+      { id: "QI-003", serviceName: "Influencer Collaboration", quantity: 3, unit: "influencer", rate: 25000, amount: 75000 },
     ],
+    subtotal: 360000, discountPercent: 0, discountAmount: 0, discountType: "percent",
+    gstApplicable: true, gstRate: 18, cgst: 32400, sgst: 32400, gstAmount: 64800,
+    grandTotal: 424800,
+    status: "Approved",
+    terms: DEFAULT_TERMS,
+    notes: "Summer collection shoot + 3-month social media package",
+    createdAt: "2026-04-10",
   },
   {
-    id: "QT-2026-0015", clientId: "C-002", clientName: "Vastra Couture", date: "14/04/2026",
-    status: "Billed", validity: "30 days",
+    id: "Q-002", quoteNumber: "CM-Q-2026-002", type: "Quotation",
+    clientName: "Gowda Motors", leadId: "L-003",
+    clientAddress: "Pimpri-Chinchwad, Pune",
+    clientPhone: "+91 99003 33333", clientEmail: "mahesh@gowdamotors.com",
+    date: "2026-04-17", validUntil: "2026-05-17",
     items: [
-      { description: "Lookbook Photography", qty: 1, rate: 120000 },
-      { description: "E-commerce Product Shoot", qty: 1, rate: 80000 },
+      { id: "QI-004", serviceName: "Digital Marketing Setup + 6-month management", quantity: 6, unit: "month", rate: 40000, amount: 240000 },
+      { id: "QI-005", serviceName: "Showroom Photography", quantity: 1, unit: "day", rate: 80000, amount: 80000 },
+      { id: "QI-006", serviceName: "Banner Design & Printing", quantity: 10, unit: "banner", rate: 8000, amount: 80000 },
     ],
+    subtotal: 400000, discountPercent: 10, discountAmount: 40000, discountType: "percent",
+    gstApplicable: true, gstRate: 18, cgst: 32400, sgst: 32400, gstAmount: 64800,
+    grandTotal: 424800,
+    status: "Sent",
+    terms: DEFAULT_TERMS,
+    notes: "Includes Google Ads setup, social media, and outdoor banners. 10% discount applied.",
+    sentVia: "Email",
+    createdAt: "2026-04-17",
   },
   {
-    id: "QT-2026-0016", clientId: "C-003", clientName: "Speedway Motors", date: "16/04/2026",
-    status: "Sent", validity: "15 days",
+    id: "Q-003", quoteNumber: "CM-Q-2026-003", type: "Quotation",
+    clientName: "MLA Priya Deshmukh", clientId: "C-001",
+    clientAddress: "Ward Office, Yerawada, Pune 411006",
+    clientPhone: "+91 98765 00001", clientEmail: "priya.deshmukh@email.com",
+    date: "2026-04-05", validUntil: "2026-05-05",
     items: [
-      { description: "Launch Video Production", qty: 1, rate: 180000 },
-      { description: "Digital Ad Management (1 month)", qty: 1, rate: 50000 },
+      { id: "QI-007", serviceName: "Campaign Management — April", quantity: 1, unit: "month", rate: 75000, amount: 75000 },
+      { id: "QI-008", serviceName: "Rally Event Coverage (Photography + Videography)", quantity: 1, unit: "event", rate: 50000, amount: 50000 },
+      { id: "QI-009", serviceName: "Social Media — 30 posts + 4 reels", quantity: 1, unit: "month", rate: 60000, amount: 60000 },
     ],
+    subtotal: 185000, discountPercent: 0, discountAmount: 0, discountType: "percent",
+    gstApplicable: false, gstRate: 0, cgst: 0, sgst: 0, gstAmount: 0,
+    grandTotal: 185000,
+    status: "Converted to Bill",
+    terms: DEFAULT_TERMS,
+    notes: "April campaign package. No GST — political client.",
+    createdAt: "2026-04-05",
   },
   {
-    id: "QT-2026-0017", clientId: "C-005", clientName: "Urban Threads", date: "18/04/2026",
-    status: "Draft", validity: "30 days",
+    id: "Q-004", quoteNumber: "CM-Q-2026-004", type: "Quotation",
+    clientName: "Green Earth NGO", clientId: "C-004",
+    clientAddress: "FC Road, Deccan Gymkhana, Pune 411004",
+    clientPhone: "+91 99876 11111", clientEmail: "info@greenearthngo.org",
+    date: "2026-04-18", validUntil: "2026-05-18",
     items: [
-      { description: "Influencer Campaign", qty: 1, rate: 90000 },
-      { description: "Content Calendar (Quarterly)", qty: 1, rate: 60000 },
+      { id: "QI-010", serviceName: "Earth Day Campaign Video Production", quantity: 1, unit: "video", rate: 120000, amount: 120000 },
+      { id: "QI-011", serviceName: "Social Media Promotion — 2 weeks", quantity: 1, unit: "lot", rate: 30000, amount: 30000 },
     ],
+    subtotal: 150000, discountPercent: 0, discountAmount: 0, discountType: "percent",
+    gstApplicable: false, gstRate: 0, cgst: 0, sgst: 0, gstAmount: 0,
+    grandTotal: 150000,
+    status: "Draft",
+    terms: DEFAULT_TERMS,
+    notes: "Pro-bono discount applied. Earth Day 2026 special.",
+    createdAt: "2026-04-18",
   },
-];
-
-export const quotationTerms = [
-  "50% advance payable on approval, balance 50% on delivery / monthly retainer billing.",
-  "All amounts are exclusive of applicable GST @ 18%.",
-  "Payment due within 7 days of invoice date. Overdue invoices attract interest @ 1.5% per month.",
-  "All creative assets remain the intellectual property of CreativeMark Advertising until full payment is received.",
-  "Cancellation after work commencement will be billed pro-rata for time and resources already committed.",
-  "Disputes, if any, shall be subject to the exclusive jurisdiction of courts in Mumbai, Maharashtra.",
+  {
+    id: "Q-005", quoteNumber: "CM-B-2026-015", type: "Bill",
+    clientName: "MLA Priya Deshmukh", clientId: "C-001",
+    clientAddress: "Ward Office, Yerawada, Pune 411006",
+    clientPhone: "+91 98765 00001", clientEmail: "priya.deshmukh@email.com",
+    date: "2026-04-01", dueDate: "2026-04-15",
+    items: [
+      { id: "QI-012", serviceName: "Monthly Retainer — April 2026", quantity: 1, unit: "month", rate: 75000, amount: 75000 },
+    ],
+    subtotal: 75000, discountPercent: 0, discountAmount: 0, discountType: "percent",
+    gstApplicable: false, gstRate: 0, cgst: 0, sgst: 0, gstAmount: 0,
+    grandTotal: 75000,
+    status: "Paid",
+    terms: DEFAULT_TERMS,
+    createdAt: "2026-04-01",
+  },
+  {
+    id: "Q-006", quoteNumber: "CM-B-2026-012", type: "Bill",
+    clientName: "Adv. Rajesh Kumar", clientId: "C-002",
+    clientAddress: "15, Sasane Nagar, Hadapsar, Pune 411028",
+    clientPhone: "+91 97654 32100", clientEmail: "rajesh.kumar.adv@email.com",
+    clientGst: "27AABCR1234F1ZP",
+    date: "2026-03-01", dueDate: "2026-03-15",
+    items: [
+      { id: "QI-013", serviceName: "Social Media + Reel Production — Q1", quantity: 3, unit: "month", rate: 50000, amount: 150000 },
+      { id: "QI-014", serviceName: "Branding Collateral", quantity: 1, unit: "lot", rate: 25000, amount: 25000 },
+    ],
+    subtotal: 175000, discountPercent: 0, discountAmount: 0, discountType: "percent",
+    gstApplicable: false, gstRate: 0, cgst: 0, sgst: 0, gstAmount: 0,
+    grandTotal: 175000,
+    status: "Overdue",
+    terms: DEFAULT_TERMS,
+    createdAt: "2026-03-01",
+  },
 ];

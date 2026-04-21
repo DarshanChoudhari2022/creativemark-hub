@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar,
@@ -8,6 +8,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Employees", url: "/employees", icon: UserCog },
   { title: "Leads", url: "/leads", icon: Target },
@@ -18,9 +19,21 @@ const items = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
+import { useAuth } from "@/contexts/AuthContext";
+
+const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners"];
+
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { user } = useAuth();
   const collapsed = state === "collapsed";
+
+  const visibleItems = items.filter(item => {
+    if (user?.role === "Employee" && ADMIN_ONLY_ROUTES.includes(item.url)) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -32,7 +45,7 @@ export function AppSidebar() {
           <SidebarGroupLabel className={collapsed ? "sr-only" : ""}>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title} className="relative h-10">
                     <NavLink

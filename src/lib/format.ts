@@ -1,16 +1,60 @@
-export const formatINR = (n: number) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+/**
+ * Format a number as INR currency (e.g. ₹1,25,000)
+ */
+export function formatINR(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
-export const formatINRCompact = (n: number) => {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
-  if (n >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
-  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
-  return `₹${n}`;
-};
+/**
+ * Compact INR format — shows L (Lakhs) or K
+ */
+export function formatINRCompact(amount: number): string {
+  if (amount >= 100000) {
+    return `₹${(amount / 100000).toFixed(1)}L`;
+  }
+  if (amount >= 1000) {
+    return `₹${(amount / 1000).toFixed(0)}K`;
+  }
+  return `₹${amount}`;
+}
 
-export const formatDateDDMMYYYY = (d: Date = new Date()) => {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-};
+/**
+ * Format a Date (or today) as DD/MM/YYYY
+ */
+export function formatDateDDMMYYYY(date?: Date | string): string {
+  const d = date ? new Date(date) : new Date();
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+/**
+ * Format phone number for WhatsApp link (strip spaces, dashes)
+ */
+export function waLink(phone: string, message = ""): string {
+  const cleaned = phone.replace(/[\s\-\(\)]/g, "");
+  return `https://wa.me/${cleaned}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
+}
+
+/**
+ * Format phone number for tel: link
+ */
+export function telLink(phone: string): string {
+  return `tel:${phone.replace(/[\s\-\(\)]/g, "")}`;
+}
+
+/**
+ * Get short relative time string
+ */
+export function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}m ago`;
+}
