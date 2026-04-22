@@ -4,7 +4,12 @@ export const recoveries: Recovery[] = [];
 
 export const WA_TEMPLATES: Record<string, any> = {
   soft: (client: string, amount: string, invoice: string) => 
-    `Hi ${client}, this is a gentle reminder that payment of ${amount} for invoice ${invoice} is due. Please let us know if you need any assistance processing it.`,
+    `Hi ${client}, this is a gentle reminder that payment of ${amount} for invoice ${invoice} is due. Please let us know if you need any assistance processing it. 🙏`,
+  firm: (client: string, amount: string, invoice: string) => 
+    `Dear ${client}, according to our records, payment of ${amount} for invoice ${invoice} is now past due. Could you please provide an update on the payment status? ⚠️`,
+  final: (client: string, amount: string, invoice: string) => 
+    `URGENT: Dear ${client}, your payment of ${amount} for invoice ${invoice} is significantly overdue. Please process this immediately to avoid interruption in services. 🚨`,
+  // legacy aliases
   medium: (client: string, amount: string, invoice: string) => 
     `Dear ${client}, according to our records, payment of ${amount} for invoice ${invoice} is now past due. Could you please provide an update on the payment status?`,
   strong: (client: string, amount: string, invoice: string) => 

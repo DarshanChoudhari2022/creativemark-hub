@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useNavigate, Link } from "react-router-dom";
-import { Briefcase, Loader2, AlertCircle } from "lucide-react";
+import { Briefcase, Loader2, AlertCircle, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -27,6 +27,13 @@ export default function Signup() {
 
     setLoading(true);
     setError(null);
+
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      setError("Signup is not available in demo mode. Use the Sign In page with demo credentials.");
+      toast.error("Signup unavailable in demo mode");
+      return;
+    }
 
     try {
       // 1. Sign up the user
@@ -85,6 +92,16 @@ export default function Signup() {
           <h1 className="text-3xl font-black tracking-tight text-foreground">Sign Up</h1>
           <p className="text-sm text-muted-foreground font-medium">Create a new workspace account</p>
         </div>
+
+        {!isSupabaseConfigured && (
+          <div className="mb-5 p-3 rounded-lg bg-blue-50 border border-blue-100 flex items-start gap-2 text-blue-700 text-xs">
+            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold">Demo Mode Active</div>
+              <div className="text-blue-600 mt-0.5">Signup requires a Supabase backend. <Link to="/login" className="underline font-semibold">Sign In</Link> with demo credentials instead.</div>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 p-3 rounded-lg bg-red-50 border border-red-100 flex items-center gap-2 text-red-600 text-xs font-semibold animate-in fade-in slide-in-from-top-2">

@@ -1,5 +1,4 @@
 import { useParams, Link } from "react-router-dom";
-import { useState } from "react";
 import { ArrowLeft, Phone, Mail, MapPin, Calendar, Camera, FileText, Wallet, Instagram, Facebook, Twitter, Linkedin, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,9 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader, PaymentBadge } from "@/components/shared";
-import { clients } from "@/data/clients";
-import type { Client } from "@/types";
-import { employees } from "@/data/employees";
+import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 
 const PLATFORM_ICONS: Record<string, React.ElementType> = {
@@ -34,9 +31,23 @@ const POST_STATUS_COLORS: Record<string, string> = {
 
 const ClientDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const client = clients.find((c) => c.id === id);
 
-  if (!client) {
+  const { data: clientsData, loading } = useSupabaseTable<any>(
+    'clients',
+    '*, client_services(*), client_assignments(employee_id, employees(name, role, phone))'
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  const rawClient = clientsData.find((c: any) => c.id === id);
+
+  if (!rawClient) {
     return (
       <div className="text-center py-16">
         <h2 className="text-xl font-bold text-muted-foreground mb-2">Client not found</h2>
@@ -45,7 +56,22 @@ const ClientDetail = () => {
     );
   }
 
-  const assigned = employees.filter((e) => client.assignedEmployees.includes(e.id));
+  // Normalize Supabase data to the shape the template expects
+  const client = {
+    ...rawClient,
+    assignedEmployees: rawClient.client_assignments?.map((a: any) => a.employee_id) || [],
+    services: rawClient.client_services?.filter((s: any) => s.active).map((s: any) => s.service_name) || [],
+    serviceLabels: rawClient.client_services?.filter((s: any) => s.active).map((s: any) => s.service_name) || [],
+    paymentStatus: rawClient.payment_status,
+    totalBilled: rawClient.total_billed ?? 0,
+    outstanding: rawClient.outstanding ?? 0,
+    monthlyRetainer: rawClient.monthly_retainer ?? 0,
+    posts: [],
+    shoots: [],
+    paymentHistory: [],
+  };
+
+  const assigned = rawClient.client_assignments?.map((a: any) => a.employees).filter(Boolean) || [];
 
   return (
     <div>

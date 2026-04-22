@@ -82,7 +82,7 @@ const Leads = () => {
       // Search Filtering
       if (search !== "") {
         const query = search.toLowerCase();
-        if (!l.name.toLowerCase().includes(query) && !l.organization.toLowerCase().includes(query)) {
+        if (!l.name.toLowerCase().includes(query) && !(l.organization ?? "").toLowerCase().includes(query)) {
           return false;
         }
       }

@@ -35,10 +35,15 @@ const Partners = () => {
     if (!form.name) { toast.error("Partner name is required"); return; }
     const newP: Partner = {
       id: `P-${String(partners.length + 1).padStart(3, "0")}`,
-      name: form.name, phone: form.phone, email: form.email, whatsapp: form.whatsapp || form.phone.replace(/[^0-9]/g, ""),
+      name: form.name, phone: form.phone, email: form.email,
+      whatsapp: form.whatsapp || form.phone.replace(/[^0-9]/g, ""),
       category: form.category, commissionType: form.commissionType, commissionRate: form.commissionRate,
       totalLeadsReferred: 0, totalCommissionEarned: 0, pendingCommission: 0,
-      agreementDate: new Date().toISOString().slice(0, 10), status: "Active", ledger: [],
+      agreementDate: new Date().toISOString().slice(0, 10),
+      partnerSince: new Date().toISOString().slice(0, 10),
+      status: "Active", ledger: [],
+      commissionRates: [],
+      leadsReferred: [],
     };
     setPartners([...partners, newP]);
     setAddOpen(false);
