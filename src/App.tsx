@@ -17,6 +17,8 @@ import Partners from "./pages/Partners";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
 
@@ -31,6 +33,8 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>

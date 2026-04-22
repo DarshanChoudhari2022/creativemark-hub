@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Briefcase, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,6 +46,22 @@ export default function Login() {
     }
   };
 
+  const handleForgot = async () => {
+    if (!email) {
+      toast.error("Please enter your email to reset password");
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/reset-password',
+      });
+      if (error) throw error;
+      toast.success("Password reset email sent!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send reset email");
+    }
+  };
+
   return (
     <div className="flex h-screen w-full items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm p-8 shadow-2xl border-border relative overflow-hidden">
@@ -82,7 +98,7 @@ export default function Login() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <button type="button" className="text-[11px] text-primary hover:underline font-bold">Forgot?</button>
+              <button type="button" onClick={handleForgot} className="text-[11px] text-primary hover:underline font-bold">Forgot?</button>
             </div>
             <Input 
               id="password"
@@ -110,7 +126,13 @@ export default function Login() {
             )}
           </Button>
           
-          <div className="text-center mt-6">
+          <div className="text-center mt-6 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <Link to="/signup" className="text-primary hover:underline font-semibold">
+                Sign Up
+              </Link>
+            </p>
             <p className="text-[11px] text-muted-foreground">
               Internal access only. Unauthorized entry is prohibited.
             </p>
