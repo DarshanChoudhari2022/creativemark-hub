@@ -40,7 +40,7 @@ export function useSupabaseTable<T>(tableName: string, query: string = '*') {
   const update = async (id: string | number, updates: Partial<T>) => {
     const { data: updatedData, error: updateError } = await supabase
       .from(tableName)
-      .update(updates)
+      .update(updates as any)
       .eq('id', id)
       .select();
 
