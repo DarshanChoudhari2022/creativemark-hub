@@ -65,7 +65,8 @@ const Leads = () => {
     source: "Walk-in" as Lead["source"], heat: "Warm" as LeadHeat,
     assignedTo: "", services: "", notes: "", partnerRef: "",
     lastInteractionDate: "", actionItem: "", nextCallDate: "",
-    customCategory: "",
+    lastInteractionDate: "", actionItem: "", nextCallDate: "",
+    customCategory: "", customSource: "",
     whatsappError: "",
   });
 
@@ -136,7 +137,7 @@ const Leads = () => {
       phone: form.phone, 
       whatsapp: form.whatsapp || form.phone.replace(/[^0-9+]/g, ""),
       email: form.email,
-      source: form.source, 
+      source: form.source === "Other" ? form.customSource : form.source, 
       stage: "New", 
       heat: form.heat,
       assigned_to: form.assignedTo || null,
@@ -159,7 +160,7 @@ const Leads = () => {
         name: "", company: "", category: "Other", phone: "", whatsapp: "", email: "", estimatedValue: 0,
         source: "Walk-in", heat: "Warm", assignedTo: "", services: "", notes: "", partnerRef: "",
         lastInteractionDate: "", actionItem: "", nextCallDate: "",
-        customCategory: "",
+        customCategory: "", customSource: "",
         whatsappError: "",
       });
       setPhoneError("");
@@ -347,6 +348,17 @@ const Leads = () => {
                       <SelectContent>{(["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner", "Other"] as Lead["source"][]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  {(form.source === "Other" || !["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner"].includes(form.source)) && (
+                    <div className="col-span-2">
+                      <Label>Specify Source *</Label>
+                      <Input 
+                        value={form.customSource || (form.source !== "Other" ? form.source : "")} 
+                        onChange={(e) => setForm({ ...form, customSource: e.target.value })} 
+                        placeholder="e.g. JustDial, Google Ads"
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
                   <div><Label>Heat</Label>
                     <Select value={form.heat} onValueChange={(v: LeadHeat) => setForm({ ...form, heat: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
