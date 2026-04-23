@@ -1,18 +1,17 @@
-import { useState, useMemo } from "react";
-import { Plus, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Plus, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/shared";
 import { formatDateDDMMYYYY } from "@/lib/format";
 import { toast } from "sonner";
-
-import { calendarEvents as dataCalendarEvents } from "@/data/calendar";
-import { leads } from "@/data/leads";
+import { supabase } from "@/lib/supabase";
 import type { CalendarEventType, EventType } from "@/types";
 
 interface PageCalendarEvent {
@@ -24,6 +23,7 @@ interface PageCalendarEvent {
   client?: string;
   assignedTo?: string;
   notes?: string;
+  source?: "calendar" | "lead_followup";
 }
 
 const TYPE_COLORS: Record<CalendarEventType, { bg: string; text: string; dot: string }> = {
@@ -34,49 +34,76 @@ const TYPE_COLORS: Record<CalendarEventType, { bg: string; text: string; dot: st
   Internal: { bg: "bg-gray-50", text: "text-gray-600", dot: "bg-gray-400" },
 };
 
-const getDerivedEvents = (): PageCalendarEvent[] => {
-  const derived: PageCalendarEvent[] = dataCalendarEvents.map(e => ({
-    id: e.id,
-    date: e.start.slice(0, 10),
-    title: e.title,
-    type: e.type,
-    time: e.start.includes("T") ? e.start.slice(11, 16) : undefined,
-    client: e.clientName,
-    assignedTo: e.assignedEmployeeNames?.[0],
-    notes: e.notes,
-  }));
-
-  leads.forEach(l => {
-    if (l.nextFollowupDate) {
-      derived.push({
-        id: `FU-${l.id}`,
-        date: l.nextFollowupDate,
-        title: `Follow-up: ${l.name}`,
-        type: "Meeting",
-        client: l.organization || l.name,
-        assignedTo: l.assignedToName,
-        notes: `Stage: ${l.stage} | Heat: ${l.heat}`,
-      });
-    }
-  });
-
-  return derived;
-};
-
 const CalendarPage = () => {
-  const [events, setEvents] = useState<PageCalendarEvent[]>(getDerivedEvents());
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 3, 1)); // April 2026
+  const [events, setEvents] = useState<PageCalendarEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ title: "", date: "", time: "", type: "Meeting" as CalendarEventType, client: "", assignedTo: "", notes: "" });
+
+  // Fetch from Supabase
+  const fetchEvents = async () => {
+    setLoading(true);
+
+    // Fetch calendar events
+    const { data: calEvents } = await supabase
+      .from("calendar_events")
+      .select("*, calendar_event_assignments(employee_id, employees(name))");
+
+    // Fetch lead follow-ups
+    const { data: leads } = await supabase
+      .from("leads")
+      .select("id, name, organization, next_followup_date, next_call_date, stage, heat, assigned_to, employees!leads_assigned_to_fkey(name)")
+      .or("next_followup_date.not.is.null,next_call_date.not.is.null");
+
+    const derived: PageCalendarEvent[] = [];
+
+    // Map calendar events
+    (calEvents || []).forEach(e => {
+      derived.push({
+        id: e.id,
+        date: e.start_time ? new Date(e.start_time).toISOString().slice(0, 10) : "",
+        title: e.title,
+        type: e.type as CalendarEventType,
+        time: e.start_time ? new Date(e.start_time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : undefined,
+        client: e.client_name || "",
+        assignedTo: e.calendar_event_assignments?.map((a: any) => a.employees?.name).filter(Boolean).join(", ") || "",
+        notes: e.notes || "",
+        source: "calendar",
+      });
+    });
+
+    // Map lead follow-ups
+    (leads || []).forEach(l => {
+      const fDate = l.next_followup_date || l.next_call_date;
+      if (fDate) {
+        derived.push({
+          id: `FU-${l.id}`,
+          date: fDate,
+          title: `Follow-up: ${l.name}`,
+          type: "Meeting",
+          client: l.organization || l.name,
+          assignedTo: (l as any).employees?.name || "",
+          notes: `Stage: ${l.stage} | Heat: ${l.heat}`,
+          source: "lead_followup",
+        });
+      }
+    });
+
+    setEvents(derived);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchEvents(); }, []);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthName = currentDate.toLocaleString("default", { month: "long", year: "numeric" });
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
   const days: (number | null)[] = [];
   for (let i = 0; i < firstDayOfWeek; i++) days.push(null);
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
@@ -99,22 +126,58 @@ const CalendarPage = () => {
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
 
-  const addEvent = () => {
+  const addEvent = async () => {
     if (!form.title || !form.date) { toast.error("Title and date are required"); return; }
-    setEvents([...events, { ...form, id: `EV-${String(events.length + 1).padStart(3, "0")}` }]);
+
+    const startTime = form.time
+      ? new Date(`${form.date}T${form.time}:00`).toISOString()
+      : new Date(`${form.date}T09:00:00`).toISOString();
+
+    const { error } = await supabase.from("calendar_events").insert({
+      title: form.title,
+      type: form.type,
+      start_time: startTime,
+      client_name: form.client || null,
+      notes: form.notes || null,
+      status: "Scheduled",
+    });
+
+    if (error) { toast.error("Failed to add event: " + error.message); return; }
+
     setAddOpen(false);
     setForm({ title: "", date: "", time: "", type: "Meeting", client: "", assignedTo: "", notes: "" });
-    toast.success("Event added");
+    toast.success("Event added to calendar");
+    fetchEvents();
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    if (eventId.startsWith("FU-")) {
+      toast.error("Follow-up events are managed in Leads — edit the lead's follow-up date");
+      return;
+    }
+    const { error } = await supabase.from("calendar_events").delete().eq("id", eventId);
+    if (error) { toast.error("Failed to delete: " + error.message); return; }
+    toast.success("Event deleted");
+    fetchEvents();
   };
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Calendar" subtitle="Loading…" />
+        <div className="h-96 bg-muted animate-pulse rounded-lg" />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
         title="Calendar"
-        subtitle={`${events.length} events this month`}
+        subtitle={`${events.length} events`}
         actions={
           <>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -141,7 +204,7 @@ const CalendarPage = () => {
                     </Select>
                   </div>
                   <div><Label>Client</Label><Input value={form.client} onChange={(e) => setForm({ ...form, client: e.target.value })} placeholder="Optional" /></div>
-                  <div><Label>Assigned To</Label><Input value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })} placeholder="Optional" /></div>
+                  <div><Label>Notes</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional" rows={2} /></div>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
@@ -226,11 +289,19 @@ const CalendarPage = () => {
                           <div className={`font-semibold text-sm ${colors.text}`}>{ev.title}</div>
                           {ev.time && <div className="text-xs font-mono text-muted-foreground mt-0.5">{ev.time}</div>}
                         </div>
-                        <Badge variant="outline" className={`text-[10px] ${colors.text} border-current`}>{ev.type}</Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="outline" className={`text-[10px] ${colors.text} border-current`}>{ev.type}</Badge>
+                          {ev.source === "calendar" && (
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-primary" onClick={() => deleteEvent(ev.id)}>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       {ev.client && <div className="text-xs text-muted-foreground mt-1.5">Client: <span className="font-medium text-foreground">{ev.client}</span></div>}
                       {ev.assignedTo && <div className="text-xs text-muted-foreground mt-0.5">Assigned: <span className="font-medium text-foreground">{ev.assignedTo}</span></div>}
                       {ev.notes && <div className="text-xs text-muted-foreground mt-1 italic">{ev.notes}</div>}
+                      {ev.source === "lead_followup" && <div className="text-[10px] text-blue-500 mt-1">📋 Auto-synced from Leads</div>}
                     </div>
                   );
                 })}

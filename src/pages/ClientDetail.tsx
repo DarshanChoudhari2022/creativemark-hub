@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Phone, Mail, MapPin, Calendar, Camera, FileText, Wallet, Instagram, Facebook, Twitter, Linkedin, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,9 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader, PaymentBadge } from "@/components/shared";
-import { clients } from "@/data/clients";
+import { supabase } from "@/lib/supabase";
 import type { Client } from "@/types";
-import { employees } from "@/data/employees";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 
 const PLATFORM_ICONS: Record<string, React.ElementType> = {
@@ -34,7 +33,49 @@ const POST_STATUS_COLORS: Record<string, string> = {
 
 const ClientDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const client = clients.find((c) => c.id === id);
+  const [client, setClient] = useState<any | null>(null);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchClient = async () => {
+      if (!id) return;
+      setLoading(true);
+
+      const [cRes, eRes] = await Promise.all([
+        supabase.from("clients").select("*, client_services(*), client_shoots(*), client_posts(*), payment_history(*)").eq("id", id).single(),
+        supabase.from("employees").select("id, name, role, phone"),
+      ]);
+
+      if (cRes.data) {
+        const c = cRes.data;
+        setClient({
+          ...c,
+          totalBilled: c.total_billed || 0,
+          outstanding: c.outstanding || 0,
+          monthlyRetainer: c.monthly_retainer || 0,
+          paymentStatus: c.payment_status || "Current",
+          services: c.client_services || [],
+          shoots: c.client_shoots || [],
+          posts: c.client_posts || [],
+          paymentHistory: c.payment_history || [],
+          assignedEmployees: c.assigned_employees || [],
+        });
+      }
+      setEmployees(eRes.data || []);
+      setLoading(false);
+    };
+    fetchClient();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="text-center py-16">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+        <p className="text-muted-foreground">Loading client…</p>
+      </div>
+    );
+  }
 
   if (!client) {
     return (
@@ -128,9 +169,9 @@ const ClientDetail = () => {
             <Card className="p-5">
               <h3 className="font-bold text-base mb-3">Active Services</h3>
               <div className="space-y-2">
-                {client.services.map(s => {
-                  const serviceName = typeof s === 'string' ? s : s.serviceName;
-                  const serviceId = typeof s === 'string' ? s : s.id;
+                {client.services.map((s: any) => {
+                  const serviceName = typeof s === 'string' ? s : (s.service_name || s.serviceName);
+                  const serviceId = typeof s === 'string' ? s : (s.id || s.service_name);
                   return (
                     <div key={serviceId} className="flex items-center gap-2 p-2 rounded-lg border border-border">
                       <span className="h-2 w-2 rounded-full bg-primary" />
@@ -138,6 +179,7 @@ const ClientDetail = () => {
                     </div>
                   );
                 })}
+                {client.services.length === 0 && <div className="text-sm text-muted-foreground text-center py-4">No services assigned</div>}
               </div>
             </Card>
             <Card className="p-5">
@@ -163,11 +205,11 @@ const ClientDetail = () => {
             <h3 className="font-bold text-base mb-3 flex items-center gap-2"><Calendar className="h-4 w-4 text-primary" /> Upcoming Social Calendar Events</h3>
             {client.posts.length > 0 ? (
               <div className="space-y-2">
-                {client.posts.map((post) => (
+                {client.posts.map((post: any) => (
                   <div key={post.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
                     <div>
                       <div className="text-sm font-semibold">{post.caption}</div>
-                      <Badge variant="outline" className="text-[10px] mt-0.5">{post.postType}</Badge>
+                      <Badge variant="outline" className="text-[10px] mt-0.5">{post.post_type || post.postType}</Badge>
                     </div>
                     <div className="text-xs font-mono text-muted-foreground">{formatDateDDMMYYYY(new Date(post.date))}</div>
                   </div>
@@ -188,17 +230,18 @@ const ClientDetail = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {client.posts.length > 0 ? client.posts.map((post, i) => {
-                  const PlatformIcon = PLATFORM_ICONS[post.platform] || Instagram;
+                {client.posts.length > 0 ? client.posts.map((post: any) => {
+                  const platform = post.platform || "Instagram";
+                  const PlatformIcon = PLATFORM_ICONS[platform] || Instagram;
                   return (
                     <TableRow key={post.id}>
                       <TableCell className="font-mono text-xs">{formatDateDDMMYYYY(new Date(post.date))}</TableCell>
                       <TableCell>
-                        <span className={`flex items-center gap-1.5 ${PLATFORM_COLORS[post.platform] || ""}`}>
-                          <PlatformIcon className="h-4 w-4" /> {post.platform}
+                        <span className={`flex items-center gap-1.5 ${PLATFORM_COLORS[platform] || ""}`}>
+                          <PlatformIcon className="h-4 w-4" /> {platform}
                         </span>
                       </TableCell>
-                      <TableCell className="text-sm">{post.postType}</TableCell>
+                      <TableCell className="text-sm">{post.post_type || post.postType}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{post.caption}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={`text-[10px] ${POST_STATUS_COLORS[post.status] || ""}`}>{post.status}</Badge>
@@ -224,14 +267,14 @@ const ClientDetail = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {client.shoots.length > 0 ? client.shoots.map((shoot) => (
+                {client.shoots.length > 0 ? client.shoots.map((shoot: any) => (
                   <TableRow key={shoot.id}>
                     <TableCell className="font-mono text-xs">{formatDateDDMMYYYY(new Date(shoot.date))}</TableCell>
-                    <TableCell className="font-mono text-sm">{shoot.reportingTime}</TableCell>
+                    <TableCell className="font-mono text-sm">{shoot.reporting_time || shoot.reportingTime}</TableCell>
                     <TableCell className="text-sm">{shoot.location}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {shoot.assignedEmployees.map(eid => {
+                        {(shoot.assigned_employees || shoot.assignedEmployees || []).map((eid: string) => {
                           const emp = employees.find(e => e.id === eid);
                           return <span key={eid} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted font-medium">{emp?.name.split(" ")[0] || eid}</span>;
                         })}
@@ -259,9 +302,9 @@ const ClientDetail = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(client.paymentHistory || []).length > 0 ? (client.paymentHistory || []).map((entry, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-mono font-semibold text-sm">{entry.invoiceNo}</TableCell>
+                {(client.paymentHistory || []).length > 0 ? (client.paymentHistory || []).map((entry: any, i: number) => (
+                  <TableRow key={entry.id || i}>
+                    <TableCell className="font-mono font-semibold text-sm">{entry.invoice_no || entry.invoiceNo}</TableCell>
                     <TableCell className="font-mono text-xs">{formatDateDDMMYYYY(new Date(entry.date))}</TableCell>
                     <TableCell className="text-right font-semibold">{formatINR(entry.amount)}</TableCell>
                     <TableCell><PaymentBadge status={entry.status} /></TableCell>

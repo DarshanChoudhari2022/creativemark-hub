@@ -24,7 +24,8 @@ export type EmployeeRole =
   | "Content Writer"
   | "Sales Executive"
   | "Campaign Strategist"
-  | "Project Manager";
+  | "Project Manager"
+  | "Others";
 export type EmployeeStatus = "Active" | "On Leave" | "Inactive";
 export type ContractType = "Per Assignment" | "Monthly";
 export type WorkType =
@@ -52,6 +53,10 @@ export type PartnerStatus = "Active" | "Inactive";
 export type CommissionStatus = "Pending" | "Paid";
 export type CommissionType = "Percentage" | "Fixed";
 export type RecoveryStatus = "Not Due Yet" | "Due Soon" | "Overdue" | "Reminder Sent" | "Partially Paid" | "Paid";
+export type LeadQuotationStatus = "Not Sent" | "Sent" | "Accepted" | "Rejected";
+export type LeadPaymentStatus = "Not Due" | "Pending" | "Paid" | "Overdue";
+export type LeadLifecycleStage = "Lead" | "Quotation" | "Negotiation" | "Billing" | "Payment" | "Completed" | "Lost";
+export type NotificationType = "follow_up" | "payment_due" | "quotation_reminder" | "call_reminder";
 
 // Calendar event types
 export type CalendarEventType = "Shoot" | "Meeting" | "Deadline" | "Holiday" | "Internal";
@@ -178,6 +183,7 @@ export interface Employee {
   id: string;
   name: string;
   role: EmployeeRole;
+  customRole?: string;
   phone: string;
   whatsapp: string;
   email?: string;
@@ -241,6 +247,18 @@ export interface LeadReassignment {
   date: string;
 }
 
+export interface LeadCall {
+  id: string;
+  leadId: string;
+  callDate: string;
+  durationMinutes: number;
+  summary: string;
+  outcome: string;
+  nextAction: string;
+  calledBy: string;
+  calledByName?: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -265,11 +283,21 @@ export interface Lead {
   expectedClose?: string;
   lastContactDate: string;
   nextFollowupDate?: string;
+  lastInteractionDate?: string;
+  actionItem?: string;
+  nextCallDate?: string;
+  quotationStatus?: LeadQuotationStatus;
+  quotationId?: string;
+  billId?: string;
+  paymentDueDate?: string;
+  paymentStatus?: LeadPaymentStatus;
+  lifecycleStage?: LeadLifecycleStage;
   notes?: string;
   commLog: CommLog[];
   tasks: LeadTask[];
   reassignments: LeadReassignment[];
-  company?: string; // Added missing company
+  calls: LeadCall[];
+  company?: string;
 }
 
 // ── Quotations & Bills ──────────────────────────────────────

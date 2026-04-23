@@ -14,6 +14,7 @@ import Quotations from "./pages/Quotations";
 import Recovery from "./pages/Recovery";
 import CalendarPage from "./pages/CalendarPage";
 import Partners from "./pages/Partners";
+import SmartLeadHub from "./pages/SmartLeadHub";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
@@ -48,6 +49,7 @@ const App = () => (
                 <Route path="/recovery" element={<Recovery />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/partners" element={<Partners />} />
+                <Route path="/smart-leads" element={<SmartLeadHub />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>

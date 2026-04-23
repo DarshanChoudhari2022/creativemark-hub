@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/shared";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { supabase } from "@/lib/supabase";
-import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
+import { formatINR, formatDateDDMMYYYY, waLink, isValidIndianPhone } from "@/lib/format";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { Employee, EmployeeRole, WorkLog } from "@/types";
@@ -32,7 +32,15 @@ const Employees = () => {
   const [logOpen, setLogOpen] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState<any | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", role: "Graphic Designer" as EmployeeRole, phone: "", email: "", salary: 0 });
+  const [form, setForm] = useState({ 
+    name: "", 
+    role: "Graphic Designer" as EmployeeRole, 
+    customRole: "",
+    phone: "", 
+    email: "", 
+    salary: 0 
+  });
+  const [phoneError, setPhoneError] = useState("");
   const [logForm, setLogForm] = useState({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, notes: "" });
 
   const employees = useMemo(() => {
@@ -40,6 +48,7 @@ const Employees = () => {
       ...e,
       assignedClients: e.client_assignments?.map((ca: any) => ca.client_id) || [],
       assignedClientNames: e.client_assignments?.map((ca: any) => ca.clients?.name).filter(Boolean) || [],
+      displayRole: e.role === "Others" && e.custom_role ? e.custom_role : e.role,
     }));
   }, [employeesData]);
 
@@ -47,18 +56,22 @@ const Employees = () => {
     employees.filter(e =>
       search === "" ||
       e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.role.toLowerCase().includes(search.toLowerCase())
+      (e.displayRole || e.role).toLowerCase().includes(search.toLowerCase())
     ), [employees, search]);
 
   const addEmployee = async () => {
     if (!form.name) { toast.error("Employee name is required"); return; }
+    if (form.role === "Others" && !form.customRole.trim()) { toast.error("Please specify the custom role"); return; }
+    if (form.phone && !isValidIndianPhone(form.phone)) { setPhoneError("Enter valid Indian number"); return; }
     
     const { error } = await insertEmployee({
       name: form.name,
-      role: form.role,
+      role: form.role === "Others" ? "Employee" : form.role,
+      custom_role: form.role === "Others" ? form.customRole : null,
       phone: form.phone,
       whatsapp: form.phone,
       email: form.email,
+      base_rate: form.salary,
       salary: form.salary,
       status: "Active",
     });
@@ -67,7 +80,8 @@ const Employees = () => {
       toast.error("Failed to add employee: " + error.message);
     } else {
       setAddOpen(false);
-      setForm({ name: "", role: "Graphic Designer", phone: "", email: "", salary: 0 });
+      setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0 });
+      setPhoneError("");
       toast.success("Employee added successfully");
     }
   };
@@ -97,12 +111,12 @@ const Employees = () => {
 
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").slice(0, 2);
   const sendWorkLogToClient = (emp: any, log: any) => {
-    const msg = `Hi, this is to confirm that ${emp.name} (${emp.role}) worked on "${log.workType}" at ${log.location} on ${formatDateDDMMYYYY(new Date(log.date))} for ${log.hours} hours. — CreativeMark`;
+    const msg = `Hi, this is to confirm that ${emp.name} (${emp.displayRole || emp.role}) worked on "${log.workType}" at ${log.location} on ${formatDateDDMMYYYY(new Date(log.date))} for ${log.hours} hours. — CreativeMark`;
     const client = clients?.find((c: any) => c.id === log.client_id);
     if (client?.whatsapp) window.open(waLink(client.whatsapp, msg), "_blank");
   };
 
-  const roles: EmployeeRole[] = ["Video Editor", "Graphic Designer", "Social Media Manager", "Photographer", "Campaign Strategist", "Content Writer", "Sales Executive", "Project Manager"];
+  const roles: EmployeeRole[] = ["Video Editor", "Graphic Designer", "Social Media Manager", "Photographer", "Campaign Strategist", "Content Writer", "Sales Executive", "Project Manager", "Others"];
 
   return (
     <div>
@@ -122,13 +136,33 @@ const Employees = () => {
                 <div className="space-y-3">
                   <div><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Vikram Joshi" /></div>
                   <div><Label>Role</Label>
-                    <Select value={form.role} onValueChange={(v: EmployeeRole) => setForm({ ...form, role: v })}>
+                    <Select value={form.role} onValueChange={(v: EmployeeRole) => setForm({ ...form, role: v, customRole: v === "Others" ? form.customRole : "" })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{roles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  {form.role === "Others" && (
+                    <div>
+                      <Label>Specify Role *</Label>
+                      <Input 
+                        value={form.customRole} 
+                        onChange={(e) => setForm({ ...form, customRole: e.target.value })} 
+                        placeholder="e.g. Brand Consultant, Coordinator"
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                    <div>
+                      <Label>Phone</Label>
+                      <Input 
+                        value={form.phone} 
+                        onChange={(e) => { setForm({ ...form, phone: e.target.value }); setPhoneError(""); }} 
+                        placeholder="+91 98765 43210"
+                        className={phoneError ? "border-red-500" : ""}
+                      />
+                      {phoneError && <p className="text-[11px] text-red-500 mt-0.5">{phoneError}</p>}
+                    </div>
                     <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
                   </div>
                   <div><Label>Monthly Salary ₹</Label><Input type="number" value={form.salary} onChange={(e) => setForm({ ...form, salary: +e.target.value })} /></div>
@@ -160,7 +194,7 @@ const Employees = () => {
         {filtered.map((emp) => {
           const isOpen = detailId === emp.id;
           const assignedClientsList = clients?.filter((c: any) => emp.assignedClients.includes(c.id)) || [];
-          const salary = emp.salary ?? 0;
+          const salary = emp.salary ?? emp.base_rate ?? 0;
           const advanceTaken = emp.advance_taken ?? 0;
           const duesPending = emp.dues_pending ?? 0;
           const netPayable = salary - advanceTaken + duesPending;
@@ -185,7 +219,7 @@ const Employees = () => {
                         <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[emp.status] || ""}`}>{emp.status}</Badge>
                         {emp.onFieldToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">On Field</span>}
                       </div>
-                      <div className="text-sm text-muted-foreground">{emp.role}</div>
+                      <div className="text-sm text-muted-foreground">{emp.displayRole || emp.role}</div>
                     </div>
                     <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
                       <div className="text-center">

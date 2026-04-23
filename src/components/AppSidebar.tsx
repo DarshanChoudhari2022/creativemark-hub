@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3, Zap } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar,
@@ -16,6 +16,7 @@ const items = [
   { title: "Recovery", url: "/recovery", icon: Wallet },
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
   { title: "Partners", url: "/partners", icon: Handshake },
+  { title: "Smart Lead Hub", url: "/smart-leads", icon: Zap },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

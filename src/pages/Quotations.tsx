@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, FileText, Download, Send, Eye, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,13 +11,12 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
-import { quotations as initialQuotations } from "@/data/quotations";
-import { clients } from "@/data/clients";
-import { leads } from "@/data/leads";
+import { SERVICE_PRESETS, DEFAULT_TERMS } from "@/data/quotations";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { generateQuotationPDF } from "@/lib/pdf";
 import { toast } from "sonner";
-import type { QuotationBill, QuotationBillStatus, LineItem } from "@/types";
+import { supabase } from "@/lib/supabase";
+import type { QuotationBillStatus, LineItem } from "@/types";
 
 const STATUS_COLORS: Record<string, string> = {
   Draft: "bg-gray-100 text-gray-600 border-gray-200",
@@ -32,30 +31,51 @@ const STATUS_COLORS: Record<string, string> = {
 const emptyItem = (): LineItem => ({ id: crypto.randomUUID(), serviceName: "", description: "", quantity: 1, rate: 0, amount: 0 });
 
 const Quotations = () => {
-  const [quotations, setQuotations] = useState(initialQuotations);
+  const [quotations, setQuotations] = useState<any[]>([]);
+  const [allClients, setAllClients] = useState<any[]>([]);
+  const [allLeads, setAllLeads] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [addOpen, setAddOpen] = useState(false);
-  const [previewQ, setPreviewQ] = useState<QuotationBill | null>(null);
+  const [previewQ, setPreviewQ] = useState<any | null>(null);
 
-  // Builder state
+  // Builder state — GST defaults to OFF per user request
   const [type, setType] = useState<"Quotation" | "Bill">("Quotation");
   const [recipientId, setRecipientId] = useState("");
+  const [recipientType, setRecipientType] = useState<"Client" | "Lead">("Client");
   const [items, setItems] = useState<LineItem[]>([emptyItem()]);
-  const [gstEnabled, setGstEnabled] = useState(true);
+  const [gstEnabled, setGstEnabled] = useState(false); // DEFAULT OFF
   const [discountPercent, setDiscountPercent] = useState(0);
-  const [terms, setTerms] = useState("50% advance, 50% upon completion. Delivery within 30 days.");
+  const [terms, setTerms] = useState(DEFAULT_TERMS);
   const [notes, setNotes] = useState("");
 
-  const allRecipients = [
-    ...clients.map(c => ({ id: c.id, name: c.name, type: "Client", isClient: true })),
-    ...leads.map(l => ({ id: l.id, name: `${l.name} (${l.company})`, type: "Lead", isClient: false })),
-  ];
+  // Fetch data
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const [qRes, cRes, lRes] = await Promise.all([
+        supabase.from("quotations").select("*, quotation_items(*)").order("created_at", { ascending: false }),
+        supabase.from("clients").select("id, name, phone, whatsapp, email"),
+        supabase.from("leads").select("id, name, organization, phone, whatsapp, email"),
+      ]);
+      setQuotations(qRes.data || []);
+      setAllClients(cRes.data || []);
+      setAllLeads(lRes.data || []);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  const allRecipients = useMemo(() => [
+    ...allClients.map(c => ({ id: c.id, name: c.name, type: "Client" as const, phone: c.whatsapp || c.phone || "" })),
+    ...allLeads.map(l => ({ id: l.id, name: `${l.name}${l.organization ? ` (${l.organization})` : ""}`, type: "Lead" as const, phone: l.whatsapp || l.phone || "" })),
+  ], [allClients, allLeads]);
 
   const filtered = useMemo(() =>
     quotations.filter(q =>
       (statusFilter === "all" || q.status === statusFilter) &&
-      (search === "" || q.recipientName.toLowerCase().includes(search.toLowerCase()) || q.number.toLowerCase().includes(search.toLowerCase()))
+      (search === "" || (q.client_name || "").toLowerCase().includes(search.toLowerCase()) || (q.quote_number || "").toLowerCase().includes(search.toLowerCase()))
     ), [quotations, statusFilter, search]);
 
   const updateItem = (index: number, field: keyof LineItem, value: string | number) => {
@@ -74,69 +94,123 @@ const Quotations = () => {
   const sgstAmount = gstEnabled ? Math.round(afterDiscount * 0.09) : 0;
   const total = afterDiscount + cgstAmount + sgstAmount;
 
-  const createQuotation = () => {
+  const createQuotation = async () => {
     const recipient = allRecipients.find(r => r.id === recipientId);
     if (!recipient || items.every(i => !i.serviceName && !i.description)) { toast.error("Select recipient and add items"); return; }
-    
-    // In actual system we would differentiate Q vs B numbering
+
     const prefix = type === "Quotation" ? "QT" : "BL";
     const status: QuotationBillStatus = type === "Quotation" ? "Draft" : "Sent";
-    
-    const newDoc: QuotationBill = {
-      id: `DOC-${String(quotations.length + 1).padStart(3, "0")}`,
-      number: `${prefix}-2026-${String(19 + quotations.length).padStart(4, "0")}`,
+    const quoteNumber = `${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const isClient = recipient.type === "Client";
+
+    // Insert quotation into Supabase
+    const { data: inserted, error } = await supabase.from("quotations").insert({
+      quote_number: quoteNumber,
       type,
       status,
       date: new Date().toISOString().slice(0, 10),
-      dueDate: new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10),
-      
-      recipientId,
-      recipientName: recipient.name,
-      isClient: recipient.isClient,
-      
-      items: items.filter(i => i.serviceName || i.description),
+      valid_until: type === "Quotation" ? new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10) : null,
+      due_date: type === "Bill" ? new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10) : null,
+      client_id: isClient ? recipientId : null,
+      lead_id: !isClient ? recipientId : null,
+      client_name: recipient.name,
+      client_phone: recipient.phone,
       subtotal,
-      discountPercent,
-      discountAmount,
-      cgstPercent: gstEnabled ? 9 : 0,
-      cgstAmount,
-      sgstPercent: gstEnabled ? 9 : 0,
-      sgstAmount,
-      total,
-      
+      discount_percent: discountPercent,
+      discount_amount: discountAmount,
+      discount_type: "percent",
+      gst_applicable: gstEnabled,
+      gst_rate: gstEnabled ? 18 : 0,
+      cgst: cgstAmount,
+      sgst: sgstAmount,
+      gst_amount: cgstAmount + sgstAmount,
+      grand_total: total,
       terms,
-      internalNotes: notes,
-    };
-    setQuotations([newDoc, ...quotations]);
+      internal_notes: notes,
+    }).select().single();
+
+    if (error) { toast.error("Failed to create: " + error.message); return; }
+
+    // Insert line items
+    const validItems = items.filter(i => i.serviceName || i.description);
+    if (validItems.length > 0 && inserted) {
+      await supabase.from("quotation_items").insert(
+        validItems.map(item => ({
+          quotation_id: inserted.id,
+          service_name: item.serviceName || item.description || "",
+          description: item.description || item.serviceName || "",
+          quantity: item.quantity,
+          rate: item.rate,
+          amount: item.amount,
+        }))
+      );
+    }
+
+    // Refresh data
+    const { data: refreshed } = await supabase.from("quotations").select("*, quotation_items(*)").order("created_at", { ascending: false });
+    setQuotations(refreshed || []);
     setAddOpen(false);
     resetForm();
-    toast.success(`${type} created`);
+    toast.success(`${type} created — ${quoteNumber}`);
   };
 
   const resetForm = () => {
-    setRecipientId(""); setItems([emptyItem()]); setGstEnabled(true); setDiscountPercent(0);
-    setTerms("50% advance, 50% upon completion. Delivery within 30 days."); setNotes("");
+    setRecipientId(""); setItems([emptyItem()]); setGstEnabled(false); setDiscountPercent(0);
+    setTerms(DEFAULT_TERMS); setNotes("");
     setType("Quotation");
   };
 
-  const shareViaWhatsApp = (q: QuotationBill) => {
-    let phone = "";
-    if (q.isClient) {
-      phone = clients.find(c => c.id === q.recipientId)?.whatsapp || clients.find(c => c.id === q.recipientId)?.phone || "";
-    } else {
-      phone = leads.find(l => l.id === q.recipientId)?.phone || "";
-    }
-    
-    const msg = `Hi, please find your ${q.type.toLowerCase()} ${q.number} for ${formatINR(q.total)}. Valid/due until ${formatDateDDMMYYYY(new Date(q.dueDate))}. — CreativeMark`;
+  const shareViaWhatsApp = (q: any) => {
+    const phone = q.client_phone || "";
+    const msg = `Hi, please find your ${(q.type || "Quotation").toLowerCase()} ${q.quote_number} for ${formatINR(q.grand_total || 0)}. Valid/due until ${q.due_date || q.valid_until ? formatDateDDMMYYYY(new Date(q.due_date || q.valid_until)) : "N/A"}. — CreativeMark`;
     if (phone) window.open(waLink(phone, msg), "_blank");
     else toast.error("No phone number found for this recipient");
   };
 
-  const downloadPDF = (q: QuotationBill) => {
-    // Cast appropriately since we've changed the type but PDF generator might need updates later
-    generateQuotationPDF(q as any);
+  const downloadPDF = (q: any) => {
+    // Map Supabase shape to PDF generator expected shape
+    const pdfData = {
+      ...q,
+      quoteNumber: q.quote_number,
+      clientName: q.client_name,
+      items: (q.quotation_items || []).map((i: any) => ({
+        description: i.description || i.service_name,
+        serviceName: i.service_name,
+        quantity: i.quantity,
+        rate: i.rate,
+        amount: i.amount,
+      })),
+      grandTotal: q.grand_total,
+      gstApplicable: q.gst_applicable,
+      gstRate: q.gst_rate,
+      cgstAmount: q.cgst,
+      sgstAmount: q.sgst,
+      discountPercent: q.discount_percent,
+      discountAmount: q.discount_amount,
+    };
+    generateQuotationPDF(pdfData as any);
     toast.success("PDF downloaded");
   };
+
+  const updateStatus = async (q: any, newStatus: string) => {
+    const { error } = await supabase.from("quotations").update({ status: newStatus }).eq("id", q.id);
+    if (error) { toast.error("Failed: " + error.message); return; }
+    setQuotations(prev => prev.map(x => x.id === q.id ? { ...x, status: newStatus } : x));
+    toast.success(`Status updated to ${newStatus}`);
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Quotations & Bills" subtitle="Loading…" />
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -153,7 +227,7 @@ const Quotations = () => {
               <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                {(["Draft", "Sent", "Approved", "Rejected", "Converted", "Paid", "Overdue"] as QuotationBillStatus[]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                {(["Draft", "Sent", "Approved", "Rejected", "Converted to Bill", "Paid", "Overdue"] as QuotationBillStatus[]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
             <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) resetForm(); }}>
@@ -181,13 +255,25 @@ const Quotations = () => {
                     </div>
                   </div>
 
+                  {/* Service Presets */}
+                  <div>
+                    <Label className="mb-1 block text-xs text-muted-foreground">Quick Add Service</Label>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {SERVICE_PRESETS.map(preset => (
+                        <Button key={preset.serviceName} variant="outline" size="sm" className="text-[11px] h-7"
+                          onClick={() => setItems([...items.filter(i => i.serviceName || i.description), { id: crypto.randomUUID(), serviceName: preset.serviceName, description: preset.serviceName, quantity: 1, rate: preset.rate, amount: preset.rate }])}
+                        >{preset.serviceName} — {formatINR(preset.rate)}</Button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Line Items */}
                   <div>
                     <Label className="mb-2 block">Line Items</Label>
                     <div className="space-y-2">
                       {items.map((item, i) => (
                         <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                          <div className="col-span-5"><Input placeholder="Description" value={item.serviceName || item.description} onChange={(e) => updateItem(i, "description", e.target.value)} /></div>
+                          <div className="col-span-5"><Input placeholder="Description" value={item.serviceName || item.description} onChange={(e) => { updateItem(i, "serviceName", e.target.value); updateItem(i, "description", e.target.value); }} /></div>
                           <div className="col-span-2"><Input type="number" placeholder="Qty" min={1} value={item.quantity} onChange={(e) => updateItem(i, "quantity", +e.target.value)} /></div>
                           <div className="col-span-2"><Input type="number" placeholder="Rate ₹" value={item.rate} onChange={(e) => updateItem(i, "rate", +e.target.value)} /></div>
                           <div className="col-span-2 text-right font-semibold text-sm pt-2">{formatINR(item.amount)}</div>
@@ -254,12 +340,21 @@ const Quotations = () => {
             {filtered.map((q) => (
               <TableRow key={q.id}>
                 <TableCell><Badge variant="outline" className="text-[10px]">{q.type}</Badge></TableCell>
-                <TableCell className="font-mono font-semibold">{q.number}</TableCell>
-                <TableCell className="font-semibold">{q.recipientName} {q.isClient ? "" : <span className="text-[10px] text-muted-foreground ml-1">(Lead)</span>}</TableCell>
-                <TableCell className="text-sm text-muted-foreground font-mono">{formatDateDDMMYYYY(new Date(q.date))}</TableCell>
-                <TableCell className="text-sm text-muted-foreground font-mono">{formatDateDDMMYYYY(new Date(q.dueDate))}</TableCell>
-                <TableCell className="text-right font-bold">{formatINR(q.total)}</TableCell>
-                <TableCell><Badge variant="outline" className={`text-[11px] ${STATUS_COLORS[q.status]}`}>{q.status}</Badge></TableCell>
+                <TableCell className="font-mono font-semibold">{q.quote_number}</TableCell>
+                <TableCell className="font-semibold">{q.client_name} {q.lead_id ? <span className="text-[10px] text-muted-foreground ml-1">(Lead)</span> : ""}</TableCell>
+                <TableCell className="text-sm text-muted-foreground font-mono">{q.date ? formatDateDDMMYYYY(new Date(q.date)) : ""}</TableCell>
+                <TableCell className="text-sm text-muted-foreground font-mono">{(q.due_date || q.valid_until) ? formatDateDDMMYYYY(new Date(q.due_date || q.valid_until)) : "—"}</TableCell>
+                <TableCell className="text-right font-bold">{formatINR(q.grand_total || 0)}</TableCell>
+                <TableCell>
+                  <Select value={q.status} onValueChange={(v) => updateStatus(q, v)}>
+                    <SelectTrigger className="h-7 w-auto border-0 p-0">
+                      <Badge variant="outline" className={`text-[11px] cursor-pointer ${STATUS_COLORS[q.status] || ""}`}>{q.status}</Badge>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(["Draft", "Sent", "Approved", "Rejected", "Converted to Bill", "Paid", "Overdue"] as string[]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setPreviewQ(q)} title="Preview"><Eye className="h-3.5 w-3.5" /></Button>
@@ -270,7 +365,7 @@ const Quotations = () => {
               </TableRow>
             ))}
             {filtered.length === 0 && (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No documents found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No documents found — create your first quotation</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -282,16 +377,16 @@ const Quotations = () => {
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-primary" /> {previewQ.number} ({previewQ.type})
+                <FileText className="h-5 w-5 text-primary" /> {previewQ.quote_number} ({previewQ.type})
                 <Badge variant="outline" className={`${STATUS_COLORS[previewQ.status]}`}>{previewQ.status}</Badge>
               </DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">To:</span> <span className="font-semibold">{previewQ.recipientName}</span></div>
-                <div><span className="text-muted-foreground">Date:</span> <span className="font-mono">{formatDateDDMMYYYY(new Date(previewQ.date))}</span></div>
-                <div><span className="text-muted-foreground">{previewQ.type === "Bill" ? "Due Date:" : "Valid Until:"}</span> <span className="font-mono">{formatDateDDMMYYYY(new Date(previewQ.dueDate))}</span></div>
+                <div><span className="text-muted-foreground">To:</span> <span className="font-semibold">{previewQ.client_name}</span></div>
+                <div><span className="text-muted-foreground">Date:</span> <span className="font-mono">{previewQ.date ? formatDateDDMMYYYY(new Date(previewQ.date)) : ""}</span></div>
+                <div><span className="text-muted-foreground">{previewQ.type === "Bill" ? "Due Date:" : "Valid Until:"}</span> <span className="font-mono">{(previewQ.due_date || previewQ.valid_until) ? formatDateDDMMYYYY(new Date(previewQ.due_date || previewQ.valid_until)) : "—"}</span></div>
               </div>
 
               <Table>
@@ -302,9 +397,9 @@ const Quotations = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {previewQ.items.map((item, i) => (
+                  {(previewQ.quotation_items || []).map((item: any, i: number) => (
                     <TableRow key={i}>
-                      <TableCell>{item.description}</TableCell>
+                      <TableCell>{item.description || item.service_name}</TableCell>
                       <TableCell className="text-center">{item.quantity}</TableCell>
                       <TableCell className="text-right">{formatINR(item.rate)}</TableCell>
                       <TableCell className="text-right font-semibold">{formatINR(item.amount)}</TableCell>
@@ -315,11 +410,15 @@ const Quotations = () => {
 
               <div className="flex justify-end">
                 <div className="w-64 space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatINR(previewQ.subtotal)}</span></div>
-                  {previewQ.discountAmount > 0 && <div className="flex justify-between text-green-600"><span>Discount ({previewQ.discountPercent}%)</span><span>-{formatINR(previewQ.discountAmount)}</span></div>}
-                  {previewQ.cgstAmount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">CGST ({previewQ.cgstPercent}%)</span><span>{formatINR(previewQ.cgstAmount)}</span></div>}
-                  {previewQ.sgstAmount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">SGST ({previewQ.sgstPercent}%)</span><span>{formatINR(previewQ.sgstAmount)}</span></div>}
-                  <div className="flex justify-between border-t border-border pt-1 font-bold text-lg"><span>Total</span><span className="text-primary">{formatINR(previewQ.total)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatINR(previewQ.subtotal || 0)}</span></div>
+                  {(previewQ.discount_amount || 0) > 0 && <div className="flex justify-between text-green-600"><span>Discount ({previewQ.discount_percent}%)</span><span>-{formatINR(previewQ.discount_amount)}</span></div>}
+                  {previewQ.gst_applicable && (
+                    <>
+                      <div className="flex justify-between"><span className="text-muted-foreground">CGST (9%)</span><span>{formatINR(previewQ.cgst || 0)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">SGST (9%)</span><span>{formatINR(previewQ.sgst || 0)}</span></div>
+                    </>
+                  )}
+                  <div className="flex justify-between border-t border-border pt-1 font-bold text-lg"><span>Total</span><span className="text-primary">{formatINR(previewQ.grand_total || 0)}</span></div>
                 </div>
               </div>
 

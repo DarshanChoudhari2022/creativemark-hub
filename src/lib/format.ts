@@ -47,6 +47,32 @@ export function telLink(phone: string): string {
 }
 
 /**
+ * Format phone number for SMS link with pre-loaded message
+ */
+export function smsLink(phone: string, message = ""): string {
+  const cleaned = phone.replace(/[\s\-\(\)]/g, "");
+  return `sms:${cleaned}${message ? `?body=${encodeURIComponent(message)}` : ""}`;
+}
+
+/**
+ * Validate Indian phone number format (+91 followed by 10 digits)
+ */
+export function isValidIndianPhone(phone: string): boolean {
+  const cleaned = phone.replace(/[\s\-\(\)]/g, "");
+  return /^(\+91)?[6-9]\d{9}$/.test(cleaned);
+}
+
+/**
+ * Format phone to standard Indian format (+91 XXXXX XXXXX)
+ */
+export function formatIndianPhone(phone: string): string {
+  const cleaned = phone.replace(/[\s\-\(\)+]/g, "");
+  const digits = cleaned.startsWith("91") ? cleaned.slice(2) : cleaned;
+  if (digits.length !== 10) return phone;
+  return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+}
+
+/**
  * Get short relative time string
  */
 export function relativeTime(dateStr: string): string {

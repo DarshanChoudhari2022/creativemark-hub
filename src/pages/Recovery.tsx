@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { AlertTriangle, Send, Phone, Mail, MessageSquare, CheckCircle2, Clock, Search, Filter } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { AlertTriangle, Send, Phone, Mail, MessageSquare, CheckCircle2, Clock, Search, Filter, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,24 +9,75 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
-import { recoveries as initialRecoveries, WA_TEMPLATES } from "@/data/recoveries";
+import { WA_TEMPLATES } from "@/data/recoveries";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { toast } from "sonner";
-import type { Recovery } from "@/types";
+import { supabase } from "@/lib/supabase";
 
-const SEVERITY_COLORS = (days: number): string => {
-  if (days > 30) return "bg-red-50 border-red-200";
-  if (days > 15) return "bg-amber-50 border-amber-200";
-  return "bg-card border-border";
-};
+/* Recovery is now derived from Bills (quotations where type='Bill' and status != 'Paid') */
+
+interface RecoveryRow {
+  id: string;
+  clientName: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  dueDate: string;
+  amountDue: number;
+  amountPaid: number;
+  daysOverdue: number;
+  received: boolean;
+  contact: string;
+  email: string;
+  whatsapp: string;
+  reminderCount: number;
+}
 
 const Recovery = () => {
-  const [recoveries, setRecoveries] = useState(initialRecoveries);
+  const [recoveries, setRecoveries] = useState<RecoveryRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("pending");
-  const [selected, setSelected] = useState<Recovery | null>(null);
+  const [selected, setSelected] = useState<RecoveryRow | null>(null);
   const [templateType, setTemplateType] = useState<"soft" | "firm" | "final">("soft");
   const [partialAmount, setPartialAmount] = useState(0);
+  const [reminderHistory, setReminderHistory] = useState<any[]>([]);
+
+  const fetchRecoveries = async () => {
+    setLoading(true);
+    // Get all bills (type = 'Bill')
+    const { data: bills } = await supabase
+      .from("quotations")
+      .select("*")
+      .eq("type", "Bill")
+      .order("created_at", { ascending: false });
+
+    const now = Date.now();
+    const rows: RecoveryRow[] = (bills || []).map(b => {
+      const dueDate = b.due_date ? new Date(b.due_date) : new Date(b.date || b.created_at);
+      const daysOverdue = b.status === "Paid" ? 0 : Math.max(0, Math.floor((now - dueDate.getTime()) / 86400000));
+      const amountPaid = b.status === "Paid" ? (b.grand_total || 0) : (b.amount_paid || 0);
+
+      return {
+        id: b.id,
+        clientName: b.client_name || "Unknown",
+        invoiceNo: b.quote_number || "",
+        invoiceDate: b.date || "",
+        dueDate: b.due_date || b.date || "",
+        amountDue: b.grand_total || 0,
+        amountPaid,
+        daysOverdue,
+        received: b.status === "Paid",
+        contact: b.client_phone || "",
+        email: b.client_email || "",
+        whatsapp: b.client_phone || "",
+        reminderCount: 0,
+      };
+    });
+    setRecoveries(rows);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchRecoveries(); }, []);
 
   const filtered = useMemo(() =>
     recoveries.filter(r =>
@@ -39,43 +90,89 @@ const Recovery = () => {
   const overdueCount = recoveries.filter(r => !r.received).length;
   const criticalCount = recoveries.filter(r => !r.received && r.daysOverdue > 30).length;
 
-  const sendWhatsApp = (recovery: Recovery, type: "soft" | "firm" | "final") => {
-    const msg = WA_TEMPLATES[type](recovery.clientName, formatINR(recovery.amountDue - recovery.amountPaid), recovery.invoiceNo);
+  const sendWhatsApp = (recovery: RecoveryRow, type: "soft" | "firm" | "final") => {
+    const balance = recovery.amountDue - recovery.amountPaid;
+    const msg = WA_TEMPLATES[type](recovery.clientName, formatINR(balance), recovery.invoiceNo);
     window.open(waLink(recovery.whatsapp, msg), "_blank");
+    toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} reminder opened in WhatsApp`);
 
-    // Add to reminder history
-    setRecoveries(recoveries.map(r =>
-      r.id === recovery.id
-        ? { ...r, reminderHistory: [{ date: new Date().toISOString().slice(0, 10), channel: "WhatsApp", note: `${type.charAt(0).toUpperCase() + type.slice(1)} reminder sent` }, ...r.reminderHistory] }
-        : r
-    ));
-    toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} reminder sent via WhatsApp`);
+    // Log reminder in Supabase
+    supabase.from("recovery_reminders").insert({
+      quotation_id: recovery.id,
+      type: "whatsapp",
+      message: msg,
+      sent_at: new Date().toISOString(),
+    }).then(() => {});
   };
 
-  const markPartialPayment = (recovery: Recovery, amount: number) => {
+  const markPartialPayment = async (recovery: RecoveryRow, amount: number) => {
     if (amount <= 0) { toast.error("Enter a valid amount"); return; }
     const newPaid = recovery.amountPaid + amount;
     const fullyPaid = newPaid >= recovery.amountDue;
 
-    setRecoveries(recoveries.map(r =>
-      r.id === recovery.id
-        ? {
-            ...r,
-            amountPaid: newPaid,
-            received: fullyPaid,
-            daysOverdue: fullyPaid ? 0 : r.daysOverdue,
-            reminderHistory: [{ date: new Date().toISOString().slice(0, 10), channel: "Call", note: `${fullyPaid ? "Full" : "Partial"} payment of ${formatINR(amount)} received` }, ...r.reminderHistory],
-          }
-        : r
-    ));
+    const updateData: any = {
+      amount_paid: newPaid,
+      status: fullyPaid ? "Paid" : "Overdue",
+    };
+
+    const { error } = await supabase.from("quotations").update(updateData).eq("id", recovery.id);
+    if (error) { toast.error("Failed to record payment: " + error.message); return; }
+
+    // Log the payment
+    await supabase.from("recovery_notes").insert({
+      quotation_id: recovery.id,
+      note: `${fullyPaid ? "Full" : "Partial"} payment of ${formatINR(amount)} received`,
+      created_at: new Date().toISOString(),
+    });
+
     setPartialAmount(0);
-    toast.success(fullyPaid ? "Invoice fully paid!" : `Partial payment of ${formatINR(amount)} recorded`);
+    toast.success(fullyPaid ? "Invoice fully paid! 🎉" : `Partial payment of ${formatINR(amount)} recorded`);
     if (fullyPaid) setSelected(null);
+    fetchRecoveries();
   };
 
-  const markFullPayment = (recovery: Recovery) => {
+  const markFullPayment = (recovery: RecoveryRow) => {
     markPartialPayment(recovery, recovery.amountDue - recovery.amountPaid);
   };
+
+  const openDetail = async (r: RecoveryRow) => {
+    setSelected(r);
+    // Fetch reminder history for this bill
+    const { data: reminders } = await supabase
+      .from("recovery_reminders")
+      .select("*")
+      .eq("quotation_id", r.id)
+      .order("sent_at", { ascending: false });
+    const { data: notes } = await supabase
+      .from("recovery_notes")
+      .select("*")
+      .eq("quotation_id", r.id)
+      .order("created_at", { ascending: false });
+
+    const combined = [
+      ...(reminders || []).map((rem: any) => ({
+        date: rem.sent_at,
+        channel: "WhatsApp",
+        note: rem.message?.slice(0, 80) + "…" || "Reminder sent",
+      })),
+      ...(notes || []).map((n: any) => ({
+        date: n.created_at,
+        channel: "Payment",
+        note: n.note || "Note",
+      })),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    setReminderHistory(combined);
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Payment Recovery" subtitle="Loading…" />
+        <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}</div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -96,6 +193,7 @@ const Recovery = () => {
                 <SelectItem value="received">Received</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline" size="sm" onClick={fetchRecoveries}><RefreshCw className="h-3.5 w-3.5" /> Refresh</Button>
           </>
         }
       />
@@ -125,7 +223,7 @@ const Recovery = () => {
               <TableHead>Client</TableHead><TableHead>Invoice</TableHead><TableHead>Date</TableHead>
               <TableHead className="text-right">Due</TableHead><TableHead className="text-right">Paid</TableHead>
               <TableHead className="text-right">Balance</TableHead><TableHead>Overdue</TableHead>
-              <TableHead>Reminders</TableHead><TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -133,7 +231,7 @@ const Recovery = () => {
               <TableRow key={r.id} className={r.received ? "opacity-50" : ""}>
                 <TableCell className="font-semibold">{r.clientName}</TableCell>
                 <TableCell className="font-mono text-sm">{r.invoiceNo}</TableCell>
-                <TableCell className="text-sm text-muted-foreground font-mono">{formatDateDDMMYYYY(new Date(r.invoiceDate))}</TableCell>
+                <TableCell className="text-sm text-muted-foreground font-mono">{r.invoiceDate ? formatDateDDMMYYYY(new Date(r.invoiceDate)) : ""}</TableCell>
                 <TableCell className="text-right">{formatINR(r.amountDue)}</TableCell>
                 <TableCell className="text-right text-green-600 font-semibold">{formatINR(r.amountPaid)}</TableCell>
                 <TableCell className={`text-right font-bold ${!r.received ? "text-primary" : ""}`}>{formatINR(r.amountDue - r.amountPaid)}</TableCell>
@@ -146,19 +244,18 @@ const Recovery = () => {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{r.reminderHistory.length} sent</TableCell>
                 <TableCell className="text-right">
                   {!r.received && (
                     <div className="flex items-center justify-end gap-1">
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600" onClick={() => sendWhatsApp(r, "soft")} title="WhatsApp Reminder"><Send className="h-3.5 w-3.5" /></Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setSelected(r)} title="Details"><MessageSquare className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDetail(r)} title="Details"><MessageSquare className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600" onClick={() => markFullPayment(r)} title="Mark Paid"><CheckCircle2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   )}
                 </TableCell>
               </TableRow>
             ))}
-            {filtered.length === 0 && <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">{filter === "received" ? "No received payments" : "No pending invoices — all clear! 🎉"}</TableCell></TableRow>}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{filter === "received" ? "No received payments" : "No pending invoices — all clear! 🎉"}</TableCell></TableRow>}
           </TableBody>
         </Table>
       </Card>
@@ -175,8 +272,8 @@ const Recovery = () => {
             </DialogHeader>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-muted-foreground">Invoice Date:</span> <span className="font-mono">{formatDateDDMMYYYY(new Date(selected.invoiceDate))}</span></div>
-              <div><span className="text-muted-foreground">Due Date:</span> <span className="font-mono">{formatDateDDMMYYYY(new Date(selected.dueDate))}</span></div>
+              <div><span className="text-muted-foreground">Invoice Date:</span> <span className="font-mono">{selected.invoiceDate ? formatDateDDMMYYYY(new Date(selected.invoiceDate)) : "—"}</span></div>
+              <div><span className="text-muted-foreground">Due Date:</span> <span className="font-mono">{selected.dueDate ? formatDateDDMMYYYY(new Date(selected.dueDate)) : "—"}</span></div>
               <div><span className="text-muted-foreground">Amount Due:</span> <span className="font-bold">{formatINR(selected.amountDue)}</span></div>
               <div><span className="text-muted-foreground">Amount Paid:</span> <span className="font-bold text-green-600">{formatINR(selected.amountPaid)}</span></div>
               <div><span className="text-muted-foreground">Balance:</span> <span className="font-bold text-lg text-primary">{formatINR(selected.amountDue - selected.amountPaid)}</span></div>
@@ -219,13 +316,14 @@ const Recovery = () => {
 
             {/* Reminder History */}
             <div className="mt-4">
-              <h4 className="font-bold text-sm flex items-center gap-1.5 mb-2"><Clock className="h-4 w-4" /> Reminder History</h4>
+              <h4 className="font-bold text-sm flex items-center gap-1.5 mb-2"><Clock className="h-4 w-4" /> Activity History</h4>
               <div className="space-y-1.5">
-                {selected.reminderHistory.map((rem, i) => (
+                {reminderHistory.length === 0 && <div className="text-xs text-muted-foreground text-center py-3">No activity recorded yet</div>}
+                {reminderHistory.map((rem, i) => (
                   <div key={i} className="flex items-center gap-3 p-2 rounded border border-border text-xs">
-                    <Badge variant="outline" className={`text-[10px] ${rem.channel === "WhatsApp" ? "bg-green-50 text-green-600" : rem.channel === "Call" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"}`}>{rem.channel}</Badge>
-                    <span className="flex-1 text-muted-foreground">{rem.note}</span>
-                    <span className="font-mono text-muted-foreground">{formatDateDDMMYYYY(new Date(rem.date))}</span>
+                    <Badge variant="outline" className={`text-[10px] ${rem.channel === "WhatsApp" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>{rem.channel}</Badge>
+                    <span className="flex-1 text-muted-foreground truncate">{rem.note}</span>
+                    <span className="font-mono text-muted-foreground shrink-0">{rem.date ? formatDateDDMMYYYY(new Date(rem.date)) : ""}</span>
                   </div>
                 ))}
               </div>
@@ -233,8 +331,8 @@ const Recovery = () => {
 
             <DialogFooter>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Phone className="h-3.5 w-3.5" /> {selected.contact}
-                <Mail className="h-3.5 w-3.5 ml-2" /> {selected.email}
+                <Phone className="h-3.5 w-3.5" /> {selected.contact || "No phone"}
+                <Mail className="h-3.5 w-3.5 ml-2" /> {selected.email || "No email"}
               </div>
             </DialogFooter>
           </DialogContent>
