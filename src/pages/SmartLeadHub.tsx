@@ -40,19 +40,30 @@ const STATUS_COLORS: Record<string, string> = {
   Lost: "bg-red-500",
 };
 
+const SLA_THRESHOLD_SECONDS = 15 * 60; // 15 minutes SLA for first response
+
 const SmartLeadHub = () => {
   const { data: smartLeads, loading, insert, update, refresh } = useSupabaseTable<any>("smart_leads", "*, assigned_to(id, name, phone, whatsapp)");
   const { data: employeesData } = useSupabaseTable<any>("employees", "*, leads:leads!assigned_to(id, stage)");
   const { data: rosterData } = useSupabaseTable<any>("sales_roster", "*, employee_id(id, name)");
   const { data: webhookConfigs } = useSupabaseTable<any>("webhook_config", "*");
+  const { data: activityLogs, refresh: refreshLogs } = useSupabaseTable<any>("lead_activity_log", "*, lead_id(id, customer_name)");
 
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
   const [detailLead, setDetailLead] = useState<any>(null);
   const [form, setForm] = useState({ name: "", phone: "", whatsapp: "", email: "", vehicle: "", source: "Walk-in" as LeadSource, notes: "" });
+
+  // ── Auto-refresh every 30 seconds for real-time visibility ──
+  useEffect(() => {
+    const interval = setInterval(() => { refresh(); refreshLogs(); }, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Calculate Employee Metrics for Assignment
   const employees = useMemo(() => {
@@ -92,6 +103,30 @@ const SmartLeadHub = () => {
   const avgResponseTime = todayLeads.filter(l => l.response_time_seconds).reduce((s, l, _, a) => s + l.response_time_seconds / a.length, 0);
   const unassignedCount = leads.filter(l => l.status === "New" && !l.assigned_to).length;
   const convertedToday = todayLeads.filter(l => l.status === "Converted").length;
+
+  // ── SLA Breach Detection ──
+  const slaBreachedLeads = useMemo(() => {
+    const now = Date.now();
+    return leads.filter(l => {
+      if (l.status === "Converted" || l.status === "Lost") return false;
+      if (l.first_response_at) return false; // Already responded
+      const assignedAt = l.assigned_at ? new Date(l.assigned_at).getTime() : new Date(l.created_at).getTime();
+      const elapsed = (now - assignedAt) / 1000;
+      return elapsed > SLA_THRESHOLD_SECONDS;
+    });
+  }, [leads]);
+
+  // ── Assign All Unassigned ──
+  const assignAllUnassigned = async () => {
+    const unassigned = leads.filter(l => l.status === "New" && !l.assigned_to);
+    if (unassigned.length === 0) { toast.info("No unassigned leads"); return; }
+    let assigned = 0;
+    for (const lead of unassigned) {
+      await autoAssign(lead.id);
+      assigned++;
+    }
+    toast.success(`Auto-assigned ${assigned} lead(s)`);
+  };
 
   // Available salespeople (not on leave)
   const availableSalespeople = useMemo(() => {
@@ -181,14 +216,17 @@ const SmartLeadHub = () => {
     }
   };
 
-  // Notification check
+  // Notification check — unassigned leads + SLA breaches
   useEffect(() => {
     const unassigned = leads.filter(l => l.status === "New" && !l.assigned_to);
     if (unassigned.length > 0) {
       toast.warning(`⚡ ${unassigned.length} new lead(s) need assignment!`, { duration: 10000 });
     }
+    if (slaBreachedLeads.length > 0) {
+      toast.error(`🚨 ${slaBreachedLeads.length} lead(s) breached 15-min SLA — no response yet!`, { duration: 15000 });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads.length]);
+  }, [leads.length, slaBreachedLeads.length]);
 
   const openWhatsApp = (phone: string, name: string) => window.open(waLink(phone, WHATSAPP_TEMPLATES.LEAD_GENERAL(name)), "_blank");
   const openSMS = (phone: string, name: string) => window.open(smsLink(phone, `Hi ${name}, thank you for your inquiry. We'll get back to you shortly. — CreativeMark`), "_blank");
@@ -218,8 +256,10 @@ const SmartLeadHub = () => {
         subtitle="Real-time lead capture, auto-assignment & response tracking"
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => refresh()} className="gap-1"><RefreshCw className="h-3.5 w-3.5" /> Refresh</Button>
+            <Button size="sm" variant="outline" onClick={() => { refresh(); refreshLogs(); toast.success("Refreshed"); }} className="gap-1"><RefreshCw className="h-3.5 w-3.5" /> Refresh</Button>
+            <Button size="sm" variant="outline" onClick={() => setFeedOpen(true)} className="gap-1"><Activity className="h-3.5 w-3.5" /> Live Feed</Button>
             <Button size="sm" variant="outline" onClick={() => setRosterOpen(true)} className="gap-1"><Users className="h-3.5 w-3.5" /> Team Roster</Button>
+            {unassignedCount > 0 && <Button size="sm" variant="destructive" onClick={assignAllUnassigned} className="gap-1 animate-pulse"><Zap className="h-3.5 w-3.5" /> Assign All ({unassignedCount})</Button>}
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover gap-1"><Plus className="h-4 w-4" /> Add Lead</Button></DialogTrigger>
               <DialogContent className="max-w-md">
@@ -253,7 +293,7 @@ const SmartLeadHub = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <div className="lg:col-span-2">
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <Card className="p-4 border-l-4 border-l-blue-500">
               <div className="flex items-center justify-between">
                 <div><div className="text-xs text-muted-foreground font-semibold uppercase">Today's Leads</div><div className="text-3xl font-black mt-1">{todayLeads.length}</div></div>
@@ -271,6 +311,13 @@ const SmartLeadHub = () => {
                 <div><div className="text-xs text-muted-foreground font-semibold uppercase">Unassigned</div><div className={`text-3xl font-black mt-1 ${unassignedCount > 0 ? "text-red-600" : "text-green-600"}`}>{unassignedCount}</div></div>
                 <div className={`h-12 w-12 rounded-full flex items-center justify-center ${unassignedCount > 0 ? "bg-red-50" : "bg-green-50"}`}>{unassignedCount > 0 ? <AlertTriangle className="h-6 w-6 text-red-500" /> : <CheckCircle className="h-6 w-6 text-green-500" />}</div>
               </div>
+            </Card>
+            <Card className={`p-4 border-l-4 ${slaBreachedLeads.length > 0 ? "border-l-orange-500 animate-pulse" : "border-l-emerald-400"}`}>
+              <div className="flex items-center justify-between">
+                <div><div className="text-xs text-muted-foreground font-semibold uppercase">SLA Breached</div><div className={`text-3xl font-black mt-1 ${slaBreachedLeads.length > 0 ? "text-orange-600" : "text-emerald-600"}`}>{slaBreachedLeads.length}</div></div>
+                <div className={`h-12 w-12 rounded-full flex items-center justify-center ${slaBreachedLeads.length > 0 ? "bg-orange-50" : "bg-emerald-50"}`}><BellRing className={`h-6 w-6 ${slaBreachedLeads.length > 0 ? "text-orange-500" : "text-emerald-500"}`} /></div>
+              </div>
+              {slaBreachedLeads.length > 0 && <div className="text-[10px] text-orange-600 mt-1 font-semibold">No response within 15 min</div>}
             </Card>
             <Card className="p-4 border-l-4 border-l-green-500">
               <div className="flex items-center justify-between">
@@ -488,6 +535,45 @@ const SmartLeadHub = () => {
           })}
         </div>
       </Card>
+
+      {/* Live Activity Feed Dialog */}
+      <Dialog open={feedOpen} onOpenChange={setFeedOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-green-500" /> Live Activity Feed</DialogTitle>
+          </DialogHeader>
+          <div className="text-xs text-muted-foreground mb-3">Real-time log of all lead assignments, responses, and escalations. Auto-refreshes every 30s.</div>
+          {activityLogs.length > 0 ? (
+            <div className="space-y-2">
+              {[...activityLogs].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 50).map((log: any) => (
+                <div key={log.id} className="flex items-start gap-3 p-2.5 rounded-lg border bg-muted/30">
+                  <div className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
+                    log.event_type === 'auto_assigned' ? 'bg-blue-500' :
+                    log.event_type === 'manual_assigned' ? 'bg-amber-500' :
+                    log.event_type === 'contacted' ? 'bg-green-500' :
+                    log.event_type === 'sla_breach' ? 'bg-red-500' :
+                    log.event_type === 'escalated' ? 'bg-orange-500' :
+                    log.event_type === 'converted' ? 'bg-emerald-600' : 'bg-gray-400'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold">{log.details}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {log.lead_id?.customer_name || 'Lead'} · {new Date(log.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] shrink-0">{log.event_type.replace(/_/g, ' ')}</Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Activity className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No activity yet</p>
+              <p className="text-xs mt-1">Events will appear here as leads are received and assigned.</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

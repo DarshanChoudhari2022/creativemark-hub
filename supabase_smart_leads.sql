@@ -1,116 +1,135 @@
--- ==============================================================================
+-- ═══════════════════════════════════════════════════════════
 -- Smart Lead Notification System — Database Schema
--- Run in Supabase SQL Editor
--- ==============================================================================
+-- Tables: smart_leads, sales_roster, lead_activity_log, webhook_config
+-- ═══════════════════════════════════════════════════════════
 
--- 1. Sales Roster — shift, availability, territory
-CREATE TABLE IF NOT EXISTS sales_roster (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
-  territory TEXT,
-  shift_start TIME DEFAULT '09:00',
-  shift_end TIME DEFAULT '18:00',
-  max_daily_leads INTEGER DEFAULT 10,
-  is_available BOOLEAN DEFAULT true,
-  leave_start DATE,
-  leave_end DATE,
-  priority_order INTEGER DEFAULT 1,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 2. Smart Leads — unified inbox from all sources
+-- ── 1. smart_leads: Core lead table for dealership leads ──
 CREATE TABLE IF NOT EXISTS smart_leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  -- Lead info
   customer_name TEXT NOT NULL,
-  phone TEXT,
-  whatsapp TEXT,
+  phone TEXT DEFAULT '',
+  whatsapp TEXT DEFAULT '',
   email TEXT,
-  vehicle_interest TEXT,
-  source TEXT CHECK (source IN ('Just Dial','Meta Ads','Google Ads','OEM CRM','Walk-in','Website','Other')) DEFAULT 'Other',
-  source_lead_id TEXT,
-  raw_payload JSONB,
-  -- Assignment
-  assigned_to UUID REFERENCES employees(id) ON DELETE SET NULL,
+  source TEXT NOT NULL DEFAULT 'Walk-in',
+  vehicle_interest TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'New' CHECK (status IN ('New', 'Assigned', 'Contacted', 'Follow-up', 'Converted', 'Lost')),
+  assigned_to UUID REFERENCES employees(id),
   assigned_at TIMESTAMPTZ,
-  assignment_method TEXT CHECK (assignment_method IN ('auto','manual','escalation')) DEFAULT 'auto',
-  -- Response
+  assignment_method TEXT CHECK (assignment_method IN ('auto', 'manual')),
+  notification_sent BOOLEAN DEFAULT FALSE,
   first_response_at TIMESTAMPTZ,
   response_time_seconds INTEGER,
-  -- Status
-  status TEXT CHECK (status IN ('New','Assigned','Contacted','Follow-up','Converted','Lost')) DEFAULT 'New',
-  -- Notifications
-  notification_sent BOOLEAN DEFAULT false,
-  notification_channel TEXT,
-  escalated BOOLEAN DEFAULT false,
-  escalation_count INTEGER DEFAULT 0,
-  -- Metadata
   notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Lead Activity Log — every action timestamped
+-- ── 2. sales_roster: Track salesperson availability & capacity ──
+CREATE TABLE IF NOT EXISTS sales_roster (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  is_available BOOLEAN DEFAULT TRUE,
+  shift_start TEXT DEFAULT '09:00',
+  shift_end TEXT DEFAULT '18:00',
+  territory TEXT DEFAULT '',
+  max_daily_leads INTEGER DEFAULT 50,
+  leave_start DATE,
+  leave_end DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── 3. lead_activity_log: Audit trail of all lead events ──
 CREATE TABLE IF NOT EXISTS lead_activity_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  smart_lead_id UUID REFERENCES smart_leads(id) ON DELETE CASCADE,
-  action TEXT NOT NULL,
-  performed_by UUID REFERENCES employees(id) ON DELETE SET NULL,
+  lead_id UUID NOT NULL REFERENCES smart_leads(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL CHECK (event_type IN (
+    'created', 'auto_assigned', 'manual_assigned', 'reassigned',
+    'contacted', 'follow_up', 'converted', 'lost', 'escalated', 'sla_breach'
+  )),
   details TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  actor_id UUID REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Escalation Rules
-CREATE TABLE IF NOT EXISTS escalation_rules (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  rule_name TEXT NOT NULL,
-  timeout_minutes INTEGER DEFAULT 15,
-  escalate_to TEXT CHECK (escalate_to IN ('next_available','manager','round_robin')) DEFAULT 'next_available',
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Insert default escalation rule
-INSERT INTO escalation_rules (rule_name, timeout_minutes, escalate_to) 
-VALUES ('Default 15-min escalation', 15, 'next_available')
-ON CONFLICT DO NOTHING;
-
--- 5. Webhook Endpoints config
+-- ── 4. webhook_config: Track integration status & stats ──
 CREATE TABLE IF NOT EXISTS webhook_config (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  platform TEXT UNIQUE NOT NULL,
-  endpoint_url TEXT,
+  platform TEXT NOT NULL UNIQUE,
+  webhook_url TEXT,
+  is_active BOOLEAN DEFAULT FALSE,
   api_key TEXT,
-  is_active BOOLEAN DEFAULT true,
-  last_received_at TIMESTAMPTZ,
+  verify_token TEXT,
   total_leads_received INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now()
+  last_received_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Insert platform configs
-INSERT INTO webhook_config (platform, endpoint_url, is_active) VALUES
-  ('Just Dial', '/api/webhooks/justdial', true),
-  ('Meta Ads', '/api/webhooks/meta', true),
-  ('Google Ads', '/api/webhooks/google', true),
-  ('OEM CRM', '/api/webhooks/oem', true)
-ON CONFLICT (platform) DO NOTHING;
-
--- Enable RLS
-ALTER TABLE sales_roster ENABLE ROW LEVEL SECURITY;
-ALTER TABLE smart_leads ENABLE ROW LEVEL SECURITY;
-ALTER TABLE lead_activity_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE escalation_rules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE webhook_config ENABLE ROW LEVEL SECURITY;
-
--- Policies
-CREATE POLICY "Auth access sales_roster" ON sales_roster FOR ALL USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Auth access smart_leads" ON smart_leads FOR ALL USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Auth access lead_activity_log" ON lead_activity_log FOR ALL USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Auth access escalation_rules" ON escalation_rules FOR ALL USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Auth access webhook_config" ON webhook_config FOR ALL USING (auth.uid() IS NOT NULL);
-
--- Index for fast lookups
+-- ── Indexes for performance ──
 CREATE INDEX IF NOT EXISTS idx_smart_leads_status ON smart_leads(status);
 CREATE INDEX IF NOT EXISTS idx_smart_leads_source ON smart_leads(source);
 CREATE INDEX IF NOT EXISTS idx_smart_leads_assigned ON smart_leads(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_smart_leads_created ON smart_leads(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lead_activity_lead ON lead_activity_log(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_activity_type ON lead_activity_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_sales_roster_emp ON sales_roster(employee_id);
+
+-- ── RLS Policies ──
+ALTER TABLE smart_leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_roster ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lead_activity_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_config ENABLE ROW LEVEL SECURITY;
+
+-- Allow authenticated users full access (dealership internal tool)
+CREATE POLICY "smart_leads_all" ON smart_leads FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "sales_roster_all" ON sales_roster FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "lead_activity_all" ON lead_activity_log FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "webhook_config_all" ON webhook_config FOR ALL USING (auth.role() = 'authenticated');
+
+-- Allow service role (webhooks) full access
+CREATE POLICY "smart_leads_service" ON smart_leads FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "sales_roster_service" ON sales_roster FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "lead_activity_service" ON lead_activity_log FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "webhook_config_service" ON webhook_config FOR ALL USING (auth.role() = 'service_role');
+
+-- ── Helper RPC: Increment webhook lead counter ──
+CREATE OR REPLACE FUNCTION increment_webhook_leads(p_platform TEXT)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE webhook_config
+  SET total_leads_received = total_leads_received + 1,
+      last_received_at = NOW()
+  WHERE platform = p_platform;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ── Seed default webhook configurations ──
+INSERT INTO webhook_config (platform, webhook_url, is_active) VALUES
+  ('Just Dial', '/functions/v1/justdial-webhook', FALSE),
+  ('Meta Ads', '/functions/v1/meta-leads-webhook', FALSE),
+  ('Google Ads', '/functions/v1/google-leads-webhook', FALSE),
+  ('OEM CRM', NULL, FALSE)
+ON CONFLICT (platform) DO NOTHING;
+
+-- ── Updated timestamp trigger ──
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$ BEGIN
+  CREATE TRIGGER smart_leads_updated_at
+    BEFORE UPDATE ON smart_leads
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TRIGGER sales_roster_updated_at
+    BEFORE UPDATE ON sales_roster
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
