@@ -44,6 +44,13 @@ DO $$ BEGIN ALTER TABLE quotations ALTER COLUMN status TYPE TEXT USING status::t
 DO $$ BEGIN ALTER TABLE quotations ALTER COLUMN discount_type TYPE TEXT USING discount_type::text; EXCEPTION WHEN others THEN NULL; END $$;
 
 -- ╔═══════════════════════════════════════════════════════════╗
+-- ║  1b. FIX employees.id — allow standalone inserts         ║
+-- ╚═══════════════════════════════════════════════════════════╝
+
+ALTER TABLE employees ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_id_fkey;
+
+-- ╔═══════════════════════════════════════════════════════════╗
 -- ║  2. ADD ALL MISSING COLUMNS ON employees                 ║
 -- ╚═══════════════════════════════════════════════════════════╝
 
