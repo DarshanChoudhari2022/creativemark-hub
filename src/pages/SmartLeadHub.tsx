@@ -13,7 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/shared";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { waLink, smsLink } from "@/lib/format";
+import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { toast } from "sonner";
 
 type LeadSource = "Just Dial" | "Meta Ads" | "Google Ads" | "OEM CRM" | "Walk-in" | "Website" | "Other";
@@ -40,7 +42,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const SmartLeadHub = () => {
   const { data: smartLeads, loading, insert, update, refresh } = useSupabaseTable<any>("smart_leads", "*, assigned_to(id, name, phone, whatsapp)");
-  const { data: employees } = useSupabaseTable<any>("employees", "id, name, phone, whatsapp, status");
+  const { data: employeesData } = useSupabaseTable<any>("employees", "*, leads:leads!assigned_to(id, stage)");
   const { data: rosterData } = useSupabaseTable<any>("sales_roster", "*, employee_id(id, name)");
   const { data: webhookConfigs } = useSupabaseTable<any>("webhook_config", "*");
 
@@ -51,6 +53,23 @@ const SmartLeadHub = () => {
   const [rosterOpen, setRosterOpen] = useState(false);
   const [detailLead, setDetailLead] = useState<any>(null);
   const [form, setForm] = useState({ name: "", phone: "", whatsapp: "", email: "", vehicle: "", source: "Walk-in" as LeadSource, notes: "" });
+
+  // Calculate Employee Metrics for Assignment
+  const employees = useMemo(() => {
+    return employeesData.map(e => {
+      const allLeads = e.leads || [];
+      const activeLeads = allLeads.filter((l: any) => !["Converted", "Lost"].includes(l.stage));
+      const convertedLeads = allLeads.filter((l: any) => l.stage === "Converted");
+      const conversionRate = allLeads.length > 0 ? Math.round((convertedLeads.length / allLeads.length) * 100) : 0;
+      
+      return {
+        ...e,
+        activeLeadsCount: activeLeads.length,
+        conversionRate,
+        target: e.lead_target || 50,
+      };
+    });
+  }, [employeesData]);
 
   // Derived metrics
   const leads = useMemo(() => smartLeads.map(l => ({
@@ -78,28 +97,56 @@ const SmartLeadHub = () => {
   const availableSalespeople = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return rosterData.filter(r => {
-      if (!r.is_available) return false;
+      const emp = employees.find(e => e.id === (r.employee_id?.id || r.employee_id));
+      if (!r.is_available || emp?.status !== "Active") return false;
       if (r.leave_start && r.leave_end && today >= r.leave_start && today <= r.leave_end) return false;
       return true;
+    }).map(r => {
+      const emp = employees.find(e => e.id === (r.employee_id?.id || r.employee_id));
+      return { ...r, ...emp };
     });
-  }, [rosterData]);
+  }, [rosterData, employees]);
 
-  // Auto-assign logic
+  // Auto-assign logic (Weighted Performance)
   const autoAssign = async (leadId: string) => {
     if (availableSalespeople.length === 0) { toast.error("No salespeople available!"); return; }
-    // Round-robin: find person with fewest today's leads
+    
+    // Sort by: 
+    // 1. Workload ratio (current active / target) - lower is better
+    // 2. Conversion rate - higher is better
+    // 3. Today's leads - lower is better
     const assignCounts: Record<string, number> = {};
     todayLeads.forEach(l => { if (l.assigned_to?.id) assignCounts[l.assigned_to.id] = (assignCounts[l.assigned_to.id] || 0) + 1; });
+
     const sorted = [...availableSalespeople].sort((a, b) => {
-      const empIdA = a.employee_id?.id || a.employee_id;
-      const empIdB = b.employee_id?.id || b.employee_id;
-      return (assignCounts[empIdA] || 0) - (assignCounts[empIdB] || 0);
+      const ratioA = (a.activeLeadsCount || 0) / (a.target || 1);
+      const ratioB = (b.activeLeadsCount || 0) / (b.target || 1);
+      
+      // If workload ratio difference is significant (> 20%), prioritize lower workload
+      if (Math.abs(ratioA - ratioB) > 0.2) return ratioA - ratioB;
+      
+      // Otherwise prioritize higher conversion rate
+      if (b.conversionRate !== a.conversionRate) return (b.conversionRate || 0) - (a.conversionRate || 0);
+      
+      // Finally, tie-break with today's lead count
+      return (assignCounts[a.id] || 0) - (assignCounts[b.id] || 0);
     });
+
     const best = sorted[0];
-    const empId = best.employee_id?.id || best.employee_id;
-    const { error } = await update(leadId, { assigned_to: empId, assigned_at: new Date().toISOString(), status: "Assigned", assignment_method: "auto", notification_sent: true });
+    const empId = best.id;
+    const { error } = await update(leadId, { 
+      assigned_to: empId, 
+      assigned_at: new Date().toISOString(), 
+      status: "Assigned", 
+      assignment_method: "auto", 
+      notification_sent: true 
+    });
+
     if (error) toast.error("Assignment failed: " + error.message);
-    else { toast.success(`Auto-assigned to ${best.employee_id?.name || "salesperson"}`); refresh(); }
+    else { 
+      toast.success(`Weighted auto-assigned to ${best.name || "salesperson"} (Conv: ${best.conversionRate}%, Workload: ${best.activeLeadsCount}/${best.target})`); 
+      refresh(); 
+    }
   };
 
   // Manual assign
@@ -140,9 +187,10 @@ const SmartLeadHub = () => {
     if (unassigned.length > 0) {
       toast.warning(`⚡ ${unassigned.length} new lead(s) need assignment!`, { duration: 10000 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads.length]);
 
-  const openWhatsApp = (phone: string, name: string) => window.open(waLink(phone, `Hi ${name}, thank you for your inquiry. This is from CreativeMark. How can we help you today?`), "_blank");
+  const openWhatsApp = (phone: string, name: string) => window.open(waLink(phone, WHATSAPP_TEMPLATES.LEAD_GENERAL(name)), "_blank");
   const openSMS = (phone: string, name: string) => window.open(smsLink(phone, `Hi ${name}, thank you for your inquiry. We'll get back to you shortly. — CreativeMark`), "_blank");
 
   const formatTime = (seconds: number) => {
@@ -156,6 +204,12 @@ const SmartLeadHub = () => {
     const diff = Math.round((Date.now() - new Date(createdAt).getTime()) / 1000);
     return formatTime(diff);
   };
+
+  const { user: currentUser } = useAuth();
+
+  const topPerformers = useMemo(() => {
+    return [...employees].sort((a, b) => b.conversionRate - a.conversionRate).slice(0, 5);
+  }, [employees]);
 
   return (
     <div>
@@ -196,32 +250,60 @@ const SmartLeadHub = () => {
         }
       />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card className="p-4 border-l-4 border-l-blue-500">
-          <div className="flex items-center justify-between">
-            <div><div className="text-xs text-muted-foreground font-semibold uppercase">Today's Leads</div><div className="text-3xl font-black mt-1">{todayLeads.length}</div></div>
-            <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center"><Zap className="h-6 w-6 text-blue-500" /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="lg:col-span-2">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="p-4 border-l-4 border-l-blue-500">
+              <div className="flex items-center justify-between">
+                <div><div className="text-xs text-muted-foreground font-semibold uppercase">Today's Leads</div><div className="text-3xl font-black mt-1">{todayLeads.length}</div></div>
+                <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center"><Zap className="h-6 w-6 text-blue-500" /></div>
+              </div>
+            </Card>
+            <Card className="p-4 border-l-4 border-l-amber-500">
+              <div className="flex items-center justify-between">
+                <div><div className="text-xs text-muted-foreground font-semibold uppercase">Avg Response</div><div className="text-3xl font-black mt-1">{avgResponseTime ? formatTime(Math.round(avgResponseTime)) : "—"}</div></div>
+                <div className="h-12 w-12 rounded-full bg-amber-50 flex items-center justify-center"><Clock className="h-6 w-6 text-amber-500" /></div>
+              </div>
+            </Card>
+            <Card className={`p-4 border-l-4 ${unassignedCount > 0 ? "border-l-red-500 animate-pulse" : "border-l-green-500"}`}>
+              <div className="flex items-center justify-between">
+                <div><div className="text-xs text-muted-foreground font-semibold uppercase">Unassigned</div><div className={`text-3xl font-black mt-1 ${unassignedCount > 0 ? "text-red-600" : "text-green-600"}`}>{unassignedCount}</div></div>
+                <div className={`h-12 w-12 rounded-full flex items-center justify-center ${unassignedCount > 0 ? "bg-red-50" : "bg-green-50"}`}>{unassignedCount > 0 ? <AlertTriangle className="h-6 w-6 text-red-500" /> : <CheckCircle className="h-6 w-6 text-green-500" />}</div>
+              </div>
+            </Card>
+            <Card className="p-4 border-l-4 border-l-green-500">
+              <div className="flex items-center justify-between">
+                <div><div className="text-xs text-muted-foreground font-semibold uppercase">Converted Today</div><div className="text-3xl font-black mt-1 text-green-600">{convertedToday}</div></div>
+                <div className="h-12 w-12 rounded-full bg-green-50 flex items-center justify-center"><TrendingUp className="h-6 w-6 text-green-500" /></div>
+              </div>
+            </Card>
           </div>
-        </Card>
-        <Card className="p-4 border-l-4 border-l-amber-500">
-          <div className="flex items-center justify-between">
-            <div><div className="text-xs text-muted-foreground font-semibold uppercase">Avg Response</div><div className="text-3xl font-black mt-1">{avgResponseTime ? formatTime(Math.round(avgResponseTime)) : "—"}</div></div>
-            <div className="h-12 w-12 rounded-full bg-amber-50 flex items-center justify-center"><Clock className="h-6 w-6 text-amber-500" /></div>
-          </div>
-        </Card>
-        <Card className={`p-4 border-l-4 ${unassignedCount > 0 ? "border-l-red-500 animate-pulse" : "border-l-green-500"}`}>
-          <div className="flex items-center justify-between">
-            <div><div className="text-xs text-muted-foreground font-semibold uppercase">Unassigned</div><div className={`text-3xl font-black mt-1 ${unassignedCount > 0 ? "text-red-600" : "text-green-600"}`}>{unassignedCount}</div></div>
-            <div className={`h-12 w-12 rounded-full flex items-center justify-center ${unassignedCount > 0 ? "bg-red-50" : "bg-green-50"}`}>{unassignedCount > 0 ? <AlertTriangle className="h-6 w-6 text-red-500" /> : <CheckCircle className="h-6 w-6 text-green-500" />}</div>
-          </div>
-        </Card>
-        <Card className="p-4 border-l-4 border-l-green-500">
-          <div className="flex items-center justify-between">
-            <div><div className="text-xs text-muted-foreground font-semibold uppercase">Converted Today</div><div className="text-3xl font-black mt-1 text-green-600">{convertedToday}</div></div>
-            <div className="h-12 w-12 rounded-full bg-green-50 flex items-center justify-center"><TrendingUp className="h-6 w-6 text-green-500" /></div>
-          </div>
-        </Card>
+        </div>
+
+        {currentUser?.role === "Manager" && (
+          <Card className="p-4">
+            <h3 className="text-xs font-bold text-muted-foreground uppercase mb-3 flex items-center gap-2"><TrendingUp className="h-3.5 w-3.5" /> Top Performers</h3>
+            <div className="space-y-3">
+              {topPerformers.map((p, i) => (
+                <div key={p.id} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-muted-foreground w-4">{i + 1}.</span>
+                    <span className="font-semibold">{p.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-green-600">{p.conversionRate}%</div>
+                      <div className="text-[10px] text-muted-foreground">Conv. Rate</div>
+                    </div>
+                    <Badge variant="secondary" className="h-5 text-[10px]">{p.activeLeadsCount} active</Badge>
+                  </div>
+                </div>
+              ))}
+              {topPerformers.length === 0 && <div className="text-xs text-muted-foreground text-center py-4 italic">No performance data yet</div>}
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Source Breakdown */}

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
-import { WA_TEMPLATES } from "@/data/recoveries";
+import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -92,9 +92,15 @@ const Recovery = () => {
 
   const sendWhatsApp = (recovery: RecoveryRow, type: "soft" | "firm" | "final") => {
     const balance = recovery.amountDue - recovery.amountPaid;
-    const msg = WA_TEMPLATES[type](recovery.clientName, formatINR(balance), recovery.invoiceNo);
+    const amountStr = formatINR(balance);
+    let msg = "";
+    
+    if (type === "soft") msg = WHATSAPP_TEMPLATES.RECOVERY_SOFT(recovery.clientName, amountStr, recovery.invoiceNo);
+    else if (type === "firm") msg = WHATSAPP_TEMPLATES.RECOVERY_FIRM(recovery.clientName, amountStr, recovery.invoiceNo);
+    else msg = WHATSAPP_TEMPLATES.RECOVERY_FINAL(recovery.clientName, amountStr, recovery.invoiceNo);
+
     window.open(waLink(recovery.whatsapp, msg), "_blank");
-    toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} reminder opened in WhatsApp`);
+    toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} reminder opened`);
 
     // Log reminder in Supabase
     supabase.from("recovery_reminders").insert({
@@ -126,7 +132,18 @@ const Recovery = () => {
     });
 
     setPartialAmount(0);
-    toast.success(fullyPaid ? "Invoice fully paid! 🎉" : `Partial payment of ${formatINR(amount)} recorded`);
+    const successMsg = fullyPaid ? "Invoice fully paid! 🎉" : `Partial payment of ${formatINR(amount)} recorded`;
+    
+    toast.success(successMsg, {
+      action: {
+        label: "Send Receipt",
+        onClick: () => {
+          const msg = WHATSAPP_TEMPLATES.PAYMENT_RECEIVED(recovery.clientName, recovery.invoiceNo, formatINR(amount));
+          window.open(waLink(recovery.whatsapp, msg), "_blank");
+        }
+      }
+    });
+
     if (fullyPaid) setSelected(null);
     fetchRecoveries();
   };
@@ -296,8 +313,8 @@ const Recovery = () => {
                   </Button>
                 ))}
               </div>
-              <div className="text-xs text-muted-foreground p-2 bg-muted/30 rounded-lg">
-                Preview: {WA_TEMPLATES[templateType](selected.clientName, formatINR(selected.amountDue - selected.amountPaid), selected.invoiceNo).slice(0, 120)}…
+              <div className="text-xs text-muted-foreground p-2 bg-muted/30 rounded-lg italic">
+                Preview: {WHATSAPP_TEMPLATES[`RECOVERY_${templateType.toUpperCase()}` as keyof typeof WHATSAPP_TEMPLATES](selected.clientName, formatINR(selected.amountDue - selected.amountPaid), selected.invoiceNo).slice(0, 100)}…
               </div>
             </div>
 

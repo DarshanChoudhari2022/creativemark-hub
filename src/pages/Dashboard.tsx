@@ -44,18 +44,20 @@ const Dashboard = () => {
   const [quotations, setQuotations] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
-      const [cRes, lRes, eRes, qRes, pRes, evRes] = await Promise.all([
+      const [cRes, lRes, eRes, qRes, pRes, evRes, tRes] = await Promise.all([
         supabase.from("clients").select("*"),
         supabase.from("leads").select("*, employees!leads_assigned_to_fkey(name)"),
         supabase.from("employees").select("*"),
         supabase.from("quotations").select("*"),
         supabase.from("partners").select("*, partner_leads(*), partner_ledger(*)"),
         supabase.from("calendar_events").select("*, calendar_event_assignments(employee_id, employees(name))"),
+        supabase.from("lead_tasks").select("*, leads(name, organization)"),
       ]);
       setClients(cRes.data || []);
       setLeads(lRes.data || []);
@@ -63,6 +65,7 @@ const Dashboard = () => {
       setQuotations(qRes.data || []);
       setPartners(pRes.data || []);
       setEvents(evRes.data || []);
+      setTasks(tRes.data || []);
       setLoading(false);
     };
     fetchAll();
@@ -163,6 +166,25 @@ const Dashboard = () => {
       }))
       .slice(0, 5);
   }, [leads]);
+
+  // ── Pending Lead Tasks ──
+  const pendingTasks = useMemo(() => {
+    return tasks
+      .filter(t => t.status === "Pending")
+      .map(t => {
+        const isOverdue = new Date(t.due_date) < new Date(new Date().setHours(0,0,0,0));
+        return {
+          id: t.id,
+          description: t.description,
+          leadName: t.leads?.name || "Unknown",
+          dueDate: t.due_date,
+          isOverdue,
+          assignedTo: t.assigned_to || "Unassigned"
+        };
+      })
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(0, 5);
+  }, [tasks]);
 
   // ── Partner leaderboard ──
   const partnerPerformance = useMemo(() => {
@@ -307,8 +329,8 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Three-column Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      {/* Multi-column Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {/* Upcoming Events */}
         <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
@@ -412,6 +434,38 @@ const Dashboard = () => {
                 <div className="text-right shrink-0 ml-2">
                   <div className={`text-xs font-semibold px-1.5 py-0.5 rounded ${f.heat === "Hot" ? "bg-red-100 text-red-700" : f.heat === "Warm" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>{f.heat}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{f.assignedTo}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Pending Tasks */}
+        <Card className="p-5 lg:col-span-3 xl:col-span-1">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-bold text-base">Pending Tasks</h3>
+              <p className="text-xs text-muted-foreground">Individual lead actions</p>
+            </div>
+            <Zap className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="space-y-2">
+            {pendingTasks.length === 0 && (
+              <div className="text-sm text-muted-foreground text-center py-4">No pending tasks</div>
+            )}
+            {pendingTasks.map((t) => (
+              <div
+                key={t.id}
+                className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors ${t.isOverdue ? "border-red-100 bg-red-50/50" : "border-border hover:bg-muted/40"}`}
+                onClick={() => navigate("/leads")}
+              >
+                <div className="min-w-0 flex-1 cursor-pointer">
+                  <div className={`text-sm font-semibold truncate ${t.isOverdue ? "text-red-700" : ""}`}>{t.description}</div>
+                  <div className="text-xs text-muted-foreground truncate">{t.leadName}</div>
+                </div>
+                <div className="text-right shrink-0 ml-2">
+                  <div className={`text-[10px] font-bold ${t.isOverdue ? "text-red-600" : "text-muted-foreground"}`}>{formatDateDDMMYYYY(new Date(t.dueDate))}</div>
+                  <div className="text-[10px] text-muted-foreground">{t.assignedTo}</div>
                 </div>
               </div>
             ))}

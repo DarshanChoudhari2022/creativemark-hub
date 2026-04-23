@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, FileText, Download, Send, Eye, Search, Trash2 } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { Plus, FileText, Download, Send, Eye, Search, Trash2, CheckCircle, XCircle, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
 import { SERVICE_PRESETS, DEFAULT_TERMS } from "@/data/quotations";
+import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { generateQuotationPDF } from "@/lib/pdf";
 import { toast } from "sonner";
@@ -31,6 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
 const emptyItem = (): LineItem => ({ id: crypto.randomUUID(), serviceName: "", description: "", quantity: 1, rate: 0, amount: 0 });
 
 const Quotations = () => {
+  const location = useLocation();
   const [quotations, setQuotations] = useState<any[]>([]);
   const [allClients, setAllClients] = useState<any[]>([]);
   const [allLeads, setAllLeads] = useState<any[]>([]);
@@ -66,6 +69,30 @@ const Quotations = () => {
     };
     fetchData();
   }, []);
+
+  // Handle incoming state from Leads page
+  useEffect(() => {
+    if (location.state && allRecipients.length > 0) {
+      const { leadId, services } = location.state;
+      setRecipientId(leadId);
+      setRecipientType("Lead");
+      setAddOpen(true);
+      
+      if (services && Array.isArray(services) && services.length > 0) {
+        setItems(services.map(s => ({
+          id: crypto.randomUUID(),
+          serviceName: s,
+          description: s,
+          quantity: 1,
+          rate: 0,
+          amount: 0
+        })));
+      }
+      
+      // Clear state so it doesn't re-open on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, allRecipients]);
 
   const allRecipients = useMemo(() => [
     ...allClients.map(c => ({ id: c.id, name: c.name, type: "Client" as const, phone: c.whatsapp || c.phone || "" })),
@@ -144,14 +171,40 @@ const Quotations = () => {
           amount: item.amount,
         }))
       );
+
+      // Data Sync: Update lead status
+      if (recipient.type === "Lead") {
+        if (type === "Quotation" && status === "Sent") {
+          await supabase.from("leads").update({ quotation_status: "Sent" }).eq("id", recipientId);
+        } else if (type === "Bill") {
+          await supabase.from("leads").update({ 
+            lifecycle_stage: "Converted", 
+            payment_status: "Pending",
+            payment_due_date: inserted.due_date
+          }).eq("id", recipientId);
+        }
+      }
     }
 
     // Refresh data
     const { data: refreshed } = await supabase.from("quotations").select("*, quotation_items(*)").order("created_at", { ascending: false });
     setQuotations(refreshed || []);
     setAddOpen(false);
+    
+    // Immediate share action
+    toast.success(`${type} created — ${quoteNumber}`, {
+      action: {
+        label: "Share via WhatsApp",
+        onClick: () => {
+          const msg = type === "Bill" 
+            ? WHATSAPP_TEMPLATES.BILL_SENT(recipient.name, quoteNumber, formatINR(total))
+            : WHATSAPP_TEMPLATES.LEAD_QUOTE_SENT(recipient.name, formatINR(total));
+          window.open(waLink(recipient.phone, msg), "_blank");
+        }
+      }
+    });
+    
     resetForm();
-    toast.success(`${type} created — ${quoteNumber}`);
   };
 
   const resetForm = () => {
@@ -162,7 +215,14 @@ const Quotations = () => {
 
   const shareViaWhatsApp = (q: any) => {
     const phone = q.client_phone || "";
-    const msg = `Hi, please find your ${(q.type || "Quotation").toLowerCase()} ${q.quote_number} for ${formatINR(q.grand_total || 0)}. Valid/due until ${q.due_date || q.valid_until ? formatDateDDMMYYYY(new Date(q.due_date || q.valid_until)) : "N/A"}. — CreativeMark`;
+    let msg = "";
+    
+    if (q.type === "Bill") {
+      msg = WHATSAPP_TEMPLATES.BILL_SENT(q.client_name, q.quote_number, formatINR(q.grand_total || 0));
+    } else {
+      msg = WHATSAPP_TEMPLATES.LEAD_QUOTE_SENT(q.client_name, formatINR(q.grand_total || 0));
+    }
+
     if (phone) window.open(waLink(phone, msg), "_blank");
     else toast.error("No phone number found for this recipient");
   };
@@ -196,7 +256,64 @@ const Quotations = () => {
     const { error } = await supabase.from("quotations").update({ status: newStatus }).eq("id", q.id);
     if (error) { toast.error("Failed: " + error.message); return; }
     setQuotations(prev => prev.map(x => x.id === q.id ? { ...x, status: newStatus } : x));
-    toast.success(`Status updated to ${newStatus}`);
+    toast.success(`Status updated to ${newStatus}`, {
+      action: newStatus === "Paid" ? {
+        label: "Send Receipt",
+        onClick: () => {
+          const msg = WHATSAPP_TEMPLATES.PAYMENT_RECEIVED(q.client_name, q.quote_number, formatINR(q.grand_total || 0));
+          window.open(waLink(q.client_phone, msg), "_blank");
+        }
+      } : undefined
+    });
+    
+    // Sync lead status
+    if (q.lead_id) {
+      if (newStatus === "Approved") {
+        await supabase.from("leads").update({ 
+          quotation_status: "Accepted",
+          stage: "Negotiation" // Move to negotiation once quote is approved
+        }).eq("id", q.lead_id);
+      } else if (newStatus === "Sent") {
+        await supabase.from("leads").update({ 
+          quotation_status: "Sent",
+          stage: "Quotation Sent"
+        }).eq("id", q.lead_id);
+      } else if (newStatus === "Rejected") {
+        await supabase.from("leads").update({ 
+          quotation_status: "Rejected",
+          stage: "Lost" 
+        }).eq("id", q.lead_id);
+      } else if (newStatus === "Paid") {
+        await supabase.from("leads").update({ 
+          payment_status: "Paid",
+          stage: "Converted"
+        }).eq("id", q.lead_id);
+      }
+    }
+  };
+
+  const convertToBill = async (q: any) => {
+    const quoteNumber = `BL-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const { error } = await supabase.from("quotations").update({
+      type: "Bill",
+      status: "Sent",
+      quote_number: quoteNumber,
+      due_date: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
+    }).eq("id", q.id);
+
+    if (error) { toast.error("Conversion failed: " + error.message); return; }
+    
+    if (q.lead_id) {
+      await supabase.from("leads").update({ 
+        stage: "Converted",
+        lifecycle_stage: "Converted", 
+        payment_status: "Pending",
+        payment_due_date: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)
+      }).eq("id", q.lead_id);
+    }
+
+    setQuotations(prev => prev.map(x => x.id === q.id ? { ...x, type: "Bill", status: "Sent", quote_number: quoteNumber } : x));
+    toast.success("Converted to Bill successfully");
   };
 
   if (loading) {
@@ -356,11 +473,26 @@ const Quotations = () => {
                   </Select>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setPreviewQ(q)} title="Preview"><Eye className="h-3.5 w-3.5" /></Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => downloadPDF(q)} title="Download PDF"><Download className="h-3.5 w-3.5" /></Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600" onClick={() => shareViaWhatsApp(q)} title="WhatsApp"><Send className="h-3.5 w-3.5" /></Button>
-                  </div>
+                    <div className="flex items-center justify-end gap-1">
+                      {q.type === "Quotation" && q.status === "Sent" && (
+                        <>
+                          <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:bg-green-50" onClick={() => updateStatus(q, "Approved")}>
+                            <CheckCircle className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8 px-2 text-red-600 hover:bg-red-50" onClick={() => updateStatus(q, "Rejected")}>
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                      {q.status === "Approved" && q.type === "Quotation" && (
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-emerald-600 hover:bg-emerald-50" onClick={() => convertToBill(q)} title="Convert to Bill">
+                          <CreditCard className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setPreviewQ(q)} title="Preview"><Eye className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => downloadPDF(q)} title="Download"><Download className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600" onClick={() => shareViaWhatsApp(q)} title="WhatsApp"><Send className="h-4 w-4" /></Button>
+                    </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -431,6 +563,11 @@ const Quotations = () => {
             </div>
 
             <DialogFooter>
+              {previewQ.type === "Quotation" && previewQ.status === "Approved" && (
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => convertToBill(previewQ)}>
+                  <FileText className="h-4 w-4 mr-1" /> Convert to Bill
+                </Button>
+              )}
               <Button variant="outline" onClick={() => downloadPDF(previewQ)}><Download className="h-4 w-4" /> Download PDF</Button>
               <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => shareViaWhatsApp(previewQ)}><Send className="h-4 w-4" /> Share via WhatsApp</Button>
             </DialogFooter>

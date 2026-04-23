@@ -9,12 +9,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader, StageBadge } from "@/components/shared";
+import { LeadTasks } from "@/components/LeadTasks";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { supabase } from "@/lib/supabase";
 import { formatINR, formatDateDDMMYYYY, waLink, smsLink, isValidIndianPhone } from "@/lib/format";
 import { toast } from "sonner";
-import type { Lead, LeadStage, LeadHeat, ClientCategory } from "@/types";
+import { useNavigate } from "react-router-dom";
+import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
+import type { Lead, LeadStage, LeadHeat, ClientCategory, LeadQuotationStatus, LeadPaymentStatus } from "@/types";
 
 const HEAT_ICONS: Record<LeadHeat, { icon: React.ElementType; color: string; label: string }> = {
   Hot: { icon: Flame, color: "text-red-500", label: "Hot" },
@@ -46,7 +50,8 @@ const kanbanStages: LeadStage[] = ["New", "Contacted", "Quotation Sent", "Negoti
 
 const Leads = () => {
   const { user } = useAuth();
-  const { data: leadsData, loading, insert, update: updateLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
+  const navigate = useNavigate();
+  const { data: leadsData, loading, refresh, insert, update: updateLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
   const { data: employees } = useSupabaseTable<any>('employees', 'id, name');
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [search, setSearch] = useState("");
@@ -60,6 +65,8 @@ const Leads = () => {
     source: "Walk-in" as Lead["source"], heat: "Warm" as LeadHeat,
     assignedTo: "", services: "", notes: "", partnerRef: "",
     lastInteractionDate: "", actionItem: "", nextCallDate: "",
+    customCategory: "",
+    whatsappError: "",
   });
 
   const leads = useMemo(() => {
@@ -102,14 +109,30 @@ const Leads = () => {
     });
   }, [leads, search, user]);
 
+  // Sync detailLead with updated data when leads array changes
+  useEffect(() => {
+    if (detailLead) {
+      const updated = leads.find(l => l.id === detailLead.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(detailLead)) {
+        setDetailLead(updated);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads, detailLead?.id]); // Also depend on detailLead.id to re-sync if the user switches leads
+
   const addLead = async () => {
     if (!form.name || !form.company) { toast.error("Name and company are required"); return; }
     if (form.phone && !isValidIndianPhone(form.phone)) { setPhoneError("Enter valid Indian number"); return; }
+    if (form.whatsapp && !isValidIndianPhone(form.whatsapp)) { setForm(f => ({ ...f, whatsappError: "Enter valid Indian number" })); return; }
+    if (form.category === "Other" && !form.customCategory.trim()) { 
+      toast.error("Please specify the custom role"); 
+      return; 
+    }
     
     const { error } = await insert({
       name: form.name, 
       organization: form.company, 
-      category: form.category,
+      category: form.category === "Other" ? form.customCategory : form.category,
       phone: form.phone, 
       whatsapp: form.whatsapp || form.phone.replace(/[^0-9+]/g, ""),
       email: form.email,
@@ -136,6 +159,8 @@ const Leads = () => {
         name: "", company: "", category: "Other", phone: "", whatsapp: "", email: "", estimatedValue: 0,
         source: "Walk-in", heat: "Warm", assignedTo: "", services: "", notes: "", partnerRef: "",
         lastInteractionDate: "", actionItem: "", nextCallDate: "",
+        customCategory: "",
+        whatsappError: "",
       });
       setPhoneError("");
       toast.success("Lead added successfully");
@@ -168,26 +193,73 @@ const Leads = () => {
         last_interaction_date: new Date().toISOString().slice(0, 10),
         action_item: callForm.nextAction,
       });
+      // Refresh local state if needed (optional since we rely on memoized leadsData)
       setCallLogOpen(false);
       setCallForm({ summary: "", outcome: "", nextAction: "", duration: 0 });
       toast.success("Call logged");
     } else toast.error("Failed to log call: " + error.message);
   };
 
-  const openWhatsApp = (phone: string, name: string) => {
-    const msg = `Hi ${name}, this is from CreativeMark. `;
-    window.open(waLink(phone, msg), "_blank");
+  const logCommunication = async (leadId: string, method: string, summary: string) => {
+    await supabase.from('comm_logs').insert({
+      lead_id: leadId,
+      method,
+      summary,
+      datetime: new Date().toISOString(),
+    });
+    await updateLead(leadId, { 
+      last_interaction_date: new Date().toISOString().slice(0, 10)
+    });
   };
 
-  const openSMS = (phone: string, name: string) => {
-    const msg = `Hi ${name}, this is from CreativeMark. `;
-    window.open(smsLink(phone, msg), "_blank");
+  const openWhatsApp = (lead: any, type: "general" | "quote" | "followup" | "soft" | "firm" | "final" = "general") => {
+    let msg = "";
+    const amount = formatINR(lead.estimatedValue || 0);
+    const invoice = `LD-${lead.id.toString().slice(0, 5).toUpperCase()}`;
+
+    switch(type) {
+      case "quote":
+        msg = WHATSAPP_TEMPLATES.LEAD_QUOTE_SENT(lead.name, amount);
+        break;
+      case "followup":
+        msg = WHATSAPP_TEMPLATES.LEAD_FOLLOWUP(lead.name, lead.actionItem || "your requirement");
+        break;
+      case "soft":
+        msg = WHATSAPP_TEMPLATES.RECOVERY_SOFT(lead.name, amount, invoice);
+        break;
+      case "firm":
+        msg = WHATSAPP_TEMPLATES.RECOVERY_FIRM(lead.name, amount, invoice);
+        break;
+      case "final":
+        msg = WHATSAPP_TEMPLATES.RECOVERY_FINAL(lead.name, amount, invoice);
+        break;
+      default:
+        msg = WHATSAPP_TEMPLATES.LEAD_GENERAL(lead.name);
+    }
+    
+    if (lead.whatsapp || lead.phone) {
+      window.open(waLink(lead.whatsapp || lead.phone, msg), "_blank");
+      logCommunication(lead.id, "WhatsApp", `Sent ${type} template`);
+      toast.success("WhatsApp reminder opened");
+    } else {
+      toast.error("No contact number found");
+    }
   };
 
-  const sendPaymentReminder = (lead: any) => {
-    const msg = `Hi ${lead.name}, this is a reminder from CreativeMark regarding your pending payment of ${formatINR(lead.estimatedValue)}. Kindly process the payment at the earliest. Thank you!`;
-    if (lead.whatsapp) window.open(waLink(lead.whatsapp, msg), "_blank");
-    else if (lead.phone) window.open(smsLink(lead.phone, msg), "_blank");
+  const openSMS = (lead: any, type: "general" | "quote" | "followup" = "general") => {
+    let msg = "";
+    switch(type) {
+      case "quote":
+        msg = WHATSAPP_TEMPLATES.LEAD_QUOTE_SENT(lead.name, lead.organization || "your project");
+        break;
+      case "followup":
+        msg = WHATSAPP_TEMPLATES.LEAD_FOLLOWUP(lead.name, lead.actionItem || "your requirement");
+        break;
+      default:
+        msg = WHATSAPP_TEMPLATES.LEAD_GENERAL(lead.name);
+    }
+    window.open(smsLink(lead.phone, msg), "_blank");
+    logCommunication(lead.id, "SMS", `Sent ${type} template via SMS`);
   };
 
   // Check for due notifications
@@ -239,7 +311,7 @@ const Leads = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Contact Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="John Doe" /></div>
                   <div><Label>Company/Organization *</Label><Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="ABC Corp" /></div>
-                  <div><Label>Category</Label>
+                  <div><Label>Role *</Label>
                     <Select value={form.category} onValueChange={(v: ClientCategory) => setForm({ ...form, category: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -247,12 +319,27 @@ const Leads = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {(form.category === "Other" || !["Politician", "Clothing", "Motors"].includes(form.category)) && (
+                    <div className="col-span-2">
+                      <Label>Specify Role *</Label>
+                      <Input 
+                        value={form.customCategory || (form.category !== "Other" ? form.category : "")} 
+                        onChange={(e) => setForm({ ...form, customCategory: e.target.value })} 
+                        placeholder="e.g. Real Estate Agent, Teacher"
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
                   <div>
                     <Label>Phone</Label>
                     <Input value={form.phone} onChange={(e) => { setForm({ ...form, phone: e.target.value }); setPhoneError(""); }} placeholder="+91 98765 43210" className={phoneError ? "border-red-500" : ""} />
                     {phoneError && <p className="text-[11px] text-red-500 mt-0.5">{phoneError}</p>}
                   </div>
-                  <div><Label>WhatsApp</Label><Input value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} placeholder="+91 98765 43210 (if different)" /></div>
+                  <div>
+                    <Label>WhatsApp</Label>
+                    <Input value={form.whatsapp} onChange={(e) => { setForm({ ...form, whatsapp: e.target.value, whatsappError: "" }); }} placeholder="+91 98765 43210" className={form.whatsappError ? "border-red-500" : ""} />
+                    {form.whatsappError && <p className="text-[11px] text-red-500 mt-0.5">{form.whatsappError}</p>}
+                  </div>
                   <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
                   <div><Label>Source</Label>
                     <Select value={form.source} onValueChange={(v: Lead["source"]) => setForm({ ...form, source: v })}>
@@ -322,20 +409,49 @@ const Leads = () => {
                     return (
                       <Card
                         key={lead.id}
-                        className={`p-3 cursor-pointer hover:shadow-md transition-shadow ${aging ? "ring-1 ring-primary/30" : ""}`}
+                        className={`p-3 cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden ${
+                          new Date(lead.nextCallDate) < new Date(new Date().setHours(0,0,0,0)) 
+                          ? "ring-1 ring-red-400 bg-red-50/10" 
+                          : aging 
+                          ? "ring-1 ring-primary/30" 
+                          : ""
+                        }`}
                         onClick={() => setDetailLead(lead)}
                       >
+                        {new Date(lead.nextCallDate) < new Date(new Date().setHours(0,0,0,0)) && (
+                          <div className="absolute top-0 right-0">
+                            <div className="bg-red-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-bl-lg animate-pulse">OVERDUE</div>
+                          </div>
+                        )}
                         <div className="flex items-start justify-between mb-1">
                           <div className="font-semibold text-sm truncate pr-1">{lead.name}</div>
                           <HeatIcon className={`h-4 w-4 shrink-0 ${heat.color}`} />
                         </div>
                         <div className="text-xs text-muted-foreground truncate mb-2">{lead.organization}</div>
-                        <div className="text-xs font-semibold text-primary mb-1">{formatINR(lead.estimatedValue)}</div>
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                          <span>{lead.assignedToName.split(" ")[0]}</span>
-                          <span className={aging ? "text-primary font-semibold" : ""}>{daysInStage}d</span>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs font-semibold text-primary">{formatINR(lead.estimatedValue)}</div>
+                          {lead.nextCallDate && (
+                            <div className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                              new Date(lead.nextCallDate) < new Date(new Date().setHours(0,0,0,0)) 
+                                ? "bg-red-100 text-red-600" 
+                                : lead.nextCallDate === new Date().toISOString().slice(0, 10)
+                                ? "bg-amber-100 text-amber-600"
+                                : "bg-blue-50 text-blue-600"
+                            }`}>
+                              <Bell className="h-2.5 w-2.5" /> {formatDateDDMMYYYY(lead.nextCallDate).split('/')[0] + '/' + formatDateDDMMYYYY(lead.nextCallDate).split('/')[1]}
+                            </div>
+                          )}
                         </div>
-                        {aging && <div className="text-[10px] text-primary mt-1 font-semibold">⚠ Aging</div>}
+                        {lead.paymentStatus === "Pending" && (
+                          <div className="flex items-center gap-1 text-[9px] font-bold text-amber-600 mb-2">
+                            <CreditCard className="h-3 w-3" /> Bill Pending
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t pt-2">
+                          <span className="flex items-center gap-1"><Briefcase className="h-2.5 w-2.5" /> {lead.assignedToName.split(" ")[0]}</span>
+                          <span className={aging ? "text-primary font-semibold" : ""}>{daysInStage}d active</span>
+                        </div>
+                        {aging && ! (new Date(lead.nextCallDate) < new Date(new Date().setHours(0,0,0,0))) && <div className="text-[10px] text-primary mt-1 font-semibold flex items-center gap-1">⚠ Priority Action</div>}
                       </Card>
                     );
                   })}
@@ -349,31 +465,61 @@ const Leads = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Contact</TableHead><TableHead>Organization</TableHead><TableHead>Stage</TableHead>
-                <TableHead>Heat</TableHead><TableHead>Source</TableHead><TableHead className="text-right">Est. Value</TableHead>
-                <TableHead>Assigned To</TableHead><TableHead>Next Follow-up</TableHead>
+                <TableHead>Contact</TableHead><TableHead>Organization</TableHead><TableHead>Role</TableHead><TableHead>Stage</TableHead>
+                <TableHead>Heat</TableHead><TableHead className="text-right">Est. Value</TableHead>
+                <TableHead>Next Call</TableHead><TableHead>Payment</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((l) => {
                 const heat = HEAT_ICONS[l.heat];
                 const HeatIcon = heat.icon;
+                const isOverdue = l.nextCallDate && new Date(l.nextCallDate) < new Date(new Date().setHours(0,0,0,0));
+                const isToday = l.nextCallDate === new Date().toISOString().slice(0, 10);
                 return (
-                  <TableRow key={l.id} className="cursor-pointer" onClick={() => setDetailLead(l)}>
-                    <TableCell className="font-semibold">{l.name}</TableCell>
+                  <TableRow 
+                    key={l.id} 
+                    className={`cursor-pointer transition-colors ${isOverdue ? "bg-red-50/30 hover:bg-red-50/50" : "hover:bg-muted/30"}`} 
+                    onClick={() => setDetailLead(l)}
+                  >
+                    <TableCell>
+                      <div className="font-semibold flex items-center gap-2">
+                        {l.name}
+                        {isOverdue && <Badge className="h-4 text-[8px] bg-red-600 animate-pulse border-0">URGENT</Badge>}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">{l.assignedToName}</div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{l.organization}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px] font-medium">{l.category}</Badge></TableCell>
                     <TableCell><StageBadge stage={l.stage} /></TableCell>
-                    <TableCell><span className="flex items-center gap-1"><HeatIcon className={`h-3.5 w-3.5 ${heat.color}`} />{l.heat}</span></TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{l.source}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatINR(l.estimatedValue)}</TableCell>
-                    <TableCell className="text-sm">{l.assignedToName}</TableCell>
-                    <TableCell className="text-xs font-mono">{l.nextFollowupDate ? formatDateDDMMYYYY(new Date(l.nextFollowupDate)) : "—"}</TableCell>
+                    <TableCell><span className="flex items-center gap-1.5"><HeatIcon className={`h-4 w-4 ${heat.color}`} />{l.heat}</span></TableCell>
+                    <TableCell className="text-right font-bold text-primary">{formatINR(l.estimatedValue)}</TableCell>
+                    <TableCell>
+                      {l.nextCallDate ? (
+                        <div className={`flex items-center gap-1.5 font-bold text-xs ${isOverdue ? "text-red-600" : isToday ? "text-amber-600" : "text-blue-600"}`}>
+                          <div className="relative">
+                            <BellRing className={`h-3.5 w-3.5 ${isOverdue || isToday ? "animate-pulse" : ""}`} />
+                            {(isOverdue || isToday) && <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></span>}
+                          </div>
+                          {formatDateDDMMYYYY(new Date(l.nextCallDate))}
+                        </div>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {l.paymentStatus !== "Not Due" ? (
+                        <Badge variant="outline" className={`text-[10px] font-bold ${
+                          l.paymentStatus === "Paid" ? "bg-green-100 text-green-700 border-green-200" :
+                          l.paymentStatus === "Overdue" ? "bg-red-100 text-red-700 border-red-200 animate-pulse" :
+                          "bg-amber-100 text-amber-700 border-amber-200"
+                        }`}>{l.paymentStatus}</Badge>
+                      ) : "—"}
+                    </TableCell>
                   </TableRow>
                 );
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No leads found matching your criteria</TableCell>
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No leads found matching your criteria</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -383,7 +529,7 @@ const Leads = () => {
 
       {/* Lead Detail Dialog */}
       <Dialog open={!!detailLead} onOpenChange={(open) => !open && setDetailLead(null)}>
-        {detailLead && (
+        {detailLead ? (
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center justify-between">
@@ -394,177 +540,335 @@ const Leads = () => {
                 </div>
                 <div className="flex items-center gap-1">
                   {detailLead.whatsapp && (
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-green-600 hover:bg-green-50" onClick={() => openWhatsApp(detailLead.whatsapp, detailLead.name)} title="WhatsApp">
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-green-600 hover:bg-green-50" onClick={() => openWhatsApp(detailLead, detailLead.stage === "Quotation Sent" ? "quote" : "followup")} title="WhatsApp">
                       <MessageCircle className="h-4 w-4" />
                     </Button>
                   )}
                   {detailLead.phone && (
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-600 hover:bg-blue-50" onClick={() => openSMS(detailLead.phone, detailLead.name)} title="SMS">
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-600 hover:bg-blue-50" onClick={() => openSMS(detailLead, detailLead.stage === "Quotation Sent" ? "quote" : "followup")} title="SMS">
                       <MessageSquare className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
               </DialogTitle>
             </DialogHeader>
+            <Tabs defaultValue="info" className="mt-4">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="info">Info & Status</TabsTrigger>
+                <TabsTrigger value="history">Interaction History</TabsTrigger>
+                <TabsTrigger value="tasks" className="relative">
+                  Tasks
+                  {detailLead.tasks.filter((t: any) => t.status === "Pending").length > 0 && (
+                    <Badge className="ml-1.5 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-primary">
+                      {detailLead.tasks.filter((t: any) => t.status === "Pending").length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-            <div className="grid grid-cols-2 gap-4 text-sm mt-2">
-              <div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1"><Briefcase className="h-3 w-3"/> Organization</div>
-                <div className="font-semibold">{detailLead.organization} <Badge variant="outline" className="text-[10px] ml-1">{detailLead.category}</Badge></div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Estimated Value</div>
-                <div className="font-bold text-primary text-lg">{formatINR(detailLead.estimatedValue)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3"/> Phone</div>
-                <div>{detailLead.phone}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1"><MessageCircle className="h-3 w-3"/> WhatsApp</div>
-                <div>{detailLead.whatsapp || detailLead.phone || "—"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Source</div>
-                <div>{detailLead.source}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Assigned To</div>
-                <div>{detailLead.assignedToName}</div>
-              </div>
-            </div>
-
-            {/* Interaction Tracking Section */}
-            <div className="mt-4 p-3 rounded-lg border border-amber-200 bg-amber-50/50">
-              <h4 className="text-xs font-bold text-amber-700 mb-2 flex items-center gap-1"><BellRing className="h-3.5 w-3.5" /> Interaction Tracking</h4>
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div>
-                  <div className="text-xs text-muted-foreground">Last Interaction</div>
-                  <div className="font-mono text-sm">{detailLead.lastInteractionDate ? formatDateDDMMYYYY(detailLead.lastInteractionDate) : "—"}</div>
+              <TabsContent value="info" className="space-y-4 pt-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1"><Briefcase className="h-3 w-3"/> Role</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="secondary" className="text-xs">{detailLead.category}</Badge>
+                      <Select onValueChange={(v) => updateLeadField(detailLead.id, "category", v)}>
+                        <SelectTrigger className="h-6 w-6 p-0 border-0 bg-transparent hover:bg-muted"><SelectValue placeholder="" /></SelectTrigger>
+                        <SelectContent>
+                          {(["Politician", "Clothing", "Motors", "Other"] as ClientCategory[]).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {detailLead.category !== "Politician" && detailLead.category !== "Clothing" && detailLead.category !== "Motors" && (
+                      <Input 
+                        className="h-7 text-xs mt-1" 
+                        placeholder="Type manual role..." 
+                        onBlur={(e) => updateLeadField(detailLead.id, "category", e.target.value)}
+                        defaultValue={detailLead.category}
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Estimated Value</div>
+                    <div className="font-bold text-primary text-lg">{formatINR(detailLead.estimatedValue)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3"/> Phone</div>
+                    <div>{detailLead.phone}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1"><MessageCircle className="h-3 w-3"/> WhatsApp</div>
+                    <div>{detailLead.whatsapp || detailLead.phone || "—"}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1">Next Call Date <Bell className="h-3 w-3 text-amber-500" /></div>
-                  <div className="font-mono text-sm font-semibold">{detailLead.nextCallDate ? formatDateDDMMYYYY(detailLead.nextCallDate) : "—"}</div>
-                  {detailLead.nextCallDate && new Date(detailLead.nextCallDate) <= new Date() && (
-                    <span className="text-[10px] text-red-600 font-bold">⚠ Due!</span>
+
+                {/* Interaction Tracking Section */}
+                <div className="p-4 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-white shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-amber-700 flex items-center gap-1.5 uppercase tracking-wider"><BellRing className="h-3.5 w-3.5" /> Interaction Center</h4>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-amber-600 hover:bg-amber-100" onClick={() => openWhatsApp(detailLead, "followup")}>
+                        <MessageSquare className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-blue-600 hover:bg-blue-100" onClick={() => openSMS(detailLead, "followup")}>
+                        <Phone className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground uppercase">Last Interaction</Label>
+                      <div className="relative group">
+                        <Calendar className="h-3 w-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input 
+                          type="date" 
+                          className="h-8 pl-7 text-[11px] bg-white border-amber-100 focus:ring-amber-500" 
+                          value={detailLead.lastInteractionDate || ""} 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDetailLead({...detailLead, lastInteractionDate: val});
+                            updateLeadField(detailLead.id, "last_interaction_date", val);
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] text-muted-foreground uppercase">Next Follow-up</Label>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-3 w-3 p-0 hover:text-amber-600"
+                          onClick={() => {
+                            if ("Notification" in window) {
+                              Notification.requestPermission().then(permission => {
+                                if (permission === "granted") {
+                                  toast.success("🔔 Alerts enabled for " + (detailLead.nextCallDate || "the set date"));
+                                }
+                              });
+                            }
+                          }}
+                        >
+                          <Bell className={`h-2.5 w-2.5 ${detailLead.nextCallDate === new Date().toISOString().slice(0, 10) ? "text-red-500 animate-bounce" : "text-amber-500"}`} />
+                        </Button>
+                      </div>
+                      <Input 
+                        type="date" 
+                        className={`h-8 text-[11px] bg-white border-amber-100 focus:ring-amber-500 ${detailLead.nextCallDate && new Date(detailLead.nextCallDate) <= new Date() ? "border-red-300 ring-1 ring-red-100" : ""}`}
+                        value={detailLead.nextCallDate || ""} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDetailLead({...detailLead, nextCallDate: val});
+                          updateLeadField(detailLead.id, "next_call_date", val);
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground uppercase">Next Objective</Label>
+                      <Input 
+                        className="h-8 text-[11px] bg-white border-amber-100 focus:ring-amber-500" 
+                        value={detailLead.actionItem || ""} 
+                        placeholder="e.g. Schedule visit"
+                        onBlur={(e) => updateLeadField(detailLead.id, "action_item", e.target.value)}
+                        onChange={(e) => setDetailLead({...detailLead, actionItem: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-amber-100/50">
+                    <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 px-4" onClick={() => setCallLogOpen(true)}>
+                      <Phone className="h-3.5 w-3.5 mr-1.5" /> Log Call Outcome
+                    </Button>
+                    <div className="flex items-center gap-1.5 ml-auto text-[10px] text-amber-600/70 font-medium">
+                      <CheckCircle className="h-3 w-3" /> Changes auto-saved
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quotation & Billing Lifecycle */}
+                <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50">
+                  <h4 className="text-xs font-bold text-blue-700 mb-2 flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> Quotation & Billing</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Quotation Status</div>
+                        <Select 
+                          value={detailLead.quotationStatus || "Not Sent"} 
+                          onValueChange={(v) => {
+                            setDetailLead({...detailLead, quotationStatus: v as LeadQuotationStatus});
+                            updateLeadField(detailLead.id, "quotation_status", v);
+                            if (v === "Accepted") toast.success("Accepted! You can now generate the bill.");
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Not Sent">Not Sent</SelectItem>
+                            <SelectItem value="Sent">Sent</SelectItem>
+                            <SelectItem value="Accepted">Accepted ✅</SelectItem>
+                            <SelectItem value="Rejected">Rejected ❌</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1 flex items-center justify-between">
+                          Payment Status
+                        </div>
+                        <Select 
+                          value={detailLead.paymentStatus || "Not Due"} 
+                          onValueChange={(v) => {
+                            setDetailLead({...detailLead, paymentStatus: v as LeadPaymentStatus});
+                            updateLeadField(detailLead.id, "payment_status", v);
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Not Due">Not Due</SelectItem>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="Paid">Paid</SelectItem>
+                            <SelectItem value="Overdue">Overdue</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button 
+                      className="flex-1 text-xs h-8 font-bold bg-primary shadow-sm hover:shadow-md transition-all active:scale-[0.98]"
+                      onClick={() => {
+                        navigate("/quotations", { 
+                          state: { 
+                            leadId: detailLead.id,
+                            name: detailLead.name,
+                            organization: detailLead.organization,
+                            email: detailLead.email,
+                            phone: detailLead.whatsapp || detailLead.phone,
+                            services: detailLead.servicesInterested
+                          } 
+                        });
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Generate Quote / Bill
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="history" className="pt-4">
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {detailLead.commLog.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground text-sm italic bg-muted/5 rounded-xl border border-dashed border-muted">
+                      No interaction history yet.
+                    </div>
+                  ) : (
+                    [...detailLead.commLog]
+                      .sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
+                      .map((log: any, idx: number) => (
+                        <div key={idx} className="flex gap-3 pb-4 border-b border-muted last:border-0 last:pb-0">
+                          <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
+                            log.method === "Call" ? "bg-blue-500" :
+                            log.method === "WhatsApp" ? "bg-green-500" :
+                            "bg-primary"
+                          }`} />
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                log.method === "Call" ? "bg-blue-50 text-blue-700" :
+                                log.method === "WhatsApp" ? "bg-green-50 text-green-700" :
+                                "bg-gray-50 text-gray-700"
+                              }`}>{log.method} Logged</span>
+                              <span className="text-[10px] text-muted-foreground font-medium">
+                                {new Date(log.datetime).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} • {new Date(log.datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-foreground leading-relaxed font-medium">{log.summary}</p>
+                            {log.action_items && (
+                              <div className="mt-2 flex items-start gap-1.5 text-[11px] bg-primary/5 text-primary p-1.5 rounded-lg border border-primary/10">
+                                <CheckCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                                <span><span className="font-bold">Next Step:</span> {log.action_items}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
                   )}
                 </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Action Item</div>
-                  <div className="text-sm">{detailLead.actionItem || "—"}</div>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-2">
-                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setCallLogOpen(true)}>
-                  <Phone className="h-3 w-3 mr-1" /> Log a Call
-                </Button>
-                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => {
-                  const nextDate = prompt("Set next call date (YYYY-MM-DD):");
-                  if (nextDate) updateLeadField(detailLead.id, "next_call_date", nextDate);
-                }}>
-                  <Calendar className="h-3 w-3 mr-1" /> Set Next Call
-                </Button>
-              </div>
-            </div>
+              </TabsContent>
 
-            {/* Quotation & Billing Lifecycle */}
-            <div className="mt-3 p-3 rounded-lg border border-blue-200 bg-blue-50/50">
-              <h4 className="text-xs font-bold text-blue-700 mb-2 flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> Quotation & Billing</h4>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div className="text-xs text-muted-foreground">Quotation Status</div>
-                  <Badge variant="outline" className={`text-[11px] ${
-                    detailLead.quotationStatus === "Accepted" ? "bg-green-100 text-green-700" :
-                    detailLead.quotationStatus === "Rejected" ? "bg-red-100 text-red-700" :
-                    detailLead.quotationStatus === "Sent" ? "bg-blue-100 text-blue-700" :
-                    "bg-gray-100 text-gray-600"
-                  }`}>{detailLead.quotationStatus || "Not Sent"}</Badge>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Payment Status</div>
-                  <Badge variant="outline" className={`text-[11px] ${
-                    detailLead.paymentStatus === "Paid" ? "bg-green-100 text-green-700" :
-                    detailLead.paymentStatus === "Overdue" ? "bg-red-100 text-red-700" :
-                    detailLead.paymentStatus === "Pending" ? "bg-amber-100 text-amber-700" :
-                    "bg-gray-100 text-gray-600"
-                  }`}>{detailLead.paymentStatus || "Not Due"}</Badge>
-                </div>
-                {detailLead.paymentDueDate && (
-                  <div>
-                    <div className="text-xs text-muted-foreground">Payment Due Date</div>
-                    <div className="font-mono text-sm">{formatDateDDMMYYYY(detailLead.paymentDueDate)}</div>
+              <TabsContent value="tasks" className="pt-4">
+                <LeadTasks 
+                  leadId={detailLead.id} 
+                  initialTasks={detailLead.tasks} 
+                  employees={employees} 
+                  onUpdate={refresh} 
+                />
+              </TabsContent>
+            </Tabs>
+
+            <div className="mt-6 pt-6 border-t border-muted">
+              <div className="flex flex-col gap-4">
+                {/* Generate Bill Action - Only if Accepted */}
+                {detailLead.quotationStatus === "Accepted" && (
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-emerald-800">Quotation Accepted!</div>
+                      <div className="text-[10px] text-emerald-600">Ready to convert this lead into a bill.</div>
+                    </div>
+                    <Button 
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8"
+                      onClick={() => {
+                        navigate("/quotations", { 
+                          state: { 
+                            leadId: detailLead.id,
+                            type: "Bill",
+                            services: detailLead.servicesInterested
+                          } 
+                        });
+                      }}
+                    >
+                      <CreditCard className="h-3.5 w-3.5 mr-1" /> Generate Bill
+                    </Button>
                   </div>
                 )}
-              </div>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Select onValueChange={(v) => updateLeadField(detailLead.id, "quotation_status", v)}>
-                  <SelectTrigger className="h-7 text-xs w-40"><SelectValue placeholder="Update Quote Status" /></SelectTrigger>
-                  <SelectContent>
-                    {["Not Sent", "Sent", "Accepted", "Rejected"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select onValueChange={(v) => updateLeadField(detailLead.id, "payment_status", v)}>
-                  <SelectTrigger className="h-7 text-xs w-40"><SelectValue placeholder="Update Payment" /></SelectTrigger>
-                  <SelectContent>
-                    {["Not Due", "Pending", "Paid", "Overdue"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => {
-                  const dueDate = prompt("Set payment due date (YYYY-MM-DD):");
-                  if (dueDate) updateLeadField(detailLead.id, "payment_due_date", dueDate);
-                }}>
-                  <CreditCard className="h-3 w-3 mr-1" /> Set Due Date
-                </Button>
-                {detailLead.paymentStatus !== "Paid" && (detailLead.whatsapp || detailLead.phone) && (
-                  <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300 hover:bg-green-50" onClick={() => sendPaymentReminder(detailLead)}>
-                    <MessageCircle className="h-3 w-3 mr-1" /> Send Reminder
-                  </Button>
-                )}
-              </div>
-            </div>
 
-            {/* Move Stage */}
-            <div className="mt-3">
-              <div className="text-xs font-semibold text-muted-foreground mb-2">Move to Stage</div>
-              <div className="flex flex-wrap gap-1.5">
-                {kanbanStages.filter(s => s !== detailLead.stage).map(s => (
-                  <Button key={s} size="sm" variant="outline" className="text-xs h-7"
-                    onClick={() => { moveLeadStage(detailLead.id, s); setDetailLead({ ...detailLead, stage: s }); }}>
-                    {s}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Communication Log */}
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Communication Log</div>
-              <div className="space-y-2">
-                {detailLead.commLog.map((log) => (
-                  <div key={log.id} className="flex items-start gap-3 p-3 rounded-lg border border-border text-sm bg-white">
-                    <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                      log.method === "Call" ? "bg-blue-100 text-blue-600" :
-                      log.method === "WhatsApp" ? "bg-green-100 text-green-600" :
-                      log.method === "Email" ? "bg-purple-100 text-purple-600" :
-                      "bg-amber-100 text-amber-600"
-                    }`}>
-                      {log.method?.slice(0, 2)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-xs">{log.method}</span>
-                        <span className="text-[11px] text-muted-foreground font-mono">{log.datetime}</span>
-                      </div>
-                      <div className="text-xs mt-0.5">{log.summary}</div>
-                      {log.action_items && <div className="text-xs text-primary mt-1"><span className="font-semibold">Action:</span> {log.action_items}</div>}
-                    </div>
+                {/* Move Stage Action */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Move to Stage</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {kanbanStages.filter(s => s !== detailLead.stage).map(s => (
+                      <Button key={s} size="sm" variant="outline" className="text-xs h-7 font-medium border-muted-foreground/20 hover:border-primary hover:text-primary transition-colors"
+                        onClick={() => { moveLeadStage(detailLead.id, s); setDetailLead({ ...detailLead, stage: s }); }}>
+                        {s}
+                      </Button>
+                    ))}
                   </div>
-                ))}
-                {detailLead.commLog.length === 0 && <div className="text-xs text-muted-foreground text-center py-4 bg-muted/10 rounded-lg">No communication logged yet</div>}
+                </div>
+
+                <div className="flex justify-center">
+                  <Button size="sm" variant="ghost" className="text-[10px] h-6 text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-bold" onClick={() => {
+                    navigate("/quotations", { 
+                      state: { 
+                        leadId: detailLead.id,
+                        name: detailLead.name,
+                        organization: detailLead.organization,
+                        phone: detailLead.whatsapp || detailLead.phone,
+                        email: detailLead.email,
+                        services: detailLead.servicesInterested
+                      } 
+                    });
+                  }}>
+                    View All Quotes & Invoices
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>
-        )}
+        ) : null}
       </Dialog>
 
       {/* Call Log Dialog */}

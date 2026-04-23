@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/shared";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
+import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { generatePartnerAgreementPDF } from "@/lib/pdf";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -303,7 +304,7 @@ const Partners = () => {
               }}>
                 <Download className="h-4 w-4" /> Download Agreement
               </Button>
-              <a href={waLink(detailPartner.whatsapp || detailPartner.phone)} target="_blank" rel="noopener">
+              <a href={waLink(detailPartner.whatsapp || detailPartner.phone, WHATSAPP_TEMPLATES.PARTNER_GREETING(detailPartner.name))} target="_blank" rel="noopener">
                 <Button className="bg-green-600 hover:bg-green-700 text-white">WhatsApp</Button>
               </a>
             </DialogFooter>

@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader, PaymentBadge } from "@/components/shared";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR, isValidIndianPhone, waLink, smsLink } from "@/lib/format";
+import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { toast } from "sonner";
 import type { ClientCategory, PaymentStatus, Client } from "@/types";
 
@@ -48,6 +49,7 @@ const Clients = () => {
   const [form, setForm] = useState({
     name: "", category: "Other" as ClientCategory, phone: "", email: "",
     area: "", whatsapp: "", serviceType: "", notes: "",
+    customCategory: "",
   });
   const [phoneError, setPhoneError] = useState("");
   const [whatsappError, setWhatsappError] = useState("");
@@ -101,7 +103,7 @@ const Clients = () => {
     
     const { error } = await insert({
       name: form.name,
-      category: form.category,
+      category: form.category === "Other" ? form.customCategory : form.category,
       contact_person: form.name,
       phone: form.phone,
       whatsapp: form.whatsapp || form.phone.replace(/[^0-9+]/g, ""),
@@ -124,8 +126,7 @@ const Clients = () => {
   };
 
   const openWhatsApp = (phone: string, name: string) => {
-    const msg = `Hi ${name}, this is from CreativeMark. `;
-    window.open(waLink(phone, msg), "_blank");
+    window.open(waLink(phone, WHATSAPP_TEMPLATES.LEAD_GENERAL(name)), "_blank");
   };
 
   const openSMS = (phone: string, name: string) => {
@@ -166,6 +167,16 @@ const Clients = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {(form.category === "Other" || !["Politician", "Clothing", "Motors"].includes(form.category)) && (
+                    <div className="col-span-2">
+                      <Label>Specify Role *</Label>
+                      <Input 
+                        value={form.customCategory} 
+                        onChange={(e) => setForm({ ...form, customCategory: e.target.value })} 
+                        placeholder="e.g. Real Estate Agent, Boutique Owner"
+                      />
+                    </div>
+                  )}
                   <div><Label>Constituency / Area</Label><Input value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="e.g. Pune East" /></div>
                   <div>
                     <Label>Phone</Label>
@@ -256,9 +267,6 @@ const Clients = () => {
                     <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${SERVICE_COLORS[s] || "bg-muted text-muted-foreground"}`}>{s}</span>
                   ))}
                 </div>
-                {c.monthly_retainer > 0 && (
-                  <div className="text-xs text-muted-foreground mb-2">Monthly Retainer: <span className="font-semibold text-foreground">{formatINR(c.monthly_retainer)}</span></div>
-                )}
                 <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
                   <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>
                   {c.whatsapp && (

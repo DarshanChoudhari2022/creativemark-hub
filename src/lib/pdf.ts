@@ -45,38 +45,54 @@ function addFooter(doc: jsPDF, pageNum: number) {
   doc.setTextColor(26, 26, 26);
 }
 
-export function generateQuotationPDF(q: Quotation) {
+export function generateQuotationPDF(q: any) {
   const doc = new jsPDF();
   addLetterhead(doc);
 
+  const isBill = q.type === "Bill";
   let y = 40;
 
   // Title
-  doc.setFontSize(16);
+  doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
-  doc.text("QUOTATION", 15, y);
+  doc.text(isBill ? "TAX INVOICE" : "QUOTATION", 15, y);
+  
+  // Status Badge (optional for internal use, but maybe keep it clean for client)
   y += 8;
 
-  // Quotation details
+  // Document details
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Quotation #: ${q.number}`, 15, y);
-  doc.text(`Date: ${formatDate(q.date)}`, 130, y);
-  y += 6;
-  doc.text(`To: ${q.clientName}`, 15, y);
-  doc.text(`Valid Until: ${formatDate(q.validUntil)}`, 130, y);
-  y += 10;
+  
+  // Left side: To details
+  doc.setFont("helvetica", "bold");
+  doc.text("Bill To:", 15, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(q.clientName || "Client Name", 15, y + 5);
+  if (q.clientPhone) doc.text(`Phone: ${q.clientPhone}`, 15, y + 10);
+  
+  // Right side: Meta details
+  const rightX = 130;
+  doc.text(`${isBill ? "Invoice" : "Quotation"} #: ${q.quoteNumber || q.number}`, rightX, y);
+  doc.text(`Date: ${formatDate(q.date || new Date())}`, rightX, y + 5);
+  if (isBill) {
+    doc.text(`Due Date: ${formatDate(q.dueDate || q.date)}`, rightX, y + 10);
+  } else {
+    doc.text(`Valid Until: ${formatDate(q.validUntil || q.date)}`, rightX, y + 10);
+  }
+  
+  y += 20;
 
   // Line items table
   autoTable(doc, {
     startY: y,
-    head: [["#", "Description", "Qty", "Rate (₹)", "Amount (₹)"]],
-    body: q.items.map((item, i) => [
+    head: [["#", "Service & Description", "Qty", "Rate (₹)", "Amount (₹)"]],
+    body: (q.items || []).map((item: any, i: number) => [
       String(i + 1),
-      item.serviceName,
+      { content: `${item.serviceName}\n${item.description || ""}`, styles: { cellPadding: { top: 2, bottom: 2 } } },
       String(item.quantity),
-      item.rate.toLocaleString("en-IN"),
-      item.amount.toLocaleString("en-IN"),
+      (item.rate || 0).toLocaleString("en-IN"),
+      (item.amount || 0).toLocaleString("en-IN"),
     ]),
     headStyles: {
       fillColor: [BRAND_RED_R, BRAND_RED_G, BRAND_RED_B],
@@ -84,7 +100,7 @@ export function generateQuotationPDF(q: Quotation) {
       fontStyle: "bold",
       fontSize: 9,
     },
-    bodyStyles: { fontSize: 9 },
+    bodyStyles: { fontSize: 9, cellPadding: 3 },
     alternateRowStyles: { fillColor: [250, 250, 250] },
     columnStyles: {
       0: { cellWidth: 10, halign: "center" },
@@ -97,50 +113,84 @@ export function generateQuotationPDF(q: Quotation) {
 
   y = (doc as any).lastAutoTable.finalY + 8;
 
-  // Totals
+  // Totals Area
   const totalsX = 130;
   doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  
+  // Subtotal
   doc.text("Subtotal:", totalsX, y);
-  doc.text(`₹${q.subtotal.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  doc.text(`₹${(q.subtotal || 0).toLocaleString("en-IN")}`, 195, y, { align: "right" });
   y += 6;
 
-  if (q.gstRate > 0) {
-    doc.text(`GST (${q.gstRate}%):`, totalsX, y);
-    doc.text(`₹${q.gstAmount.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  // Discount
+  if ((q.discountAmount || 0) > 0) {
+    doc.setTextColor(34, 197, 94); // emerald-600
+    doc.text(`Discount (${q.discountPercent}%):`, totalsX, y);
+    doc.text(`- ₹${q.discountAmount.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+    doc.setTextColor(26, 26, 26);
     y += 6;
   }
 
+  // GST Breakdown
+  if (q.gstApplicable) {
+    doc.setFontSize(9);
+    doc.text(`CGST (9%):`, totalsX, y);
+    doc.text(`₹${(q.cgstAmount || 0).toLocaleString("en-IN")}`, 195, y, { align: "right" });
+    y += 5;
+    doc.text(`SGST (9%):`, totalsX, y);
+    doc.text(`₹${(q.sgstAmount || 0).toLocaleString("en-IN")}`, 195, y, { align: "right" });
+    y += 6;
+  }
+
+  // Grand Total
+  doc.setDrawColor(200, 200, 200);
+  doc.line(totalsX, y - 4, 195, y - 4);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(BRAND_RED_R, BRAND_RED_G, BRAND_RED_B);
-  doc.text("Total:", totalsX, y);
-  doc.text(`₹${(q.total || q.grandTotal)?.toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  doc.text("Total Amount:", totalsX, y + 2);
+  doc.text(`₹${(q.grandTotal || q.total || 0).toLocaleString("en-IN")}`, 195, y + 2, { align: "right" });
   doc.setTextColor(26, 26, 26);
-  y += 12;
+  y += 15;
 
   // Terms
   if (q.terms) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.text("Terms & Conditions", 15, y);
-    y += 6;
+    y += 5;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    const lines = doc.splitTextToSize(q.terms, 170);
+    const lines = doc.splitTextToSize(q.terms, 175);
     doc.text(lines, 15, y);
     y += lines.length * 4 + 8;
   }
 
-  // Bank details
+  // Bank Details (only if bill or specific option)
+  if (isBill) {
+    doc.setFillColor(245, 245, 245);
+    doc.rect(15, y, 180, 20, "F");
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("BANK DETAILS FOR PAYMENT", 20, y + 6);
+    doc.setFont("helvetica", "normal");
+    doc.text("Account Name: CreativeMark Solutions Pvt Ltd", 20, y + 11);
+    doc.text("Bank: HDFC Bank | A/C: 50100456789123 | IFSC: HDFC0001234 | Branch: Baner, Pune", 20, y + 15);
+    y += 30;
+  }
+
+  // Signature Placeholders
+  doc.setFontSize(9);
+  doc.text("For CreativeMark", 155, y);
+  y += 15;
+  doc.setDrawColor(150, 150, 150);
+  doc.line(150, y, 195, y);
   doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.text("Bank Details", 15, y);
-  y += 5;
-  doc.setFont("helvetica", "normal");
-  doc.text("Account: CreativeMark Pvt Ltd | Bank: HDFC Bank, Baner | A/C: 50100123456789 | IFSC: HDFC0001234", 15, y);
+  doc.text("Authorized Signatory", 172, y + 4, { align: "center" });
 
   addFooter(doc, 1);
-  doc.save(`${q.number || q.quoteNumber}.pdf`);
+  doc.save(`${q.quoteNumber || q.number}.pdf`);
 }
 
 export function generatePartnerAgreementPDF(partner: Partner) {

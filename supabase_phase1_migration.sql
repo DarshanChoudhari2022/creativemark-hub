@@ -4,9 +4,19 @@
 -- Run AFTER supabase_schema_migration.sql in Supabase SQL Editor
 -- ==============================================================================
 
--- 1. Create missing reminder_type enum (referenced but never created)
+-- 1. Create missing reminder_type and calendar enums
 DO $$ BEGIN
   CREATE TYPE reminder_type AS ENUM ('whatsapp', 'email', 'sms', 'call');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE calendar_event_type AS ENUM ('Shoot', 'Meeting', 'Deadline', 'Holiday', 'Internal');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE calendar_event_status AS ENUM ('Scheduled', 'Completed', 'Cancelled');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -14,14 +24,13 @@ END $$;
 CREATE TABLE IF NOT EXISTS calendar_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
-    type TEXT NOT NULL DEFAULT 'Meeting' CHECK (type IN ('Shoot', 'Meeting', 'Deadline', 'Holiday', 'Internal')),
+    type calendar_event_type NOT NULL DEFAULT 'Meeting',
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE,
     client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
-    client_name TEXT,
     location TEXT,
     notes TEXT,
-    status TEXT DEFAULT 'Scheduled' CHECK (status IN ('Scheduled', 'Completed', 'Cancelled')),
+    status calendar_event_status DEFAULT 'Scheduled',
     created_by UUID REFERENCES employees(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
@@ -88,30 +97,43 @@ CREATE POLICY "Authenticated users can manage calendar assignments" ON calendar_
     FOR ALL USING (auth.uid() IS NOT NULL);
 
 -- 10. Add open RLS policies for tables that need write access
--- (Supplement the existing schema's restrictive policies)
+-- (Supplement the existing schema's restrictive policies, applying consistent API access rules)
+
 CREATE POLICY "Authenticated users can insert clients" ON clients
     FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Authenticated users can update clients" ON clients
-    FOR UPDATE USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Users can update their assigned clients" ON clients
+    FOR UPDATE USING (
+        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin')) OR 
+        (id IN (SELECT client_id FROM client_assignments WHERE employee_id = auth.uid()))
+    );
 
 CREATE POLICY "Authenticated users can insert leads" ON leads
     FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Authenticated users can update leads" ON leads
-    FOR UPDATE USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Users can update their assigned leads" ON leads
+    FOR UPDATE USING (
+        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin')) OR 
+        (assigned_to = auth.uid())
+    );
 
 CREATE POLICY "Authenticated users can insert quotations" ON quotations
     FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Authenticated users can update quotations" ON quotations
-    FOR UPDATE USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admins can update quotations" ON quotations
+    FOR UPDATE USING (
+        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
+    );
 
-CREATE POLICY "Authenticated users can manage quotation_items" ON quotation_items
-    FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admins can manage quotation_items" ON quotation_items
+    FOR ALL USING (
+        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
+    );
 
-CREATE POLICY "Authenticated users can manage partners" ON partners
-    FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admins can manage partners" ON partners
+    FOR ALL USING (
+        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
+    );
 
 -- Partner sub-tables
 ALTER TABLE partner_commission_rates ENABLE ROW LEVEL SECURITY;
@@ -120,8 +142,14 @@ ALTER TABLE partner_ledger ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recovery_reminders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recovery_notes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated access partner_commission_rates" ON partner_commission_rates FOR ALL USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Authenticated access partner_leads" ON partner_leads FOR ALL USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Authenticated access partner_ledger" ON partner_ledger FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Authenticated access partner_commission_rates" ON partner_commission_rates FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admin manage partner_commission_rates" ON partner_commission_rates FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+
+CREATE POLICY "Authenticated access partner_leads" ON partner_leads FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admin manage partner_leads" ON partner_leads FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+
+CREATE POLICY "Authenticated access partner_ledger" ON partner_ledger FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admin manage partner_ledger" ON partner_ledger FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+
 CREATE POLICY "Authenticated access recovery_reminders" ON recovery_reminders FOR ALL USING (auth.uid() IS NOT NULL);
 CREATE POLICY "Authenticated access recovery_notes" ON recovery_notes FOR ALL USING (auth.uid() IS NOT NULL);

@@ -35,7 +35,7 @@ export function formatDateDDMMYYYY(date?: Date | string): string {
  * Format phone number for WhatsApp link (strip spaces, dashes)
  */
 export function waLink(phone: string, message = ""): string {
-  const cleaned = phone.replace(/[\s\-\(\)]/g, "");
+  const cleaned = phone.replace(/[\s\-()]/g, "");
   return `https://wa.me/${cleaned}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
 }
 
@@ -43,14 +43,14 @@ export function waLink(phone: string, message = ""): string {
  * Format phone number for tel: link
  */
 export function telLink(phone: string): string {
-  return `tel:${phone.replace(/[\s\-\(\)]/g, "")}`;
+  return `tel:${phone.replace(/[\s\-()]/g, "")}`;
 }
 
 /**
  * Format phone number for SMS link with pre-loaded message
  */
 export function smsLink(phone: string, message = ""): string {
-  const cleaned = phone.replace(/[\s\-\(\)]/g, "");
+  const cleaned = phone.replace(/[\s\-()]/g, "");
   return `sms:${cleaned}${message ? `?body=${encodeURIComponent(message)}` : ""}`;
 }
 
@@ -58,7 +58,7 @@ export function smsLink(phone: string, message = ""): string {
  * Validate Indian phone number format (+91 followed by 10 digits)
  */
 export function isValidIndianPhone(phone: string): boolean {
-  const cleaned = phone.replace(/[\s\-\(\)]/g, "");
+  const cleaned = phone.replace(/[\s\-()]/g, "");
   return /^(\+91)?[6-9]\d{9}$/.test(cleaned);
 }
 
@@ -66,7 +66,7 @@ export function isValidIndianPhone(phone: string): boolean {
  * Format phone to standard Indian format (+91 XXXXX XXXXX)
  */
 export function formatIndianPhone(phone: string): string {
-  const cleaned = phone.replace(/[\s\-\(\)+]/g, "");
+  const cleaned = phone.replace(/[\s\-()+]/g, "");
   const digits = cleaned.startsWith("91") ? cleaned.slice(2) : cleaned;
   if (digits.length !== 10) return phone;
   return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;

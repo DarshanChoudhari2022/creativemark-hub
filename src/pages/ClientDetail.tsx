@@ -10,6 +10,7 @@ import { PageHeader, PaymentBadge } from "@/components/shared";
 import { supabase } from "@/lib/supabase";
 import type { Client } from "@/types";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
+import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 
 const PLATFORM_ICONS: Record<string, React.ElementType> = {
   Instagram,
@@ -115,7 +116,7 @@ const ClientDetail = () => {
           </div>
           <div className="flex items-center gap-2">
             {client.whatsapp && (
-              <a href={waLink(client.whatsapp)} target="_blank" rel="noopener">
+              <a href={waLink(client.whatsapp, WHATSAPP_TEMPLATES.CLIENT_GREETING(client.name))} target="_blank" rel="noopener">
                 <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"><Send className="h-4 w-4" /> WhatsApp</Button>
               </a>
             )}

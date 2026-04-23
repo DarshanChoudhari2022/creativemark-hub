@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const Employees = () => {
-  const { data: employeesData, loading, insert: insertEmployee } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name))');
+  const { data: employeesData, loading, insert: insertEmployee } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage)');
   const { data: clients } = useSupabaseTable<any>('clients', 'id, name, whatsapp');
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -38,18 +38,29 @@ const Employees = () => {
     customRole: "",
     phone: "", 
     email: "", 
-    salary: 0 
+    salary: 0,
+    target: 50 // Default target
   });
   const [phoneError, setPhoneError] = useState("");
   const [logForm, setLogForm] = useState({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, notes: "" });
 
   const employees = useMemo(() => {
-    return employeesData.map(e => ({
-      ...e,
-      assignedClients: e.client_assignments?.map((ca: any) => ca.client_id) || [],
-      assignedClientNames: e.client_assignments?.map((ca: any) => ca.clients?.name).filter(Boolean) || [],
-      displayRole: e.role === "Others" && e.custom_role ? e.custom_role : e.role,
-    }));
+    return employeesData.map(e => {
+      const allLeads = e.leads || [];
+      const activeLeads = allLeads.filter((l: any) => !["Converted", "Lost"].includes(l.stage));
+      const convertedLeads = allLeads.filter((l: any) => l.stage === "Converted");
+      const conversionRate = allLeads.length > 0 ? Math.round((convertedLeads.length / allLeads.length) * 100) : 0;
+      
+      return {
+        ...e,
+        assignedClients: e.client_assignments?.map((ca: any) => ca.client_id) || [],
+        assignedClientNames: e.client_assignments?.map((ca: any) => ca.clients?.name).filter(Boolean) || [],
+        displayRole: e.role === "Others" && e.custom_role ? e.custom_role : e.role,
+        activeLeadsCount: activeLeads.length,
+        conversionRate,
+        target: e.lead_target || 50,
+      };
+    });
   }, [employeesData]);
 
   const filtered = useMemo(() =>
@@ -73,6 +84,7 @@ const Employees = () => {
       email: form.email,
       base_rate: form.salary,
       salary: form.salary,
+      lead_target: form.target,
       status: "Active",
     });
 
@@ -80,7 +92,7 @@ const Employees = () => {
       toast.error("Failed to add employee: " + error.message);
     } else {
       setAddOpen(false);
-      setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0 });
+      setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0, target: 50 });
       setPhoneError("");
       toast.success("Employee added successfully");
     }
@@ -165,7 +177,10 @@ const Employees = () => {
                     </div>
                     <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
                   </div>
-                  <div><Label>Monthly Salary ₹</Label><Input type="number" value={form.salary} onChange={(e) => setForm({ ...form, salary: +e.target.value })} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Monthly Salary ₹</Label><Input type="number" value={form.salary} onChange={(e) => setForm({ ...form, salary: +e.target.value })} /></div>
+                    <div><Label>Lead Target</Label><Input type="number" value={form.target} onChange={(e) => setForm({ ...form, target: +e.target.value })} /></div>
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
@@ -223,16 +238,16 @@ const Employees = () => {
                     </div>
                     <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
                       <div className="text-center">
-                        <div className="text-xs uppercase">Salary</div>
-                        <div className="font-semibold text-foreground">{formatINR(salary)}</div>
+                        <div className="text-xs uppercase">Conversion</div>
+                        <div className="font-semibold text-foreground text-emerald-600">{emp.conversionRate}%</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-xs uppercase">Dues</div>
-                        <div className={`font-semibold ${duesPending > 0 ? "text-primary" : "text-foreground"}`}>{formatINR(duesPending)}</div>
+                        <div className="text-xs uppercase">Workload</div>
+                        <div className="font-semibold text-foreground">{emp.activeLeadsCount} / {emp.target}</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-xs uppercase">Clients</div>
-                        <div className="font-semibold text-foreground">{emp.assignedClients.length}</div>
+                        <div className="text-xs uppercase">Net Salary</div>
+                        <div className="font-semibold text-foreground">{formatINR(netPayable)}</div>
                       </div>
                     </div>
                     <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
