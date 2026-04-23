@@ -5,7 +5,7 @@
 
 // ── Enums / Unions ──────────────────────────────────────────
 
-export type ClientCategory = "Politician" | "Clothing" | "Motors" | "Other";
+export type ClientCategory = "Politician" | "Clothing" | "Motors" | "Other" | (string & {});
 export type PaymentStatus = "Paid" | "Partial" | "Overdue";
 export type ClientStatus = "Active" | "Inactive";
 export type PostType = "Reel" | "Graphic" | "Story" | "Video";

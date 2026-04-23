@@ -70,6 +70,12 @@ const Quotations = () => {
     fetchData();
   }, []);
 
+  // Must be defined BEFORE the useEffect that references it
+  const allRecipients = useMemo(() => [
+    ...allClients.map(c => ({ id: c.id, name: c.name, type: "Client" as const, phone: c.whatsapp || c.phone || "" })),
+    ...allLeads.map(l => ({ id: l.id, name: `${l.name}${l.organization ? ` (${l.organization})` : ""}`, type: "Lead" as const, phone: l.whatsapp || l.phone || "" })),
+  ], [allClients, allLeads]);
+
   // Handle incoming state from Leads page
   useEffect(() => {
     if (location.state && allRecipients.length > 0) {
@@ -93,11 +99,6 @@ const Quotations = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location.state, allRecipients]);
-
-  const allRecipients = useMemo(() => [
-    ...allClients.map(c => ({ id: c.id, name: c.name, type: "Client" as const, phone: c.whatsapp || c.phone || "" })),
-    ...allLeads.map(l => ({ id: l.id, name: `${l.name}${l.organization ? ` (${l.organization})` : ""}`, type: "Lead" as const, phone: l.whatsapp || l.phone || "" })),
-  ], [allClients, allLeads]);
 
   const filtered = useMemo(() =>
     quotations.filter(q =>
@@ -294,25 +295,30 @@ const Quotations = () => {
 
   const convertToBill = async (q: any) => {
     const quoteNumber = `BL-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const dueDate = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
+
+    // Update quotation directly
     const { error } = await supabase.from("quotations").update({
       type: "Bill",
       status: "Sent",
       quote_number: quoteNumber,
-      due_date: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
+      due_date: dueDate,
+      date: new Date().toISOString().slice(0, 10),
     }).eq("id", q.id);
 
     if (error) { toast.error("Conversion failed: " + error.message); return; }
-    
+
+    // Sync lead lifecycle if linked
     if (q.lead_id) {
-      await supabase.from("leads").update({ 
+      await supabase.from("leads").update({
+        lifecycle_stage: "Bill Raised",
+        quotation_status: "Converted to Bill",
+        bill_id: q.id,
         stage: "Converted",
-        lifecycle_stage: "Converted", 
-        payment_status: "Pending",
-        payment_due_date: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)
       }).eq("id", q.lead_id);
     }
 
-    setQuotations(prev => prev.map(x => x.id === q.id ? { ...x, type: "Bill", status: "Sent", quote_number: quoteNumber } : x));
+    setQuotations(prev => prev.map(x => x.id === q.id ? { ...x, type: "Bill", status: "Sent", quote_number: quoteNumber, due_date: dueDate } : x));
     toast.success("Converted to Bill successfully");
   };
 

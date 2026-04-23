@@ -36,32 +36,37 @@ const TYPE_COLORS: Record<CalendarEventType, { bg: string; text: string; dot: st
 
 const CalendarPage = () => {
   const [events, setEvents] = useState<PageCalendarEvent[]>([]);
+  const [employees, setEmployees] = useState<{ id: string; name: string; role?: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [assignMode, setAssignMode] = useState<"dropdown" | "manual">("dropdown");
   const [form, setForm] = useState({ title: "", date: "", time: "", type: "Meeting" as CalendarEventType, client: "", assignedTo: "", notes: "" });
 
   // Fetch from Supabase
   const fetchEvents = async () => {
     setLoading(true);
 
-    // Fetch calendar events
-    const { data: calEvents } = await supabase
-      .from("calendar_events")
-      .select("*, calendar_event_assignments(employee_id, employees(name))");
+    // Fetch calendar events + employees in parallel
+    const [calEventsRes, leadsRes, empRes] = await Promise.all([
+      supabase.from("calendar_events").select("*"),
+      supabase.from("leads")
+        .select("id, name, organization, next_followup_date, next_call_date, stage, heat, assigned_to")
+        .or("next_followup_date.not.is.null,next_call_date.not.is.null"),
+      supabase.from("employees").select("id, name, role"),
+    ]);
 
-    // Fetch lead follow-ups
-    const { data: leads } = await supabase
-      .from("leads")
-      .select("id, name, organization, next_followup_date, next_call_date, stage, heat, assigned_to, employees!leads_assigned_to_fkey(name)")
-      .or("next_followup_date.not.is.null,next_call_date.not.is.null");
+    const calEvents = calEventsRes.data || [];
+    const leads = leadsRes.data || [];
+    setEmployees(empRes.data || []);
 
+    const empMap = new Map((empRes.data || []).map(e => [e.id, e.name]));
     const derived: PageCalendarEvent[] = [];
 
     // Map calendar events
-    (calEvents || []).forEach(e => {
+    calEvents.forEach(e => {
       derived.push({
         id: e.id,
         date: e.start_time ? new Date(e.start_time).toISOString().slice(0, 10) : "",
@@ -69,14 +74,14 @@ const CalendarPage = () => {
         type: e.type as CalendarEventType,
         time: e.start_time ? new Date(e.start_time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : undefined,
         client: e.client_name || "",
-        assignedTo: e.calendar_event_assignments?.map((a: any) => a.employees?.name).filter(Boolean).join(", ") || "",
+        assignedTo: e.assigned_to ? (empMap.get(e.assigned_to) || e.assigned_to) : "",
         notes: e.notes || "",
         source: "calendar",
       });
     });
 
     // Map lead follow-ups
-    (leads || []).forEach(l => {
+    leads.forEach(l => {
       const fDate = l.next_followup_date || l.next_call_date;
       if (fDate) {
         derived.push({
@@ -85,7 +90,7 @@ const CalendarPage = () => {
           title: `Follow-up: ${l.name}`,
           type: "Meeting",
           client: l.organization || l.name,
-          assignedTo: (l as any).employees?.name || "",
+          assignedTo: l.assigned_to ? (empMap.get(l.assigned_to) || "") : "",
           notes: `Stage: ${l.stage} | Heat: ${l.heat}`,
           source: "lead_followup",
         });
@@ -138,6 +143,7 @@ const CalendarPage = () => {
       type: form.type,
       start_time: startTime,
       client_name: form.client || null,
+      assigned_to: form.assignedTo || null,
       notes: form.notes || null,
       status: "Scheduled",
     });
@@ -146,6 +152,7 @@ const CalendarPage = () => {
 
     setAddOpen(false);
     setForm({ title: "", date: "", time: "", type: "Meeting", client: "", assignedTo: "", notes: "" });
+    setAssignMode("dropdown");
     toast.success("Event added to calendar");
     fetchEvents();
   };
@@ -204,6 +211,30 @@ const CalendarPage = () => {
                     </Select>
                   </div>
                   <div><Label>Client</Label><Input value={form.client} onChange={(e) => setForm({ ...form, client: e.target.value })} placeholder="Optional" /></div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label>Assigned Employee</Label>
+                      <button
+                        type="button"
+                        className="text-[11px] text-primary hover:underline"
+                        onClick={() => { setAssignMode(assignMode === "dropdown" ? "manual" : "dropdown"); setForm({ ...form, assignedTo: "" }); }}
+                      >
+                        {assignMode === "dropdown" ? "Type manually instead" : "Select from list"}
+                      </button>
+                    </div>
+                    {assignMode === "dropdown" ? (
+                      <Select value={form.assignedTo} onValueChange={(v) => setForm({ ...form, assignedTo: v })}>
+                        <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                        <SelectContent>
+                          {employees.map(emp => (
+                            <SelectItem key={emp.id} value={emp.name}>{emp.name}{emp.role ? ` — ${emp.role}` : ""}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })} placeholder="Type employee name" />
+                    )}
+                  </div>
                   <div><Label>Notes</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional" rows={2} /></div>
                 </div>
                 <DialogFooter>

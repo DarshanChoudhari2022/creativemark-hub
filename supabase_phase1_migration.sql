@@ -84,56 +84,104 @@ ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calendar_event_assignments ENABLE ROW LEVEL SECURITY;
 
 -- 9. Basic RLS policies for calendar
-CREATE POLICY "Everyone can view calendar events" ON calendar_events
-    FOR SELECT USING (true);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Everyone can view calendar events" ON calendar_events;
+  CREATE POLICY "Everyone can view calendar events" ON calendar_events
+      FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated users can manage calendar events" ON calendar_events
-    FOR ALL USING (auth.uid() IS NOT NULL);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated users can manage calendar events" ON calendar_events;
+  CREATE POLICY "Authenticated users can manage calendar events" ON calendar_events
+      FOR ALL USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Everyone can view calendar assignments" ON calendar_event_assignments
-    FOR SELECT USING (true);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Everyone can view calendar assignments" ON calendar_event_assignments;
+  CREATE POLICY "Everyone can view calendar assignments" ON calendar_event_assignments
+      FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated users can manage calendar assignments" ON calendar_event_assignments
-    FOR ALL USING (auth.uid() IS NOT NULL);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated users can manage calendar assignments" ON calendar_event_assignments;
+  CREATE POLICY "Authenticated users can manage calendar assignments" ON calendar_event_assignments
+      FOR ALL USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 10. Add open RLS policies for tables that need write access
 -- (Supplement the existing schema's restrictive policies, applying consistent API access rules)
 
-CREATE POLICY "Authenticated users can insert clients" ON clients
-    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated users can insert clients" ON clients;
+  CREATE POLICY "Authenticated users can insert clients" ON clients
+      FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update their assigned clients" ON clients
-    FOR UPDATE USING (
-        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin')) OR 
-        (id IN (SELECT client_id FROM client_assignments WHERE employee_id = auth.uid()))
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Users can update their assigned clients" ON clients;
+  CREATE POLICY "Users can update their assigned clients" ON clients
+      FOR UPDATE USING (
+          (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin')) OR 
+          (id IN (SELECT client_id FROM client_assignments WHERE employee_id = auth.uid()))
+      );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated users can insert leads" ON leads
-    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated users can insert leads" ON leads;
+  CREATE POLICY "Authenticated users can insert leads" ON leads
+      FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update their assigned leads" ON leads
-    FOR UPDATE USING (
-        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin')) OR 
-        (assigned_to = auth.uid())
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Users can update their assigned leads" ON leads;
+  CREATE POLICY "Users can update their assigned leads" ON leads
+      FOR UPDATE USING (
+          (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin')) OR 
+          (assigned_to = auth.uid())
+      );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated users can insert quotations" ON quotations
-    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated users can insert quotations" ON quotations;
+  CREATE POLICY "Authenticated users can insert quotations" ON quotations
+      FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can update quotations" ON quotations
-    FOR UPDATE USING (
-        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admins can update quotations" ON quotations;
+  CREATE POLICY "Admins can update quotations" ON quotations
+      FOR UPDATE USING (
+          (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
+      );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can manage quotation_items" ON quotation_items
-    FOR ALL USING (
-        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admins can manage quotation_items" ON quotation_items;
+  CREATE POLICY "Admins can manage quotation_items" ON quotation_items
+      FOR ALL USING (
+          (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
+      );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can manage partners" ON partners
-    FOR ALL USING (
-        (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admins can manage partners" ON partners;
+  CREATE POLICY "Admins can manage partners" ON partners
+      FOR ALL USING (
+          (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'))
+      );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Partner sub-tables
 ALTER TABLE partner_commission_rates ENABLE ROW LEVEL SECURITY;
@@ -142,14 +190,54 @@ ALTER TABLE partner_ledger ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recovery_reminders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recovery_notes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated access partner_commission_rates" ON partner_commission_rates FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Admin manage partner_commission_rates" ON partner_commission_rates FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated access partner_commission_rates" ON partner_commission_rates;
+  CREATE POLICY "Authenticated access partner_commission_rates" ON partner_commission_rates FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated access partner_leads" ON partner_leads FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Admin manage partner_leads" ON partner_leads FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admin manage partner_commission_rates" ON partner_commission_rates;
+  CREATE POLICY "Admin manage partner_commission_rates" ON partner_commission_rates FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated access partner_ledger" ON partner_ledger FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Admin manage partner_ledger" ON partner_ledger FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated access partner_leads" ON partner_leads;
+  CREATE POLICY "Authenticated access partner_leads" ON partner_leads FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated access recovery_reminders" ON recovery_reminders FOR ALL USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Authenticated access recovery_notes" ON recovery_notes FOR ALL USING (auth.uid() IS NOT NULL);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admin manage partner_leads" ON partner_leads;
+  CREATE POLICY "Admin manage partner_leads" ON partner_leads FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated access partner_ledger" ON partner_ledger;
+  CREATE POLICY "Authenticated access partner_ledger" ON partner_ledger FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admin manage partner_ledger" ON partner_ledger;
+  CREATE POLICY "Admin manage partner_ledger" ON partner_ledger FOR ALL USING (auth.uid() IN (SELECT id FROM employees WHERE role = 'Admin'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated access recovery_reminders" ON recovery_reminders;
+  CREATE POLICY "Authenticated access recovery_reminders" ON recovery_reminders FOR ALL USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Authenticated access recovery_notes" ON recovery_notes;
+  CREATE POLICY "Authenticated access recovery_notes" ON recovery_notes FOR ALL USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- 11. Allow custom text in client category (override ENUM restriction)
+ALTER TABLE clients ALTER COLUMN category TYPE TEXT USING category::text;
+
