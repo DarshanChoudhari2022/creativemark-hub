@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 export const TopBar = () => {
   const { user, logout } = useAuth();
-  const { notifications, loading, refresh } = useNotifications();
+  const { notifications, loading, refresh, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
   const today = formatDateDDMMYYYY();
   const unread = notifications.filter((n) => n.urgent).length;
@@ -69,9 +69,11 @@ export const TopBar = () => {
                       if (paymentIds.length) promises.push(supabase.from('quotations').update({ status: 'Paid' }).in('id', paymentIds));
                       if (smartIds.length) promises.push(supabase.from('smart_leads').update({ status: 'Archived' }).in('id', smartIds));
                       if (otherIds.length) promises.push(supabase.from('leads').update({ last_interaction_date: new Date().toISOString().slice(0, 10) }).in('id', otherIds));
+                      
+                      // Also mark all DB notifications as read
+                      promises.push(markAllAsRead());
 
                       await Promise.all(promises);
-                      refresh();
                       toast.dismiss(loadingToast);
                       toast.success("All notifications resolved");
                     } catch (err) {
@@ -108,14 +110,14 @@ export const TopBar = () => {
                         >
                           <MessageCircle className="h-3 w-3 mr-1" /> WhatsApp Reminder
                         </Button>
-                      ) : n.type === 'smart-lead' ? (
+                      ) : n.type === 'smart-lead' || n.type === 'lead_assigned' ? (
                         <Button 
                           size="sm" 
                           variant="outline" 
                           className="h-7 text-[10px] px-2 text-blue-600 border-blue-200 bg-blue-50/50 hover:bg-blue-50"
                           onClick={() => navigate(n.link || "/smart-leads")}
                         >
-                          <Plus className="h-3 w-3 mr-1" /> Assign Now
+                          <Plus className="h-3 w-3 mr-1" /> View & Assign
                         </Button>
                       ) : (
                         <div className="flex items-center gap-1">
@@ -151,6 +153,13 @@ export const TopBar = () => {
                       onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        
+                        if (n.id.startsWith('db-')) {
+                          await markAsRead(n.id);
+                          toast.success("Notification dismissed");
+                          return;
+                        }
+
                         const firstDashIndex = n.id.indexOf("-");
                         const type = n.id.substring(0, firstDashIndex);
                         const id = n.id.substring(firstDashIndex + 1);

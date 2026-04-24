@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3, Zap } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3, Zap, Briefcase, Banknote, Bell } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar,
@@ -12,9 +12,12 @@ const items = [
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Employees", url: "/employees", icon: UserCog },
   { title: "Leads", url: "/leads", icon: Target },
+  { title: "Projects", url: "/projects", icon: Briefcase },
   { title: "Quotations & Bills", url: "/quotations", icon: FileText },
+  { title: "Financials", url: "/financials", icon: Banknote },
   { title: "Recovery", url: "/recovery", icon: Wallet },
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
+  { title: "Notifications", url: "/notifications", icon: Bell },
   { title: "Partners", url: "/partners", icon: Handshake },
   { title: "Smart Lead Hub", url: "/smart-leads", icon: Zap },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -22,7 +25,7 @@ const items = [
 
 import { useAuth } from "@/contexts/AuthContext";
 
-const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners"];
+const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners", "/financials"];
 
 export function AppSidebar() {
   const { state } = useSidebar();

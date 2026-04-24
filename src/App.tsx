@@ -16,6 +16,10 @@ import CalendarPage from "./pages/CalendarPage";
 import Partners from "./pages/Partners";
 import SmartLeadHub from "./pages/SmartLeadHub";
 import Settings from "./pages/Settings";
+import Projects from "./pages/Projects";
+import ProjectDetail from "./pages/ProjectDetail";
+import Financials from "./pages/Financials";
+import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -50,6 +54,10 @@ const App = () => (
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/partners" element={<Partners />} />
                 <Route path="/smart-leads" element={<SmartLeadHub />} />
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/financials" element={<Financials />} />
+                <Route path="/notifications" element={<Notifications />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>

@@ -451,20 +451,31 @@ export async function generatePartnerAgreementPDF(partner: Partner) {
 
   // Agreement terms
   doc.setFont("helvetica", "bold");
-  doc.text("Terms", 15, y);
+  doc.text("Terms & Conditions (Mutual Agreement)", 15, y);
   y += 6;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  const terms = [
-    "1. Commission is payable only after the referred client's invoice is fully paid.",
-    "2. Commission is calculated on the net project value (excluding GST).",
-    "3. Payment will be processed within 15 working days of client payment.",
-    "4. This agreement is valid for 12 months from the date above and is renewable.",
-    "5. Either party may terminate with 30 days written notice.",
-    "6. All referrals must be communicated in writing (email/WhatsApp) before the first client contact.",
+  doc.setFontSize(8);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  
+  const partnerTerms = [
+    "1. Referral & Scope: The Partner agrees to refer potential clients to CreativeMark for services including Digital Marketing, Branding, and Multimedia. A referral is valid only if communicated in writing before the first client contact.",
+    "2. Commission Eligibility: Commission is earned only on the 'Net Project Value' (excluding GST and third-party costs like ad-spend). Eligibility arises only after the client has cleared the full invoice amount.",
+    "3. Payment Terms: Commissions are processed on a monthly basis. Payouts will be made within 15 working days of the following month, subject to receipt of payment from the referred client.",
+    "4. Professional Conduct: The Partner shall represent CreativeMark with integrity. The Partner is not authorized to sign contracts, commit to timelines, or offer discounts on behalf of CreativeMark without written consent.",
+    "5. Non-Circumvention: The Partner agrees not to engage or contract directly with any client referred to CreativeMark for a period of 12 months following the referral, regardless of agreement status.",
+    "6. Confidentiality: Both parties shall maintain strict confidentiality regarding project pricing, client data, and proprietary business strategies shared during the course of this partnership.",
+    "7. Relationship: This agreement does not create an employer-employee relationship. The Partner operates as an independent contractor and is responsible for their own tax liabilities (GST/TDS) as per Indian law.",
+    "8. Termination: This agreement is valid for 12 months and renews automatically unless terminated. Either party may terminate this agreement with 30 days written notice via Email or WhatsApp.",
+    "9. Jurisdiction: Any disputes arising from this agreement shall be subject to the exclusive jurisdiction of the courts in Pune, Maharashtra."
   ];
-  terms.forEach(term => {
-    const lines = doc.splitTextToSize(term, 170);
+
+  partnerTerms.forEach(term => {
+    const lines = doc.splitTextToSize(term, 175);
+    if (y + (lines.length * 4) > 275) {
+      doc.addPage();
+      addLetterhead(doc, logoBase64);
+      y = 40;
+    }
     doc.text(lines, 15, y);
     y += lines.length * 4 + 2;
   });
