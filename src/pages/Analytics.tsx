@@ -29,34 +29,45 @@ export default function Analytics() {
   const [quotations, setQuotations] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
-      const [cRes, eRes, qRes, lRes, pRes] = await Promise.all([
+      const [cRes, eRes, qRes, lRes, pRes, payRes, expRes] = await Promise.all([
         supabase.from("clients").select("*"),
         supabase.from("employees").select("*"),
         supabase.from("quotations").select("*"),
         supabase.from("leads").select("*"),
         supabase.from("partners").select("*, partner_leads(*), partner_ledger(*)"),
+        supabase.from("payment_history").select("*"),
+        supabase.from("expenses").select("*"),
       ]);
       setClients(cRes.data || []);
       setEmployees(eRes.data || []);
       setQuotations(qRes.data || []);
       setLeads(lRes.data || []);
       setPartners(pRes.data || []);
+      setPayments(payRes.data || []);
+      setExpenses(expRes.data || []);
       setLoading(false);
     };
     fetchAll();
   }, []);
 
   // ── KPI computations ──
-  const totalBilled = useMemo(() => clients.reduce((s, c) => s + (c.total_billed || 0), 0), [clients]);
-  const totalOutstanding = useMemo(() => clients.reduce((s, c) => s + (c.outstanding || 0), 0), [clients]);
-  const totalPayroll = useMemo(() => employees.reduce((s, e) => s + (e.salary || 0), 0), [employees]);
+  const totalReceived = useMemo(() => payments.reduce((s, p) => s + (p.amount || 0), 0), [payments]);
+  const totalBilled = useMemo(() => quotations.filter(q => q.type === "Bill").reduce((s, q) => s + (q.grand_total || 0), 0), [quotations]);
+  const totalOutstanding = useMemo(() => Math.max(0, totalBilled - totalReceived), [totalBilled, totalReceived]);
+  
+  const totalDistributed = useMemo(() => 
+    expenses.filter(e => e.category === 'Salary').reduce((s, e) => s + (e.amount || 0), 0), 
+  [expenses]);
+
   const activeEmployees = useMemo(() => employees.filter(e => e.status === "Active").length, [employees]);
-  const roi = totalPayroll > 0 ? (totalBilled / totalPayroll).toFixed(1) : "∞";
+  const roi = totalDistributed > 0 ? (totalReceived / totalDistributed).toFixed(1) : "∞";
 
   // ── Revenue by category (from clients) ──
   const categoryData = useMemo(() => {
@@ -77,13 +88,20 @@ export default function Analytics() {
       const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
       months[key] = { month: key, billed: 0, received: 0 };
     }
-    quotations.forEach(q => {
+    quotations.filter(q => q.type === "Bill").forEach(q => {
       if (!q.date) return;
       const d = new Date(q.date);
       const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
       if (months[key]) {
         months[key].billed += q.grand_total || 0;
-        if (q.status === "Paid") months[key].received += q.grand_total || 0;
+      }
+    });
+    payments.forEach(p => {
+      if (!p.date) return;
+      const d = new Date(p.date);
+      const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
+      if (months[key]) {
+        months[key].received += p.amount || 0;
       }
     });
     return Object.values(months);
@@ -157,10 +175,10 @@ export default function Analytics() {
 
       {/* Top Level Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard icon={Wallet} label="Total Revenue" value={formatINRCompact(totalBilled)} />
-        <KPICard icon={Briefcase} label="Monthly Payroll" value={formatINRCompact(totalPayroll)} color="bg-orange-100 text-orange-600" hint={`${activeEmployees} active employees`} />
+        <KPICard icon={Wallet} label="Total Received" value={formatINRCompact(totalReceived)} />
+        <KPICard icon={Briefcase} label="Distributed" value={formatINRCompact(totalDistributed)} color="bg-orange-100 text-orange-600" hint={`${activeEmployees} active employees`} />
         <KPICard icon={FileSignature} label="Quotation Win Rate" value={`${quotationStats.rate}%`} color="bg-blue-100 text-blue-600" hint={`${quotationStats.approved}/${quotationStats.total} approved`} />
-        <KPICard icon={Target} label="ROI (Revenue/Payroll)" value={`${roi}x`} color="bg-green-100 text-green-600" />
+        <KPICard icon={Target} label="ROI (Received/Distributed)" value={`${roi}x`} color="bg-green-100 text-green-600" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

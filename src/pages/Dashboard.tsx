@@ -46,12 +46,13 @@ const Dashboard = () => {
   const [events, setEvents] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
-      const [cRes, lRes, eRes, qRes, pRes, evRes, tRes, payRes] = await Promise.all([
+      const [cRes, lRes, eRes, qRes, pRes, evRes, tRes, payRes, expRes] = await Promise.all([
         supabase.from("clients").select("*"),
         supabase.from("leads").select("*, employees!leads_assigned_to_fkey(name)"),
         supabase.from("employees").select("*"),
@@ -60,6 +61,7 @@ const Dashboard = () => {
         supabase.from("calendar_events").select("*, calendar_event_assignments(employee_id, employees(name))"),
         supabase.from("lead_tasks").select("*, leads(name, organization)"),
         supabase.from("payment_history").select("*"),
+        supabase.from("expenses").select("*"),
       ]);
       setClients(cRes.data || []);
       setLeads(lRes.data || []);
@@ -69,15 +71,20 @@ const Dashboard = () => {
       setEvents(evRes.data || []);
       setTasks(tRes.data || []);
       setPayments(payRes.data || []);
+      setExpenses(expRes.data || []);
       setLoading(false);
     };
     fetchAll();
   }, []);
 
-  // ── Computed KPIs ──
-  const totalBilled = useMemo(() => quotations.filter(q => q.type === "Bill").reduce((s, c) => s + (c.grand_total || 0), 0) || clients.reduce((s, c) => s + (c.total_billed || 0), 0), [clients, quotations]);
   const totalReceived = useMemo(() => payments.reduce((s, p) => s + (p.amount || 0), 0), [payments]);
+  const totalBilled = useMemo(() => quotations.filter(q => q.type === "Bill").reduce((s, c) => s + (c.grand_total || 0), 0), [quotations]);
   const totalOutstanding = useMemo(() => Math.max(0, totalBilled - totalReceived), [totalBilled, totalReceived]);
+  
+  const totalDistributed = useMemo(() => 
+    expenses.filter(e => e.category === 'Salary').reduce((s, e) => s + (e.amount || 0), 0), 
+  [expenses]);
+
   const activeClients = useMemo(() => clients.filter(c => c.status === "Active").length, [clients]);
   const activeLeads = useMemo(() => leads.filter(l => l.stage !== "Converted" && l.stage !== "Lost").length, [leads]);
   const overdueQuotations = useMemo(() =>
@@ -94,7 +101,7 @@ const Dashboard = () => {
       const key = d.toLocaleString("default", { month: "short" });
       months[key] = { received: 0, billed: 0 };
     }
-    quotations.forEach(q => {
+    quotations.filter(q => q.type === "Bill").forEach(q => {
       if (!q.date) return;
       const d = new Date(q.date);
       const key = d.toLocaleString("default", { month: "short" });
@@ -243,12 +250,12 @@ const Dashboard = () => {
   }
 
   const kpiData = [
-    { title: "Total Revenue", value: formatINRCompact(totalReceived), accent: false, nav: "/analytics" },
-    { title: "Outstanding", value: formatINRCompact(totalOutstanding), accent: totalOutstanding > 0, nav: "/recovery" },
-    { title: "Active Clients", value: String(activeClients), accent: false, nav: "/clients" },
+    { title: "Amount Received", value: formatINRCompact(totalReceived), accent: false, nav: "/financials" },
+    { title: "Amount Pending", value: formatINRCompact(totalOutstanding), accent: totalOutstanding > 0, nav: "/recovery" },
+    { title: "Distributed", value: formatINRCompact(totalDistributed), accent: false, nav: "/financials" },
     { title: "Active Leads", value: String(activeLeads), accent: false, nav: "/leads" },
-    { title: "Overdue Invoices", value: String(overdueQuotations), accent: true, nav: "/quotations" },
-    { title: "Partner Leads", value: String(partnerLeads), accent: false, nav: "/partners" },
+    { title: "Overdue Bills", value: String(overdueQuotations), accent: true, nav: "/quotations" },
+    { title: "Active Clients", value: String(activeClients), accent: false, nav: "/clients" },
   ];
 
   return (

@@ -87,6 +87,15 @@ const Financials = () => {
     },
   });
 
+  const { data: payments } = useQuery({
+    queryKey: ["payments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("payment_history").select("*");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: projects } = useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
@@ -97,8 +106,8 @@ const Financials = () => {
   });
 
   // Calculations
-  const totalRevenue = quotations?.filter(q => q.status === "Paid").reduce((acc, q) => acc + (q.grand_total || 0), 0) || 0;
-  const totalBilled = quotations?.reduce((acc, q) => acc + (q.grand_total || 0), 0) || 0;
+  const totalRevenue = payments?.reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
+  const totalBilled = quotations?.filter(q => q.type === "Bill").reduce((acc, q) => acc + (q.grand_total || 0), 0) || 0;
   const totalExpenses = expenses?.reduce((acc, e) => acc + (Number(e.amount) || 0), 0) || 0;
   const netProfit = totalRevenue - totalExpenses;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
@@ -111,11 +120,11 @@ const Financials = () => {
     const currentYear = new Date().getFullYear();
     const data = months.map(m => ({ name: m, revenue: 0, expenses: 0 }));
 
-    quotations?.filter(q => q.status === "Paid").forEach(q => {
-      if (q.created_at) {
-        const date = new Date(q.created_at);
+    payments?.forEach(p => {
+      if (p.date) {
+        const date = new Date(p.date);
         if (date.getFullYear() === currentYear) {
-          data[date.getMonth()].revenue += (q.grand_total || 0);
+          data[date.getMonth()].revenue += (p.amount || 0);
         }
       }
     });
