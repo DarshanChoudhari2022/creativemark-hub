@@ -193,6 +193,10 @@ const ClientDetail = () => {
     }).eq('id', id);
     
     const savedForm = { ...payForm };
+    const effectiveBilled = (client.totalBilled && client.totalBilled > 0)
+      ? client.totalBilled
+      : totalReceived + Number(payForm.amount) + (Math.max(0, (client.outstanding || 0) - Number(payForm.amount)));
+
     toast.success("Payment recorded! ✅", {
       action: {
         label: "Generate Receipt",
@@ -206,9 +210,9 @@ const ClientDetail = () => {
             chequeNo: savedForm.chequeNo,
             transactionId: savedForm.transactionId,
             notes: savedForm.notes,
-            totalBilled: client.totalBilled,
+            totalBilled: effectiveBilled,
             totalPaid: totalReceived + savedForm.amount,
-            balanceDue: Math.max(0, client.totalBilled - totalReceived - savedForm.amount),
+            balanceDue: Math.max(0, effectiveBilled - totalReceived - savedForm.amount),
           });
         }
       }
@@ -236,6 +240,11 @@ const ClientDetail = () => {
   };
 
   const handleGenerateReceipt = (entry: any) => {
+    // If totalBilled is 0 or missing, compute from totalReceived + outstanding
+    const effectiveTotalBilled = (client.totalBilled && client.totalBilled > 0)
+      ? client.totalBilled
+      : totalReceived + (client.outstanding || 0);
+
     generateReceiptPDF({
       clientName: client.name,
       invoiceNo: entry.invoice_no || entry.invoiceNo || "",
@@ -245,7 +254,7 @@ const ClientDetail = () => {
       chequeNo: entry.cheque_no || "",
       transactionId: entry.transaction_id || "",
       notes: entry.notes,
-      totalBilled: client.totalBilled,
+      totalBilled: effectiveTotalBilled,
       totalPaid: totalReceived,
       balanceDue: client.outstanding,
     });

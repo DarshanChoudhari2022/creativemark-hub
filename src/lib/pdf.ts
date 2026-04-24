@@ -63,14 +63,14 @@ function formatDate(date: Date | string) {
 
 function fmtINR(amount: number | string): string {
   const val = typeof amount === "string" ? parseFloat(amount.replace(/[^\d.]/g, "")) : amount;
-  if (isNaN(val)) return "₹ 0.00";
+  if (isNaN(val)) return "Rs. 0.00";
   
   const formatter = new Intl.NumberFormat('en-IN', {
     style: 'decimal',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  return "₹ " + formatter.format(val);
+  return "Rs. " + formatter.format(val);
 }
 
 // ── Load logo as base64 for PDF embedding ─────────────────────
@@ -607,107 +607,140 @@ export async function generateReceiptPDF(receipt: {
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.text("PAYMENT RECEIPT", margin, y);
   
+  // Receipt reference number
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text(`Ref: RCPT/${formatDate(new Date()).replace(/\//g, '')}/${receipt.invoiceNo || 'GEN'}`, pageW - margin, y, { align: "right" });
-  y += 12;
+  const receiptRef = `RCPT/${formatDate(receipt.date || new Date()).replace(/\//g, '')}/${receipt.invoiceNo || 'GEN'}`;
+  doc.text(`Ref: ${receiptRef}`, pageW - margin, y, { align: "right" });
+  y += 14;
 
-  // ── Grid Info ──
+  // ── Client & Payment Info Grid ──
   doc.setFillColor(250, 250, 250);
-  doc.roundedRect(margin, y, contentW, 35, 2, 2, "F");
-  doc.setDrawColor(235, 235, 235);
-  doc.roundedRect(margin, y, contentW, 35, 2, 2, "S");
+  const infoBoxH = (receipt.paymentMode === "Cheque" && receipt.chequeNo) ? 50 : 38;
+  doc.roundedRect(margin, y, contentW, infoBoxH, 2, 2, "F");
+  doc.setDrawColor(230, 230, 230);
+  doc.roundedRect(margin, y, contentW, infoBoxH, 2, 2, "S");
 
-  const col1 = margin + 5;
-  const col2 = pageW / 2 + 5;
+  const col1 = margin + 6;
+  const col2 = pageW / 2 + 6;
   let rowY = y + 8;
 
   const addGridItem = (label: string, value: string, lx: number, ly: number) => {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
     doc.text(label, lx, ly);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
+    doc.setFontSize(10.5);
     doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-    doc.text(value || "N/A", lx, ly + 5);
+    doc.text(value || "N/A", lx, ly + 5.5);
   };
 
   addGridItem("RECEIVED FROM", receipt.clientName.toUpperCase(), col1, rowY);
   addGridItem("DATE", formatDate(receipt.date), col2, rowY);
   
-  rowY += 15;
+  rowY += 16;
   addGridItem("INVOICE REFERENCE", receipt.invoiceNo || "General Payment", col1, rowY);
   addGridItem("PAYMENT METHOD", receipt.paymentMode, col2, rowY);
 
-  y += 45;
+  // Show Cheque No / Transaction ID in info grid
+  if (receipt.paymentMode === "Cheque" && receipt.chequeNo) {
+    rowY += 16;
+    addGridItem("CHEQUE NUMBER", receipt.chequeNo, col1, rowY);
+  } else if (receipt.transactionId && receipt.paymentMode !== "Cash") {
+    rowY += 16;
+    addGridItem("TRANSACTION ID / REF", receipt.transactionId, col1, rowY);
+  }
 
-  // ── Amount Section ──
+  y += infoBoxH + 10;
+
+  // ── Amount Section (Red Banner) ──
   doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.roundedRect(margin, y, contentW, 25, 2, 2, "F");
+  doc.roundedRect(margin, y, contentW, 28, 2, 2, "F");
   
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "normal");
-  doc.text("AMOUNT RECEIVED", margin + 10, y + 9);
-  
-  doc.setFontSize(22);
   doc.setFont("helvetica", "bold");
-  doc.text(fmtINR(receipt.amount), margin + 10, y + 19);
+  doc.text("AMOUNT RECEIVED", margin + 10, y + 8);
   
-  doc.setFontSize(8.5);
+  doc.setFontSize(24);
+  doc.setFont("helvetica", "bold");
+  doc.text(fmtINR(receipt.amount), margin + 10, y + 21);
+  
+  // Amount in words
+  doc.setFontSize(9);
   doc.setFont("helvetica", "italic");
-  const words = doc.splitTextToSize(`${numberToWords(receipt.amount)} Rupees Only`, 100);
-  doc.text(words, pageW - margin - 10, y + 12, { align: "right" });
+  const wordsText = `${numberToWords(receipt.amount)} Rupees Only`;
+  const wordLines = doc.splitTextToSize(wordsText, 80);
+  doc.text(wordLines, pageW - margin - 8, y + 12, { align: "right" });
 
-  y += 35;
+  y += 38;
 
-  // ── Account Summary & Services ──
-  const summaryX = margin;
-  const summaryW = (contentW / 2) - 5;
+  // ── Account Summary ──
+  // Compute totalBilled: if not provided or 0, estimate from totalPaid + balanceDue
+  const effectiveTotalBilled = (receipt.totalBilled && receipt.totalBilled > 0)
+    ? receipt.totalBilled
+    : (receipt.totalPaid || receipt.amount) + (receipt.balanceDue || 0);
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text("Account Summary", margin, y);
+  y += 2;
+  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setLineWidth(0.6);
+  doc.line(margin, y, margin + 25, y);
+  y += 7;
   
-  // Left: Services
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  let balY = y;
+  
+  const addBalRow = (l: string, v: number, bold?: boolean, color?: {r:number,g:number,b:number}) => {
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.setFont("helvetica", "normal");
+    doc.text(l, margin, balY);
+    if (bold) doc.setFont("helvetica", "bold");
+    if (color) doc.setTextColor(color.r, color.g, color.b);
+    else doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(fmtINR(v), pageW - margin, balY, { align: "right" });
+    balY += 7;
+  };
+
+  addBalRow("Total Billed:", effectiveTotalBilled);
+  addBalRow("Total Paid (incl. this payment):", receipt.totalPaid || receipt.amount, true);
+  
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.2);
+  doc.line(margin, balY - 3, pageW - margin, balY - 3);
+  
+  const outstanding = receipt.balanceDue || 0;
+  addBalRow(
+    "Balance Outstanding:",
+    outstanding,
+    true,
+    outstanding > 0 ? BRAND_RED : {r:34,g:150,b:80}
+  );
+
+  y = balY + 8;
+
+  // ── Services Covered ──
   if (receipt.services && receipt.services.length > 0) {
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-    doc.text("Services Covered:", summaryX, y);
+    doc.text("Services Covered:", margin, y);
     y += 5;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    receipt.services.forEach((svc, i) => {
-      doc.text(`\u2022 ${svc}`, summaryX + 2, y + (i * 4.5));
-    });
-  }
-
-  // Right: Balances
-  const balX = pageW / 2 + 5;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  doc.text("Account Summary", balX, y);
-  
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "normal");
-  let balY = y + 6;
-  
-  const addBalRow = (l: string, v: number, color?: {r:number,g:number,b:number}) => {
     doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-    doc.text(l, balX, balY);
-    if (color) doc.setTextColor(color.r, color.g, color.b);
-    else doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-    doc.text(fmtINR(v), pageW - margin - 5, balY, { align: "right" });
-    balY += 5.5;
-  };
-
-  addBalRow("Total Billed:", receipt.totalBilled || 0);
-  addBalRow("Total Paid (incl. this):", receipt.totalPaid || 0);
-  doc.setDrawColor(220, 220, 220);
-  doc.line(balX, balY - 2, pageW - margin, balY - 2);
-  addBalRow("Balance Outstanding:", receipt.balanceDue || 0, receipt.balanceDue && receipt.balanceDue > 0 ? BRAND_RED : {r:34,g:150,b:80});
-
-  y = Math.max(y + 35, balY + 10);
+    receipt.services.forEach((svc) => {
+      doc.text(`- ${svc}`, margin + 3, y);
+      y += 4.5;
+    });
+    y += 4;
+  }
 
   // ── Notes ──
   if (receipt.notes) {
@@ -719,40 +752,39 @@ export async function generateReceiptPDF(receipt: {
     y += noteLines.length * 4 + 5;
   }
 
-  // ── Transaction Details ──
-  if (receipt.chequeNo || receipt.transactionId) {
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-    let txnInfo = "";
-    if (receipt.paymentMode === "Cheque") txnInfo = `Cheque No: ${receipt.chequeNo}`;
-    else txnInfo = `Transaction ID: ${receipt.transactionId}`;
-    doc.text(txnInfo, margin, y);
-  }
+  // ── Signatures & Paid Stamp ──
+  y = Math.max(y + 15, 235);
 
-  // ── Signatures ──
-  y = 245;
+  // Signature line
   doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.setLineWidth(0.5);
-  doc.line(margin, y, margin + 50, y);
+  doc.line(margin, y, margin + 55, y);
   
   doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.text("FOR CREATIVEMARK ADVERTISING", margin, y + 5);
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
   doc.text("Authorized Signatory", margin, y + 9);
 
-  // Paid Stamp look
+  // "PAID" stamp
   doc.setDrawColor(34, 150, 80);
-  doc.setLineWidth(1);
+  doc.setLineWidth(1.5);
   doc.setTextColor(34, 150, 80);
-  doc.setFontSize(14);
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.roundedRect(pageW - margin - 40, y - 15, 35, 15, 2, 2, "S");
-  doc.text("PAID", pageW - margin - 31, y - 5);
+  doc.roundedRect(pageW - margin - 42, y - 18, 38, 16, 2, 2, "S");
+  doc.text("PAID", pageW - margin - 32, y - 7);
+
+  // Small disclaimer
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text("This is a computer-generated receipt and does not require a physical signature.", margin, y + 16);
 
   addFooter(doc, 1);
-  doc.save(`Receipt_${receipt.clientName.replace(/\s+/g, "_")}.pdf`);
+  doc.save(`Receipt_${receipt.clientName.replace(/\s+/g, "_")}_${formatDate(receipt.date || new Date()).replace(/\//g, '')}.pdf`);
 }
 
