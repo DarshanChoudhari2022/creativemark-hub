@@ -72,16 +72,26 @@ const Projects = () => {
   const { data: projects, isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
+      // Try with joins first
       const { data, error } = await supabase
         .from("projects")
         .select(`
           *,
-          client:clients(name, company_name),
-          assignee:employees(name)
+          client:clients(name),
+          assignee:employees!assigned_to(name)
         `)
         .order("created_at", { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.warn("[Projects] Join query failed, retrying with simple query:", error.message);
+        // Fallback to simple query without joins
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("projects")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (fallbackError) throw fallbackError;
+        return fallbackData;
+      }
       return data;
     },
   });
@@ -92,7 +102,7 @@ const Projects = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, company_name");
+        .select("id, name");
       if (error) throw error;
       return data;
     },
@@ -205,7 +215,7 @@ const Projects = () => {
 
   const filteredProjects = projects?.filter((project) => {
     const matchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         project.client?.company_name?.toLowerCase().includes(searchTerm.toLowerCase());
+                         project.client?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || project.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -285,7 +295,7 @@ const Projects = () => {
                       <SelectContent>
                         {clients?.map((client) => (
                           <SelectItem key={client.id} value={client.id}>
-                            {client.company_name || client.name}
+                            {client.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -515,7 +525,7 @@ const Projects = () => {
                 </div>
                 <CardTitle className="text-xl font-bold mt-3 group-hover:text-primary transition-colors line-clamp-1">{project.title}</CardTitle>
                 <p className="text-sm text-muted-foreground font-medium flex items-center gap-1 mt-1">
-                  {project.project_type === "Inhouse SaaS" ? "Internal Product" : (project.client?.company_name || project.client?.name || "No Client")}
+                  {project.project_type === "Inhouse SaaS" ? "Internal Product" : (project.client?.name || "No Client")}
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">

@@ -40,7 +40,9 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Clients = () => {
   const { user } = useAuth();
-  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name)), payment_history(amount), quotations(quotation_number, quote_number, grand_total, total_amount, type)');
+  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name))');
+  // Fetch bills separately to avoid FK join issues on the main query
+  const { data: allBills } = useSupabaseTable<any>('quotations', 'client_id, grand_total, total_amount, amount_paid, type, status');
   const [view, setView] = useState<"cards" | "table">("cards");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -56,24 +58,24 @@ const Clients = () => {
 
   const clients = useMemo(() => {
     return clientsData.map(c => {
-      const billsArr = c.quotations || [];
-      const invoices = billsArr.filter((b: any) => b.type === "Bill" || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
-      const computedBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
-      const allBilled = billsArr.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
-      const paidTotal = (c.payment_history || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
-      const finalBilled = computedBilled > 0 ? computedBilled : (allBilled > 0 ? allBilled : (c.total_billed || 0));
-      const outstanding = finalBilled > 0 ? Math.max(0, finalBilled - paidTotal) : (c.outstanding || 0);
+      // Get this client's bills from the separate query
+      const clientBills = allBills.filter((b: any) => b.client_id === c.id);
+      const invoices = clientBills.filter((b: any) => b.type === "Bill");
+      const totalBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
+      const totalPaid = invoices.reduce((s: number, b: any) => s + (b.amount_paid || 0), 0);
+      const outstanding = totalBilled > 0 ? Math.max(0, totalBilled - totalPaid) : (c.outstanding || 0);
 
       return {
         ...c,
         serviceLabels: c.client_services?.filter((s: any) => s.active).map((s: any) => s.service_name) || [],
         assignedEmployees: c.client_assignments?.map((a: any) => a.employee_id) || [],
         assignedEmployeeNames: c.client_assignments?.map((a: any) => a.employees?.name).filter(Boolean) || [],
-        paymentStatus: c.payment_status, // map snake_case to camelCase if needed
+        paymentStatus: outstanding > 0 ? "Overdue" : (totalBilled > 0 ? "Paid" : (c.payment_status || "Paid")),
         outstanding,
+        totalBilled,
       };
     });
-  }, [clientsData]);
+  }, [clientsData, allBills]);
 
   const filtered = useMemo(() => {
     return clients.filter(c => {

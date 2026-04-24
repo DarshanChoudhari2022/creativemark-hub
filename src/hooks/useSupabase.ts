@@ -14,7 +14,22 @@ export function useSupabaseTable<T>(tableName: string, query: string = '*') {
       .select(query);
 
     if (tableError) {
-      setError(tableError);
+      console.error(`[useSupabaseTable] Error fetching ${tableName} with query "${query}":`, tableError.message, tableError.code);
+      // If the join query fails (e.g. 404 from missing FK), retry with simple '*'
+      if (query !== '*') {
+        console.warn(`[useSupabaseTable] Retrying ${tableName} with simple '*' query...`);
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from(tableName)
+          .select('*');
+        if (fallbackError) {
+          console.error(`[useSupabaseTable] Fallback also failed for ${tableName}:`, fallbackError.message);
+          setError(fallbackError);
+        } else {
+          setData((fallbackData || []) as T[]);
+        }
+      } else {
+        setError(tableError);
+      }
     } else {
       setData((tableData || []) as T[]);
     }
