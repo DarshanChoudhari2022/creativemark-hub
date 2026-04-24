@@ -51,9 +51,11 @@ const kanbanStages: LeadStage[] = ["New", "Contacted", "Quotation Sent", "Negoti
 const Leads = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { data: leadsData, loading, refresh, insert, update: updateLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
+  const { data: leadsData, loading: leadsLoading, refresh: refreshLeads, insert: insertLead, update: updateLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
+  const { data: smartLeadsData, loading: smartLoading, refresh: refreshSmart } = useSupabaseTable<any>('smart_leads', '*, assigned_to(name)');
   const { data: employees } = useSupabaseTable<any>('employees', 'id, name');
   const [view, setView] = useState<"kanban" | "table">("kanban");
+  const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
@@ -70,9 +72,9 @@ const Leads = () => {
   });
 
   const leads = useMemo(() => {
-    return leadsData.map(l => ({
+    const regularLeads = leadsData.map(l => ({
       ...l,
-      organization: l.organization,
+      organization: l.organization || l.company || "—",
       assignedToName: l.assigned_to?.name || "—",
       servicesInterested: l.lead_services?.map((s: any) => s.service_name) || [],
       commLog: l.comm_logs?.map((log: any) => ({
@@ -90,8 +92,36 @@ const Leads = () => {
       paymentDueDate: l.payment_due_date,
       paymentStatus: l.payment_status || "Not Due",
       lifecycleStage: l.lifecycle_stage || "Lead",
+      isSmartLead: false
     }));
-  }, [leadsData]);
+
+    const smartLeads = (smartLeadsData || []).map(l => ({
+      ...l,
+      name: l.customer_name,
+      organization: l.vehicle_interest || "Smart Lead",
+      assignedToName: l.assigned_to?.name || "Unassigned",
+      servicesInterested: l.vehicle_interest ? [l.vehicle_interest] : [],
+      commLog: [],
+      tasks: [],
+      dateReceived: l.created_at,
+      estimatedValue: 0,
+      stage: l.status === "Assigned" ? "Contacted" : (l.status === "Follow-up" ? "Negotiation" : (l.status || "New")),
+      heat: "Warm",
+      isSmartLead: true,
+      whatsapp: l.whatsapp || l.phone,
+    }));
+
+    return [...regularLeads, ...smartLeads];
+  }, [leadsData, smartLeadsData]);
+
+  const loading = leadsLoading || smartLoading;
+
+  const refresh = () => {
+    refreshLeads();
+    refreshSmart();
+  };
+
+  const insert = insertLead;
 
   const filtered = useMemo(() => {
     return leads.filter(l => {
@@ -435,7 +465,14 @@ const Leads = () => {
                           </div>
                         )}
                         <div className="flex items-start justify-between mb-1">
-                          <div className="font-semibold text-sm truncate pr-1">{lead.name}</div>
+                          <div className="flex items-center gap-1.5 overflow-hidden">
+                            <div className="font-semibold text-sm truncate">{lead.name}</div>
+                            {lead.isSmartLead && (
+                              <Badge variant="secondary" className="h-4 px-1 text-[8px] bg-purple-100 text-purple-700 border-purple-200 shrink-0">
+                                <Zap className="h-2 w-2" />
+                              </Badge>
+                            )}
+                          </div>
                           <HeatIcon className={`h-4 w-4 shrink-0 ${heat.color}`} />
                         </div>
                         <div className="text-xs text-muted-foreground truncate mb-2">{lead.organization}</div>
@@ -496,6 +533,7 @@ const Leads = () => {
                     <TableCell>
                       <div className="font-semibold flex items-center gap-2">
                         {l.name}
+                        {l.isSmartLead && <Badge variant="secondary" className="h-4 text-[8px] bg-purple-100 text-purple-700 border-purple-200">SMART</Badge>}
                         {isOverdue && <Badge className="h-4 text-[8px] bg-red-600 animate-pulse border-0">URGENT</Badge>}
                       </div>
                       <div className="text-[10px] text-muted-foreground">{l.assignedToName}</div>

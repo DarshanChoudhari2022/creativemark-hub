@@ -372,151 +372,193 @@ export async function generatePartnerAgreementPDF(partner: Partner) {
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.getWidth();
   const logoBase64 = await loadLogo();
+  
+  // Custom Styles
+  const margin = 15;
+  const contentW = pageW - (margin * 2);
+  
   addLetterhead(doc, logoBase64);
 
-  let y = 38;
+  let y = 42;
 
-  // ── Title ──
-  doc.setFontSize(16);
+  // ── Title Header ──
+  doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.rect(margin, y, contentW, 10, "F");
+  doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("REFERRAL PARTNERSHIP AGREEMENT", pageW / 2, y, { align: "center" });
-  y += 4;
-  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.setLineWidth(0.5);
-  doc.line(55, y, pageW - 55, y);
-  y += 10;
+  doc.setTextColor(255, 255, 255);
+  doc.text("REFERRAL PARTNERSHIP AGREEMENT", pageW / 2, y + 7, { align: "center" });
+  y += 18;
 
   // ── Preamble ──
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  const preamble = `This Referral Partnership Agreement ("Agreement") is entered into on ${formatDate(partner.agreementDate || new Date())} between ${COMPANY.name}, having its office at ${COMPANY.address} (hereinafter referred to as "The Company") and ${partner.name}${partner.businessName ? ` (${partner.businessName})` : ''} (hereinafter referred to as "The Partner").`;
-  const pLines = doc.splitTextToSize(preamble, 180);
-  doc.text(pLines, 15, y);
-  y += pLines.length * 4.5 + 8;
+  const preamble = `This Agreement is made on this ${formatDate(partner.agreementDate || new Date())} ("Effective Date") by and between:`;
+  doc.text(preamble, margin, y);
+  y += 8;
 
-  // ── Two-column: Partner Info + Commission ──
-  const mid = pageW / 2;
-
-  // Left column - Partner Info
-  doc.setFillColor(248, 248, 248);
-  doc.roundedRect(12, y - 2, mid - 16, 48, 2, 2, "F");
+  // Company Box
   doc.setFont("helvetica", "bold");
+  doc.text(COMPANY.name, margin, y);
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("PARTNER DETAILS", 16, y + 4);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  let ly = y + 11;
-  doc.text(`Name: ${partner.name}`, 16, ly); ly += 5;
-  if (partner.businessName) { doc.text(`Business: ${partner.businessName}`, 16, ly); ly += 5; }
-  doc.text(`Category: ${partner.category || "Consultant"}`, 16, ly); ly += 5;
-  doc.text(`Phone: ${partner.phone}`, 16, ly); ly += 5;
-  doc.text(`Email: ${partner.email || "—"}`, 16, ly); ly += 5;
-  if (partner.pan) { doc.text(`PAN: ${partner.pan}`, 16, ly); ly += 5; }
+  const companyAddr = doc.splitTextToSize(`Address: ${COMPANY.address}`, contentW);
+  doc.text(companyAddr, margin, y + 5);
+  y += 15;
 
-  // Right column - Commission + Banking
-  doc.setFillColor(248, 248, 248);
-  doc.roundedRect(mid + 2, y - 2, mid - 16, 48, 2, 2, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("COMMISSION STRUCTURE", mid + 6, y + 4);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  let ry = y + 11;
-  const commText = partner.commissionType === "Percentage" ? `${partner.commissionRate}% of Net Project Value` : `${fmtINR(partner.commissionRate || 0)} Flat per Referral`;
-  doc.text(`Type: ${partner.commissionType || "Percentage"}`, mid + 6, ry); ry += 5;
-  doc.text(`Rate: ${commText}`, mid + 6, ry); ry += 8;
+  doc.setFontSize(10);
+  doc.text("AND", pageW / 2, y, { align: "center" });
+  y += 8;
 
+  // Partner Box
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("BANKING DETAILS", mid + 6, ry);
-  ry += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  if (partner.bankAccount) {
-    doc.text(`A/C Holder: ${partner.accountHolder || partner.name}`, mid + 6, ry); ry += 5;
-    doc.text(`Bank: ${partner.bankName || "—"}  |  IFSC: ${partner.ifsc || "—"}`, mid + 6, ry); ry += 5;
-    doc.text(`A/C No: ${partner.bankAccount}`, mid + 6, ry);
-  } else if (partner.upi) {
-    doc.text(`UPI ID: ${partner.upi}`, mid + 6, ry);
-  } else {
-    doc.text("Not Provided", mid + 6, ry);
+  doc.text(partner.name.toUpperCase(), margin, y);
+  if (partner.businessName) {
+    doc.setFontSize(9);
+    doc.text(`Proprietor/Director of ${partner.businessName}`, margin, y + 5);
   }
+  y += 15;
 
-  y += 56;
+  // ── Agreement Details Table ──
+  doc.setFillColor(250, 250, 250);
+  doc.rect(margin, y, contentW, 45, "F");
+  doc.setDrawColor(220, 220, 220);
+  doc.rect(margin, y, contentW, 45, "S");
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text("ENGAGEMENT OVERVIEW", margin + 5, y + 8);
+
+  doc.setFontSize(9);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.setFont("helvetica", "normal");
+  
+  let gridY = y + 16;
+  doc.text("Partner ID:", margin + 5, gridY);
+  doc.setFont("helvetica", "bold");
+  doc.text(`CM-PRT-${String(partner.id).slice(0, 5).toUpperCase()}`, margin + 45, gridY);
+  
+  gridY += 7;
+  doc.setFont("helvetica", "normal");
+  doc.text("Category:", margin + 5, gridY);
+  doc.setFont("helvetica", "bold");
+  doc.text(partner.category || "Strategic Referral Partner", margin + 45, gridY);
+
+  gridY += 7;
+  doc.setFont("helvetica", "normal");
+  doc.text("Commission Type:", margin + 5, gridY);
+  doc.setFont("helvetica", "bold");
+  doc.text(partner.commissionType || "Percentage", margin + 45, gridY);
+
+  gridY += 7;
+  doc.setFont("helvetica", "normal");
+  doc.text("Commission Rate:", margin + 5, gridY);
+  doc.setFont("helvetica", "bold");
+  const rateText = partner.commissionType === "Percentage" 
+    ? `${partner.commissionRate}% of Net Project Value` 
+    : `${fmtINR(partner.commissionRate || 0)} Flat per Project`;
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text(rateText, margin + 45, gridY);
+
+  y += 55;
 
   // ── Terms & Conditions ──
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("TERMS & CONDITIONS", 15, y);
+  doc.setFontSize(11);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text("TERMS & CONDITIONS", margin, y);
   y += 2;
   doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.setLineWidth(0.3);
-  doc.line(15, y, 65, y);
-  y += 6;
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin + 30, y);
+  y += 8;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.setFontSize(8.5);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
 
-  const partnerTerms = partner.agreementTerms ? partner.agreementTerms.split('\n').filter((t: string) => t.trim() !== '') : DEFAULT_PARTNER_TERMS;
+  const partnerTerms = partner.agreementTerms 
+    ? partner.agreementTerms.split('\n').filter(t => t.trim() !== '') 
+    : DEFAULT_PARTNER_TERMS;
+    
   let pageNum = 1;
-  partnerTerms.forEach((term: string) => {
-    const lines = doc.splitTextToSize(term, 178);
-    if (y + (lines.length * 3.8) > 260) {
+  partnerTerms.forEach((term) => {
+    const lines = doc.splitTextToSize(term, contentW - 5);
+    if (y + (lines.length * 4) > 260) {
       addFooter(doc, pageNum);
-      pageNum++;
       doc.addPage();
+      pageNum++;
       addLetterhead(doc, logoBase64);
-      y = 38;
+      y = 40;
     }
-    doc.text(lines, 16, y);
-    y += lines.length * 3.8 + 2.5;
+    doc.text(lines, margin, y);
+    y += (lines.length * 4) + 3;
   });
 
-  // ── Signature Block ──
-  y = Math.max(y + 12, 240);
-  if (y > 260) {
+  // ── Banking Details ──
+  if (y > 220) {
     addFooter(doc, pageNum);
-    pageNum++;
     doc.addPage();
+    pageNum++;
     addLetterhead(doc, logoBase64);
-    y = 50;
+    y = 40;
   }
 
-  doc.setDrawColor(220, 220, 220);
-  doc.setLineWidth(0.2);
-  doc.line(15, y - 4, pageW - 15, y - 4);
-
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  doc.text(`For ${COMPANY.name}`, 15, y + 2);
-  doc.text(`Partner: ${partner.name}`, 120, y + 2);
-  y += 18;
-  doc.setDrawColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.line(15, y, 80, y);
-  doc.line(120, y, pageW - 15, y);
   y += 5;
-  doc.setFontSize(7.5);
+  doc.setFillColor(245, 245, 245);
+  doc.roundedRect(margin, y, contentW, 25, 2, 2, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text("PARTNER SETTLEMENT DETAILS (As Provided)", margin + 5, y + 7);
+  
+  doc.setFontSize(8);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.setFont("helvetica", "normal");
-  doc.text("Authorized Signatory", 15, y);
-  doc.text("Partner Signature / Acceptance", 120, y);
+  if (partner.bankAccount) {
+    doc.text(`Bank Name: ${partner.bankName || "N/A"}  |  A/C No: ${partner.bankAccount}  |  IFSC: ${partner.ifsc || "N/A"}`, margin + 5, y + 15);
+    doc.text(`Account Holder: ${partner.accountHolder || partner.name}`, margin + 5, y + 20);
+  } else if (partner.upi) {
+    doc.text(`Settlement via UPI: ${partner.upi}`, margin + 5, y + 15);
+  } else {
+    doc.text("Banking details to be provided separately for commission disbursement.", margin + 5, y + 15);
+  }
+
+  y += 35;
+
+  // ── Signature Block ──
+  doc.setDrawColor(230, 230, 230);
+  doc.line(margin, y, pageW - margin, y);
+  y += 10;
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text(`For ${COMPANY.name}`, margin, y);
+  doc.text(`For The Partner`, pageW - margin - 50, y);
+  
+  y += 20;
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.2);
+  doc.line(margin, y, margin + 60, y);
+  doc.line(pageW - margin - 60, y, pageW - margin, y);
+  
+  y += 5;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text("Authorized Signatory", margin, y);
+  doc.text("Accepted & Signed By Partner", pageW - margin - 60, y);
+  
   y += 5;
   doc.setFontSize(7);
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.text(`Date: ${formatDate(new Date())}`, 15, y);
-  doc.text(`Date: _______________`, 120, y);
+  doc.text(`Digital ID: ${partner.id}`, margin, y);
 
   addFooter(doc, pageNum);
-  doc.save(`PartnerAgreement_${partner.name.replace(/\s+/g, "_")}.pdf`);
+  doc.save(`Agreement_${partner.name.replace(/\s+/g, "_")}.pdf`);
 }
+
 
 function numberToWords(num: number): string {
   if (num === 0) return "Zero";
@@ -546,102 +588,171 @@ export async function generateReceiptPDF(receipt: {
   totalBilled?: number;
   totalPaid?: number;
   balanceDue?: number;
+  services?: string[];
 }) {
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.getWidth();
   const logoBase64 = await loadLogo();
+  
+  const margin = 15;
+  const contentW = pageW - (margin * 2);
+
   addLetterhead(doc, logoBase64);
 
-  let y = 38;
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("PAYMENT RECEIPT", pageW / 2, y, { align: "center" });
-  y += 4;
-  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.setLineWidth(0.5);
-  doc.line(65, y, pageW - 65, y);
-  y += 12;
+  let y = 45;
 
+  // ── Header Section ──
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text("PAYMENT RECEIPT", margin, y);
+  
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  const details: [string, string][] = [
-    ["Receipt Date", formatDate(receipt.date)],
-    ["Invoice Reference", receipt.invoiceNo || "\u2014"],
-    ["Client Name", receipt.clientName],
-    ["Payment Mode", receipt.paymentMode || "Cash"],
-  ];
-  if (receipt.chequeNo) details.push(["Cheque No.", receipt.chequeNo]);
-  if (receipt.transactionId) details.push(["Transaction ID", receipt.transactionId]);
-
-  details.forEach(([label, value]) => {
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-    doc.text(`${label}:`, 20, y);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-    doc.text(value, 70, y);
-    y += 6;
-  });
-  y += 8;
-
-  doc.setFillColor(248, 248, 248);
-  doc.roundedRect(15, y - 2, pageW - 30, 30, 3, 3, "F");
-  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(15, y - 2, pageW - 30, 30, 3, 3, "S");
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.text("Amount Received:", 22, y + 8);
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text(fmtINR(receipt.amount), 22, y + 20);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "italic");
-  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.text(`(${numberToWords(receipt.amount)} Rupees Only)`, 22, y + 26);
-  y += 38;
+  doc.text(`Ref: RCPT/${formatDate(new Date()).replace(/\//g, '')}/${receipt.invoiceNo || 'GEN'}`, pageW - margin, y, { align: "right" });
+  y += 12;
 
-  if (receipt.totalBilled && receipt.totalBilled > 0) {
+  // ── Grid Info ──
+  doc.setFillColor(250, 250, 250);
+  doc.roundedRect(margin, y, contentW, 35, 2, 2, "F");
+  doc.setDrawColor(235, 235, 235);
+  doc.roundedRect(margin, y, contentW, 35, 2, 2, "S");
+
+  let col1 = margin + 5;
+  let col2 = pageW / 2 + 5;
+  let rowY = y + 8;
+
+  const addGridItem = (label: string, value: string, lx: number, ly: number) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text(label, lx, ly);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(value || "N/A", lx, ly + 5);
+  };
+
+  addGridItem("RECEIVED FROM", receipt.clientName.toUpperCase(), col1, rowY);
+  addGridItem("DATE", formatDate(receipt.date), col2, rowY);
+  
+  rowY += 15;
+  addGridItem("INVOICE REFERENCE", receipt.invoiceNo || "General Payment", col1, rowY);
+  addGridItem("PAYMENT METHOD", receipt.paymentMode, col2, rowY);
+
+  y += 45;
+
+  // ── Amount Section ──
+  doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.roundedRect(margin, y, contentW, 25, 2, 2, "F");
+  
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "normal");
+  doc.text("AMOUNT RECEIVED", margin + 10, y + 9);
+  
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.text(fmtINR(receipt.amount), margin + 10, y + 19);
+  
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "italic");
+  const words = doc.splitTextToSize(`${numberToWords(receipt.amount)} Rupees Only`, 100);
+  doc.text(words, pageW - margin - 10, y + 12, { align: "right" });
+
+  y += 35;
+
+  // ── Account Summary & Services ──
+  const summaryX = margin;
+  const summaryW = (contentW / 2) - 5;
+  
+  // Left: Services
+  if (receipt.services && receipt.services.length > 0) {
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-    doc.text("Account Summary", 20, y); y += 6;
+    doc.text("Services Covered:", summaryX, y);
+    y += 5;
     doc.setFont("helvetica", "normal");
-    doc.text(`Total Billed: ${fmtINR(receipt.totalBilled)}`, 20, y); y += 5;
-    doc.text(`Total Paid: ${fmtINR(receipt.totalPaid || 0)}`, 20, y); y += 5;
-    const bal = receipt.balanceDue ?? (receipt.totalBilled - (receipt.totalPaid || 0));
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(bal > 0 ? BRAND_RED.r : 0, bal > 0 ? BRAND_RED.g : 128, bal > 0 ? BRAND_RED.b : 0);
-    doc.text(`Balance Due: ${fmtINR(bal)}`, 20, y); y += 10;
-  }
-
-  if (receipt.notes) {
     doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-    doc.text(`Notes: ${receipt.notes}`, 20, y); y += 8;
+    receipt.services.forEach((svc, i) => {
+      doc.text(`\u2022 ${svc}`, summaryX + 2, y + (i * 4.5));
+    });
   }
 
-  y = Math.max(y + 15, 220);
-  doc.setDrawColor(220, 220, 220);
-  doc.line(15, y, pageW - 15, y); y += 8;
+  // Right: Balances
+  const balX = pageW / 2 + 5;
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  doc.text(`For ${COMPANY.name}`, 15, y); y += 18;
-  doc.setDrawColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.line(15, y, 80, y); y += 5;
-  doc.setFontSize(7.5);
+  doc.text("Account Summary", balX, y);
+  
+  doc.setFontSize(8.5);
   doc.setFont("helvetica", "normal");
-  doc.text("Authorized Signatory", 15, y); y += 12;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "italic");
-  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.text("Thank you for your payment. We value your business!", pageW / 2, y, { align: "center" });
+  let balY = y + 6;
+  
+  const addBalRow = (l: string, v: number, color?: {r:number,g:number,b:number}) => {
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text(l, balX, balY);
+    if (color) doc.setTextColor(color.r, color.g, color.b);
+    else doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(fmtINR(v), pageW - margin - 5, balY, { align: "right" });
+    balY += 5.5;
+  };
+
+  addBalRow("Total Billed:", receipt.totalBilled || 0);
+  addBalRow("Total Paid (incl. this):", receipt.totalPaid || 0);
+  doc.setDrawColor(220, 220, 220);
+  doc.line(balX, balY - 2, pageW - margin, balY - 2);
+  addBalRow("Balance Outstanding:", receipt.balanceDue || 0, receipt.balanceDue && receipt.balanceDue > 0 ? BRAND_RED : {r:34,g:150,b:80});
+
+  y = Math.max(y + 35, balY + 10);
+
+  // ── Notes ──
+  if (receipt.notes) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    const noteLines = doc.splitTextToSize(`Note: ${receipt.notes}`, contentW);
+    doc.text(noteLines, margin, y);
+    y += noteLines.length * 4 + 5;
+  }
+
+  // ── Transaction Details ──
+  if (receipt.chequeNo || receipt.transactionId) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    let txnInfo = "";
+    if (receipt.paymentMode === "Cheque") txnInfo = `Cheque No: ${receipt.chequeNo}`;
+    else txnInfo = `Transaction ID: ${receipt.transactionId}`;
+    doc.text(txnInfo, margin, y);
+  }
+
+  // ── Signatures ──
+  y = 245;
+  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, margin + 50, y);
+  
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text("FOR CREATIVEMARK ADVERTISING", margin, y + 5);
+  doc.setFont("helvetica", "normal");
+  doc.text("Authorized Signatory", margin, y + 9);
+
+  // Paid Stamp look
+  doc.setDrawColor(34, 150, 80);
+  doc.setLineWidth(1);
+  doc.setTextColor(34, 150, 80);
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.roundedRect(pageW - margin - 40, y - 15, 35, 15, 2, 2, "S");
+  doc.text("PAID", pageW - margin - 31, y - 5);
+
   addFooter(doc, 1);
-  doc.save(`Receipt_${receipt.clientName.replace(/\s+/g, "_")}_${receipt.invoiceNo || "payment"}.pdf`);
+  doc.save(`Receipt_${receipt.clientName.replace(/\s+/g, "_")}.pdf`);
 }
+
