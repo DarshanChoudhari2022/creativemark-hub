@@ -43,29 +43,41 @@ export const useNotifications = () => {
       const { data: dbNotifs } = await query;
 
       // 2. Fetch Follow-ups due today or overdue
-      const { data: followUps } = await supabase
+      let followUpsQuery = supabase
         .from('leads')
         .select('id, name, phone, whatsapp, next_call_date, action_item')
         .not('next_call_date', 'is', null)
         .lte('next_call_date', today)
-        .not('stage', 'in', '("Converted", "Lost")')
-        .eq(user.role === 'Employee' ? 'assigned_to' : 'id', user.role === 'Employee' ? user.id : 'id'); // Filter if employee
+        .not('stage', 'in', '("Converted", "Lost")');
+      
+      if (user.role === 'Employee') {
+        followUpsQuery = followUpsQuery.eq('assigned_to', user.id);
+      }
+      const { data: followUps } = await followUpsQuery;
 
       // 3. Fetch Stale Leads (No interaction for 3 days)
-      const { data: staleLeads } = await supabase
+      let staleLeadsQuery = supabase
         .from('leads')
         .select('id, name, last_interaction_date')
         .lt('last_interaction_date', threeDaysAgo)
-        .not('stage', 'in', '("Converted", "Lost")')
-        .eq(user.role === 'Employee' ? 'assigned_to' : 'id', user.role === 'Employee' ? user.id : 'id');
+        .not('stage', 'in', '("Converted", "Lost")');
+
+      if (user.role === 'Employee') {
+        staleLeadsQuery = staleLeadsQuery.eq('assigned_to', user.id);
+      }
+      const { data: staleLeads } = await staleLeadsQuery;
 
       // 4. Fetch Quotation Follow-ups (Sent but not decided after 2 days)
-      const { data: pendingQuotes } = await supabase
+      let pendingQuotesQuery = supabase
         .from('leads')
         .select('id, name, last_interaction_date, quotation_status')
         .eq('quotation_status', 'Sent')
-        .lte('last_interaction_date', twoDaysAgo)
-        .eq(user.role === 'Employee' ? 'assigned_to' : 'id', user.role === 'Employee' ? user.id : 'id');
+        .lte('last_interaction_date', twoDaysAgo);
+
+      if (user.role === 'Employee') {
+        pendingQuotesQuery = pendingQuotesQuery.eq('assigned_to', user.id);
+      }
+      const { data: pendingQuotes } = await pendingQuotesQuery;
 
       // 5. Fetch Overdue payments (Bills)
       const { data: payments } = await supabase
@@ -87,12 +99,16 @@ export const useNotifications = () => {
       }
 
       // 7. Fetch Overdue Lead Tasks
-      const { data: leadTasks } = await supabase
+      let leadTasksQuery = supabase
         .from('lead_tasks')
         .select('id, description, due_date, lead_id, leads(name)')
         .eq('status', 'Pending')
-        .lte('due_date', today)
-        .eq(user.role === 'Employee' ? 'assigned_to' : 'id', user.role === 'Employee' ? user.id : 'id');
+        .lte('due_date', today);
+
+      if (user.role === 'Employee') {
+        leadTasksQuery = leadTasksQuery.eq('assigned_to', user.id);
+      }
+      const { data: leadTasks } = await leadTasksQuery;
 
       const mapped: AppNotification[] = [
         ...(dbNotifs || []).map(n => ({
@@ -167,7 +183,7 @@ export const useNotifications = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, includeRead]);
 
   // Real-time subscription
   useEffect(() => {

@@ -619,8 +619,8 @@ export async function generateReceiptPDF(receipt: {
   doc.setDrawColor(235, 235, 235);
   doc.roundedRect(margin, y, contentW, 35, 2, 2, "S");
 
-  let col1 = margin + 5;
-  let col2 = pageW / 2 + 5;
+  const col1 = margin + 5;
+  const col2 = pageW / 2 + 5;
   let rowY = y + 8;
 
   const addGridItem = (label: string, value: string, lx: number, ly: number) => {

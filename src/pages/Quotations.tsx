@@ -60,7 +60,7 @@ const Quotations = () => {
     } else if (terms === DEFAULT_TERMS_BILL && type === "Quotation") {
       setTerms(DEFAULT_TERMS_QUOTATION);
     }
-  }, [type]);
+  }, [type, terms]);
 
   // Fetch data
   useEffect(() => {

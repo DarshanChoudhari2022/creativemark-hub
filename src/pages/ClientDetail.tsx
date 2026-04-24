@@ -54,7 +54,7 @@ const ClientDetail = () => {
   const [postForm, setPostForm] = useState({ date: "", platform: "Instagram", postType: "Image", caption: "", status: "Draft" });
   const [payForm, setPayForm] = useState({ invoiceNo: "", date: "", amount: 0, status: "Paid", notes: "", paymentMode: "UPI" as string, chequeNo: "", transactionId: "" });
 
-  const fetchClient = async () => {
+  const fetchClient = useCallback(async () => {
     if (!id) return;
     setLoading(true);
 
@@ -92,11 +92,11 @@ const ClientDetail = () => {
     });
     setEmployees(eRes.data || []);
     setLoading(false);
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchClient();
-  }, [id]);
+  }, [fetchClient]);
 
   const handleAssignTeam = async () => {
     if (!teamEmpId) return;
@@ -262,6 +262,16 @@ const ClientDetail = () => {
   };
 
 
+  const totalReceived = useMemo(() => {
+    if (!client?.paymentHistory) return 0;
+    return client.paymentHistory.reduce((s: number, p: any) => s + (p.amount || 0), 0);
+  }, [client?.paymentHistory]);
+
+  const assigned = useMemo(() => {
+    if (!client?.assignedEmployees || !employees) return [];
+    return employees.filter((e) => client.assignedEmployees.includes(e.id));
+  }, [client?.assignedEmployees, employees]);
+
   if (loading) {
     return (
       <div className="text-center py-16">
@@ -279,9 +289,6 @@ const ClientDetail = () => {
       </div>
     );
   }
-
-  const assigned = employees.filter((e) => client.assignedEmployees.includes(e.id));
-  const totalReceived = useMemo(() => (client.paymentHistory || []).reduce((s: number, p: any) => s + (p.amount || 0), 0), [client.paymentHistory]);
 
   return (
     <div>

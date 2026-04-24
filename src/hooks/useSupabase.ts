@@ -16,7 +16,7 @@ export function useSupabaseTable<T>(tableName: string, query: string = '*') {
     if (tableError) {
       setError(tableError);
     } else {
-      setData(tableData as T[]);
+      setData((tableData || []) as T[]);
     }
     setLoading(false);
   }, [tableName, query]);
