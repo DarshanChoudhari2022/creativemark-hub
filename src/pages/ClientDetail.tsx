@@ -71,10 +71,10 @@ const ClientDetail = () => {
     }
 
     const [servicesRes, shootsRes, postsRes, paymentsRes, eRes] = await Promise.all([
-      supabase.from("client_services").select("*").eq("client_id", id).then(r => r.data).catch(() => []),
-      supabase.from("client_shoots").select("*").eq("client_id", id).then(r => r.data).catch(() => []),
-      supabase.from("client_posts").select("*").eq("client_id", id).then(r => r.data).catch(() => []),
-      supabase.from("payment_history").select("*").eq("client_id", id).then(r => r.data).catch(() => []),
+      supabase.from("client_services").select("*").eq("client_id", id).then(r => r.data || [], () => []),
+      supabase.from("client_shoots").select("*").eq("client_id", id).then(r => r.data || [], () => []),
+      supabase.from("client_posts").select("*").eq("client_id", id).then(r => r.data || [], () => []),
+      supabase.from("payment_history").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("employees").select("id, name, role, phone"),
     ]);
 
