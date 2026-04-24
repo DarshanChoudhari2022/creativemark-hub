@@ -1,11 +1,15 @@
-import { Bell, Search, LogOut, MessageCircle, MessageSquare, Phone, Plus, Check } from "lucide-react";
+import { useState } from "react";
+import { Bell, Search, LogOut, MessageCircle, MessageSquare, Phone, Plus, Check, EyeOff, Eye, Lock } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { formatDateDDMMYYYY, waLink, smsLink, formatINR } from "@/lib/format";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useNavigate, Link } from "react-router-dom";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
@@ -14,10 +18,25 @@ import { toast } from "sonner";
 
 export const TopBar = () => {
   const { user, logout } = useAuth();
+  const { isShielded, requestUnlock, lock, isDialogOpen, setDialogOpen, tryUnlock } = usePrivacyShield();
   const { notifications, loading, refresh, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
   const today = formatDateDDMMYYYY();
   const unread = notifications.filter((n) => n.urgent).length;
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (tryUnlock(password)) {
+      setPassword("");
+      setPasswordError("");
+      toast.success("Data unlocked successfully");
+    } else {
+      setPasswordError("Incorrect password");
+      setPassword("");
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -27,6 +46,7 @@ export const TopBar = () => {
   if (!user) return null;
 
   return (
+    <>
     <header className="h-16 border-b border-border bg-background flex items-center gap-3 px-4 sticky top-0 z-30">
       <SidebarTrigger className="text-foreground" />
       <div className="hidden md:flex items-center gap-2 max-w-md w-full ml-2">
@@ -37,6 +57,19 @@ export const TopBar = () => {
       </div>
       <div className="ml-auto flex items-center gap-3">
         <span className="hidden sm:inline text-sm text-muted-foreground">{today}</span>
+        {/* Privacy Shield Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`relative transition-colors ${isShielded ? "text-red-500 hover:text-red-600 hover:bg-red-50" : "text-green-500 hover:text-green-600 hover:bg-green-50"}`}
+          onClick={() => isShielded ? requestUnlock() : lock()}
+          title={isShielded ? "Data hidden — click to unlock" : "Data visible — click to lock"}
+        >
+          {isShielded ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          {isShielded && (
+            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background" />
+          )}
+        </Button>
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="relative">
@@ -221,5 +254,47 @@ export const TopBar = () => {
         </div>
       </div>
     </header>
+
+    {/* Privacy Shield Password Dialog */}
+    <Dialog open={isDialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setPassword(""); setPasswordError(""); } }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Lock className="h-5 w-5 text-primary" />
+            Unlock Confidential Data
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handlePasswordSubmit} className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="shield-password">Enter Password</Label>
+            <Input
+              id="shield-password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
+              autoFocus
+              className={passwordError ? "border-red-500 focus-visible:ring-red-500" : ""}
+            />
+            {passwordError && (
+              <p className="text-xs text-red-500 font-medium">{passwordError}</p>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Financial data and client names are hidden for privacy. Enter the password to reveal all information.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setPassword(""); setPasswordError(""); }}>
+              Cancel
+            </Button>
+            <Button type="submit" className="bg-primary hover:bg-primary/90 gap-2">
+              <Eye className="h-4 w-4" />
+              Unlock
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };

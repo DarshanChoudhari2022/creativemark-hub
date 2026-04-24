@@ -26,12 +26,14 @@ import Signup from "./pages/Signup";
 import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
+import { PrivacyShieldProvider } from "./contexts/PrivacyShieldContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <PrivacyShieldProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -67,6 +69,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </PrivacyShieldProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

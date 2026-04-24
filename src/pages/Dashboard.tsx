@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pi
 import { WA_TEMPLATES } from "@/data/recoveries";
 import { formatINR, formatINRCompact, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { PageHeader } from "@/components/shared";
+import { Masked, useMask } from "@/components/Masked";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -234,6 +235,7 @@ const Dashboard = () => {
       }));
   }, [employees]);
 
+  const { maskAmount } = useMask();
   const kpiIcons = [Wallet, Wallet, Users, Target, AlertTriangle, Handshake];
 
   if (loading) {
@@ -253,9 +255,9 @@ const Dashboard = () => {
   }
 
   const kpiData = [
-    { title: "Amount Received", value: formatINRCompact(totalReceived), accent: false, nav: "/financials" },
-    { title: "Amount Pending", value: formatINRCompact(totalOutstanding), accent: totalOutstanding > 0, nav: "/recovery" },
-    { title: "Distributed", value: formatINRCompact(totalDistributed), accent: false, nav: "/financials" },
+    { title: "Amount Received", value: maskAmount(formatINRCompact(totalReceived)), accent: false, nav: "/financials" },
+    { title: "Amount Pending", value: maskAmount(formatINRCompact(totalOutstanding)), accent: totalOutstanding > 0, nav: "/recovery" },
+    { title: "Distributed", value: maskAmount(formatINRCompact(totalDistributed)), accent: false, nav: "/financials" },
     { title: "Active Leads", value: String(activeLeads), accent: false, nav: "/leads" },
     { title: "Overdue Bills", value: String(overdueQuotations), accent: true, nav: "/quotations" },
     { title: "Active Clients", value: String(activeClients), accent: false, nav: "/clients" },
@@ -401,12 +403,12 @@ const Dashboard = () => {
                 className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors ${p.daysOverdue > 30 ? "border-primary/30 bg-primary/5" : "border-border hover:bg-muted/40"}`}
               >
                 <div className="min-w-0 flex-1 cursor-pointer" onClick={() => navigate("/recovery")}>
-                  <div className="text-sm font-semibold truncate">{p.client}</div>
+                  <div className="text-sm font-semibold truncate"><Masked>{p.client}</Masked></div>
                   <div className="text-xs text-muted-foreground font-mono">{p.invoiceNo}</div>
                 </div>
                 <div className="text-right shrink-0 flex items-center gap-3">
                   <div className="cursor-pointer" onClick={() => navigate("/recovery")}>
-                    <div className="text-sm font-bold text-primary">{formatINRCompact(p.amount)}</div>
+                    <div className="text-sm font-bold text-primary"><Masked placeholder="₹•••••">{formatINRCompact(p.amount)}</Masked></div>
                     <div className={`text-xs font-medium ${p.daysOverdue > 30 ? "text-primary" : "text-muted-foreground"}`}>{p.daysOverdue}d overdue</div>
                   </div>
                   {p.whatsapp && (
@@ -450,8 +452,8 @@ const Dashboard = () => {
                 onClick={() => navigate("/leads")}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold truncate">{f.name}</div>
-                  <div className="text-xs text-muted-foreground truncate">{f.organization}</div>
+                  <div className="text-sm font-semibold truncate"><Masked>{f.name}</Masked></div>
+                  <div className="text-xs text-muted-foreground truncate"><Masked>{f.organization}</Masked></div>
                 </div>
                 <div className="text-right shrink-0 ml-2">
                   <div className={`text-xs font-semibold px-1.5 py-0.5 rounded ${f.heat === "Hot" ? "bg-red-100 text-red-700" : f.heat === "Warm" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>{f.heat}</div>
@@ -519,11 +521,11 @@ const Dashboard = () => {
                 >
                   <div className="text-2xl">{medals[i] || `#${i + 1}`}</div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold truncate">{p.name}</div>
+                    <div className="font-bold truncate"><Masked>{p.name}</Masked></div>
                     <div className="text-xs text-muted-foreground">{p.totalLeads} leads referred</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-sm text-primary">{formatINRCompact(p.totalEarned)}</div>
+                    <div className="font-bold text-sm text-primary"><Masked placeholder="₹•••••">{formatINRCompact(p.totalEarned)}</Masked></div>
                     {p.pending > 0 && <div className="text-[10px] text-amber-600">{formatINRCompact(p.pending)} pending</div>}
                     {p.pending === 0 && <div className="text-[10px] text-muted-foreground">all settled</div>}
                   </div>
@@ -555,7 +557,7 @@ const Dashboard = () => {
                   {e.name.split(" ").map((n: string) => n[0]).join("")}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold truncate">{e.name}</div>
+                  <div className="font-bold truncate"><Masked>{e.name}</Masked></div>
                   <div className="text-xs text-muted-foreground">{e.role}</div>
                 </div>
                 <div className="text-right">

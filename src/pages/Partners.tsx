@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/shared";
+import { Masked } from "@/components/Masked";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { generatePartnerAgreementPDF, DEFAULT_PARTNER_TERMS } from "@/lib/pdf";
@@ -253,11 +254,11 @@ const Partners = () => {
         </div>
         <div className="kpi-card">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Commission Paid</div>
-          <div className="text-3xl font-extrabold mt-1 text-green-600">{formatINR(totalPaid)}</div>
+          <div className="text-3xl font-extrabold mt-1 text-green-600"><Masked placeholder="₹•••••">{formatINR(totalPaid)}</Masked></div>
         </div>
         <div className="kpi-card">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Commission Pending</div>
-          <div className="text-3xl font-extrabold mt-1 text-primary">{formatINR(totalPending)}</div>
+          <div className="text-3xl font-extrabold mt-1 text-primary"><Masked placeholder="₹•••••">{formatINR(totalPending)}</Masked></div>
           <div className="text-xs text-muted-foreground">Awaiting payout</div>
         </div>
       </div>
@@ -277,11 +278,11 @@ const Partners = () => {
                   <AvatarFallback className="font-bold text-sm bg-primary/10 text-primary">{getInitials(p.name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold truncate">{p.name}</div>
+                  <div className="font-bold truncate"><Masked>{p.name}</Masked></div>
                   <div className="text-xs text-muted-foreground">{p.totalLeadsReferred} leads · {p.category}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold text-primary">{formatINR(p.totalCommissionEarned)}</div>
+                  <div className="font-bold text-primary"><Masked placeholder="₹•••••">{formatINR(p.totalCommissionEarned)}</Masked></div>
                   <div className="text-[10px] text-muted-foreground">total earned</div>
                 </div>
               </div>
@@ -304,12 +305,12 @@ const Partners = () => {
           <TableBody>
             {filtered.map((p) => (
               <TableRow key={p.id} className="cursor-pointer" onClick={() => openDetail(p)}>
-                <TableCell className="font-semibold">{p.name}</TableCell>
+                <TableCell className="font-semibold"><Masked>{p.name}</Masked></TableCell>
                 <TableCell className="text-sm text-muted-foreground">{p.category}</TableCell>
                 <TableCell className="text-sm">{p.commissionType === "Percentage" ? `${p.commissionRate}%` : `${formatINR(p.commissionRate)} flat`}</TableCell>
                 <TableCell className="text-center font-semibold">{p.totalLeadsReferred}</TableCell>
-                <TableCell className="text-right font-semibold text-green-600">{formatINR(p.totalCommissionEarned)}</TableCell>
-                <TableCell className={`text-right font-semibold ${p.pendingCommission > 0 ? "text-primary" : ""}`}>{formatINR(p.pendingCommission)}</TableCell>
+                <TableCell className="text-right font-semibold text-green-600"><Masked placeholder="₹•••••">{formatINR(p.totalCommissionEarned)}</Masked></TableCell>
+                <TableCell className={`text-right font-semibold ${p.pendingCommission > 0 ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{formatINR(p.pendingCommission)}</Masked></TableCell>
                 <TableCell><Badge variant="outline" className={`text-[11px] ${p.status === "Active" ? "bg-green-100 text-green-700 border-green-200" : "bg-gray-100 text-gray-500"}`}>{p.status}</Badge></TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={async () => {
@@ -395,11 +396,11 @@ const Partners = () => {
                 <div className="text-xs text-muted-foreground mt-0.5">Leads Referred</div>
               </div>
               <div className="p-3 bg-card border rounded-lg text-center">
-                <div className="text-2xl font-extrabold text-green-600">{formatINR(detailPartner.totalCommissionEarned)}</div>
+                <div className="text-2xl font-extrabold text-green-600"><Masked placeholder="₹•••••">{formatINR(detailPartner.totalCommissionEarned)}</Masked></div>
                 <div className="text-xs text-muted-foreground mt-0.5">Total Earned</div>
               </div>
               <div className="p-3 bg-card border rounded-lg text-center">
-                <div className={`text-2xl font-extrabold ${detailPartner.pendingCommission > 0 ? "text-primary" : ""}`}>{formatINR(detailPartner.pendingCommission)}</div>
+                <div className={`text-2xl font-extrabold ${detailPartner.pendingCommission > 0 ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{formatINR(detailPartner.pendingCommission)}</Masked></div>
                 <div className="text-xs text-muted-foreground mt-0.5">Pending</div>
               </div>
             </div>
@@ -418,9 +419,9 @@ const Partners = () => {
                   {ledger.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="font-mono text-xs">{entry.created_at ? formatDateDDMMYYYY(new Date(entry.created_at)) : ""}</TableCell>
-                      <TableCell className="font-semibold">{entry.client_name || "—"}</TableCell>
-                      <TableCell className="text-right">{formatINR(entry.project_value || 0)}</TableCell>
-                      <TableCell className="text-right font-semibold">{formatINR(entry.commission_amount || 0)}</TableCell>
+                      <TableCell className="font-semibold"><Masked>{entry.client_name || "—"}</Masked></TableCell>
+                      <TableCell className="text-right"><Masked placeholder="₹•••••">{formatINR(entry.project_value || 0)}</Masked></TableCell>
+                      <TableCell className="text-right font-semibold"><Masked placeholder="₹•••••">{formatINR(entry.commission_amount || 0)}</Masked></TableCell>
                       <TableCell>
                         <Badge variant="outline" className={`text-[10px] ${entry.status === "Paid" ? "bg-green-100 text-green-700" : entry.status === "Pending" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{entry.status}</Badge>
                       </TableCell>

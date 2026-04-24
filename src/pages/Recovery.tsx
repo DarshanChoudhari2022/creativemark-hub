@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
+import { Masked } from "@/components/Masked";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { toast } from "sonner";
@@ -248,7 +249,7 @@ const Recovery = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="kpi-card">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Total Outstanding</div>
-          <div className="text-3xl font-extrabold text-primary mt-1">{formatINR(totalOutstanding)}</div>
+          <div className="text-3xl font-extrabold text-primary mt-1"><Masked placeholder="₹•••••">{formatINR(totalOutstanding)}</Masked></div>
         </div>
         <div className="kpi-card">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Invoices Pending</div>
@@ -278,12 +279,12 @@ const Recovery = () => {
               return (
               <>
               <TableRow key={r.id} className={r.received ? "opacity-50" : ""}>
-                <TableCell className="font-semibold">{r.clientName}</TableCell>
+                <TableCell className="font-semibold"><Masked>{r.clientName}</Masked></TableCell>
                 <TableCell className="font-mono text-sm">{r.invoiceNo}</TableCell>
                 <TableCell className="text-sm text-muted-foreground font-mono">{r.invoiceDate ? formatDateDDMMYYYY(new Date(r.invoiceDate)) : ""}</TableCell>
-                <TableCell className="text-right">{formatINR(r.amountDue)}</TableCell>
-                <TableCell className="text-right text-green-600 font-semibold">{formatINR(r.amountPaid)}</TableCell>
-                <TableCell className={`text-right font-bold ${!r.received ? "text-primary" : ""}`}>{formatINR(balance)}</TableCell>
+                <TableCell className="text-right"><Masked placeholder="₹•••••">{formatINR(r.amountDue)}</Masked></TableCell>
+                <TableCell className="text-right text-green-600 font-semibold"><Masked placeholder="₹•••••">{formatINR(r.amountPaid)}</Masked></TableCell>
+                <TableCell className={`text-right font-bold ${!r.received ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{formatINR(balance)}</Masked></TableCell>
                 <TableCell>
                   {r.received ? (
                     <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs">Paid</Badge>
@@ -381,7 +382,7 @@ const Recovery = () => {
                 ))}
               </div>
               <div className="text-xs text-muted-foreground p-2 bg-muted/30 rounded-lg italic">
-                Preview: {WHATSAPP_TEMPLATES[`RECOVERY_${templateType.toUpperCase()}` as keyof typeof WHATSAPP_TEMPLATES](selected.clientName, formatINR(selected.amountDue - selected.amountPaid), selected.invoiceNo).slice(0, 100)}…
+                Preview: {(WHATSAPP_TEMPLATES[`RECOVERY_${templateType.toUpperCase()}` as keyof typeof WHATSAPP_TEMPLATES] as (c: string, a: string, i: string) => string)(selected.clientName, formatINR(selected.amountDue - selected.amountPaid), selected.invoiceNo).slice(0, 100)}…
               </div>
             </div>
 

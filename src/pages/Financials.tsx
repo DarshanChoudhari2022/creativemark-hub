@@ -53,8 +53,10 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV } from "@/lib/export";
+import { Masked, useMask } from "@/components/Masked";
 
 const Financials = () => {
+  const { maskAmount } = useMask();
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -285,7 +287,7 @@ const Financials = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Collected Revenue</p>
-                <h3 className="text-2xl font-bold mt-1">{formatINR(totalRevenue)}</h3>
+                <h3 className="text-2xl font-bold mt-1"><Masked placeholder="₹•••••">{formatINR(totalRevenue)}</Masked></h3>
               </div>
               <div className="p-2 bg-primary/20 rounded-lg">
                 <TrendingUp className="h-5 w-5 text-primary" />
@@ -303,7 +305,7 @@ const Financials = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Expenses</p>
-                <h3 className="text-2xl font-bold mt-1">{formatINR(totalExpenses)}</h3>
+                <h3 className="text-2xl font-bold mt-1"><Masked placeholder="₹•••••">{formatINR(totalExpenses)}</Masked></h3>
               </div>
               <div className="p-2 bg-red-500/20 rounded-lg">
                 <TrendingDown className="h-5 w-5 text-red-500" />
@@ -321,7 +323,7 @@ const Financials = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Net Profit</p>
-                <h3 className="text-2xl font-bold mt-1">{formatINR(netProfit)}</h3>
+                <h3 className="text-2xl font-bold mt-1"><Masked placeholder="₹•••••">{formatINR(netProfit)}</Masked></h3>
               </div>
               <div className="p-2 bg-green-500/20 rounded-lg">
                 <DollarSign className="h-5 w-5 text-green-500" />
@@ -342,7 +344,7 @@ const Financials = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Outstanding Dues</p>
-                <h3 className="text-2xl font-bold mt-1">{formatINR(totalOutstanding)}</h3>
+                <h3 className="text-2xl font-bold mt-1"><Masked placeholder="₹•••••">{formatINR(totalOutstanding)}</Masked></h3>
               </div>
               <div className="p-2 bg-yellow-500/20 rounded-lg">
                 <AlertCircle className="h-5 w-5 text-yellow-500" />
@@ -466,12 +468,12 @@ const Financials = () => {
                 {projects?.slice(0, 5).map((project) => (
                   <tr key={project.id} className="hover:bg-primary/5 transition-colors">
                     <td className="px-6 py-4 font-bold">{project.title}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{project.client?.name}</td>
-                    <td className="px-6 py-4 text-right font-mono">{formatINR(project.budget_revenue || 0)}</td>
-                    <td className="px-6 py-4 text-right font-mono">{formatINR(project.budget_cost || 0)}</td>
+                    <td className="px-6 py-4 text-muted-foreground"><Masked>{project.client?.name}</Masked></td>
+                    <td className="px-6 py-4 text-right font-mono"><Masked placeholder="₹•••••">{formatINR(project.budget_revenue || 0)}</Masked></td>
+                    <td className="px-6 py-4 text-right font-mono"><Masked placeholder="₹•••••">{formatINR(project.budget_cost || 0)}</Masked></td>
                     <td className="px-6 py-4 text-right">
                       <span className={`font-bold ${((project.budget_revenue || 0) - (project.budget_cost || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatINR((project.budget_revenue || 0) - (project.budget_cost || 0))}
+                        <Masked placeholder="₹•••••">{formatINR((project.budget_revenue || 0) - (project.budget_cost || 0))}</Masked>
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -506,12 +508,12 @@ const Financials = () => {
                     <Receipt className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="font-bold text-sm group-hover:text-primary transition-colors">{expense.title}</p>
+                    <p className="font-bold text-sm group-hover:text-primary transition-colors"><Masked>{expense.title}</Masked></p>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{expense.category} • {format(new Date(expense.date), "MMM d, yyyy")}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-red-500">-{formatINR(expense.amount)}</p>
+                  <p className="font-bold text-red-500"><Masked placeholder="-₹•••••">-{formatINR(expense.amount)}</Masked></p>
                   <p className="text-[10px] text-muted-foreground">Successful</p>
                 </div>
               </div>

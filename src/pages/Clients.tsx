@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader, PaymentBadge } from "@/components/shared";
+import { Masked } from "@/components/Masked";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR, isValidIndianPhone, waLink, smsLink } from "@/lib/format";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
@@ -131,7 +132,7 @@ const Clients = () => {
       toast.error("Failed to add client: " + error.message);
     } else {
       setOpen(false);
-      setForm({ name: "", category: "Other", phone: "", email: "", area: "", whatsapp: "", serviceType: "", notes: "" });
+      setForm({ name: "", category: "Other", phone: "", email: "", area: "", whatsapp: "", serviceType: "", notes: "", customCategory: "" });
       setPhoneError("");
       setWhatsappError("");
       toast.success("Client added successfully");
@@ -267,7 +268,7 @@ const Clients = () => {
               <Card key={c.id} className="p-5 hover:shadow-md transition-shadow group">
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <Link to={`/clients/${c.id}`} className="font-bold text-lg hover:text-primary transition-colors">{c.name}</Link>
+                    <Link to={`/clients/${c.id}`} className="font-bold text-lg hover:text-primary transition-colors"><Masked>{c.name}</Masked></Link>
                     {c.area && <div className="text-xs text-muted-foreground mt-0.5">{c.area}</div>}
                   </div>
                   <Badge variant="outline" className={`font-semibold text-xs ${CATEGORY_COLORS[c.category as ClientCategory] || CATEGORY_COLORS.Other}`}>{c.category}</Badge>
@@ -312,7 +313,7 @@ const Clients = () => {
                   </div>
                 )}
                 <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="text-xs text-muted-foreground">Outstanding<div className={`font-bold text-base ${c.outstanding > 0 ? "text-primary" : "text-foreground"}`}>{formatINR(c.outstanding)}</div></div>
+                  <div className="text-xs text-muted-foreground">Outstanding<div className={`font-bold text-base ${c.outstanding > 0 ? "text-primary" : "text-foreground"}`}><Masked placeholder="₹•••••">{formatINR(c.outstanding)}</Masked></div></div>
                   <div className="flex items-center gap-2">
                     <PaymentBadge status={c.paymentStatus} />
                     <Link to={`/clients/${c.id}`}>
@@ -340,7 +341,7 @@ const Clients = () => {
               {filtered.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>
-                    <Link to={`/clients/${c.id}`} className="font-semibold hover:text-primary">{c.name}</Link>
+                    <Link to={`/clients/${c.id}`} className="font-semibold hover:text-primary"><Masked>{c.name}</Masked></Link>
                     {c.area && <div className="text-xs text-muted-foreground">{c.area}</div>}
                   </TableCell>
                   <TableCell><Badge variant="outline" className={`text-xs ${CATEGORY_COLORS[c.category]}`}>{c.category}</Badge></TableCell>
@@ -366,7 +367,7 @@ const Clients = () => {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className={`text-right font-semibold ${c.outstanding > 0 ? "text-primary" : ""}`}>{formatINR(c.outstanding)}</TableCell>
+                  <TableCell className={`text-right font-semibold ${c.outstanding > 0 ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{formatINR(c.outstanding)}</Masked></TableCell>
                   <TableCell><PaymentBadge status={c.paymentStatus} /></TableCell>
                   <TableCell><Link to={`/clients/${c.id}`}><Button size="sm" variant="ghost" className="text-xs">View</Button></Link></TableCell>
                 </TableRow>
