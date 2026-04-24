@@ -28,9 +28,15 @@ import { useAuth } from "@/contexts/AuthContext";
 const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners", "/financials"];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, setOpenMobile, isMobile } = useSidebar();
   const { user } = useAuth();
   const collapsed = state === "collapsed";
+
+  const handleItemClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   const visibleItems = items.filter(item => {
     if (user?.role === "Employee" && ADMIN_ONLY_ROUTES.includes(item.url)) {
@@ -55,6 +61,7 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
+                      onClick={handleItemClick}
                       className="flex items-center gap-3 rounded-md px-2 text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
                       activeClassName="!bg-primary/10 !text-primary font-semibold before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-primary"
                     >

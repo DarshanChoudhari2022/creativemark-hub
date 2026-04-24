@@ -14,7 +14,7 @@ export const BrandLogo = ({ collapsed = false }: Props) => {
           src={logo} 
           alt="CM" 
           className={cn(
-            "relative rounded-lg object-cover border border-border/50 shadow-sm transition-all duration-300",
+            "relative rounded-lg object-contain bg-white border border-border/50 shadow-sm transition-all duration-300",
             collapsed ? "h-9 w-9" : "h-10 w-10"
           )} 
         />
