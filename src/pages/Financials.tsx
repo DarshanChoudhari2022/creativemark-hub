@@ -104,22 +104,48 @@ const Financials = () => {
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
   // Charts Data
-  const monthlyData = [
-    { name: "Jan", revenue: 450000, expenses: 120000 },
-    { name: "Feb", revenue: 520000, expenses: 150000 },
-    { name: "Mar", revenue: 480000, expenses: 140000 },
-    { name: "Apr", revenue: 610000, expenses: 180000 },
-    { name: "May", revenue: 590000, expenses: 170000 },
-    { name: "Jun", revenue: 720000, expenses: 210000 },
-  ];
+  const getMonthlyData = () => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentYear = new Date().getFullYear();
+    const data = months.map(m => ({ name: m, revenue: 0, expenses: 0 }));
 
-  const categoryData = [
-    { name: "Salaries", value: 400000, color: "#3B82F6" },
-    { name: "Rent", value: 120000, color: "#10B981" },
-    { name: "Software", value: 50000, color: "#F59E0B" },
-    { name: "Marketing", value: 80000, color: "#EF4444" },
-    { name: "Other", value: 30000, color: "#8B5CF6" },
-  ];
+    quotations?.filter(q => q.status === "Paid").forEach(q => {
+      if (q.created_at) {
+        const date = new Date(q.created_at);
+        if (date.getFullYear() === currentYear) {
+          data[date.getMonth()].revenue += (q.grand_total || 0);
+        }
+      }
+    });
+
+    expenses?.forEach(e => {
+      if (e.date) {
+        const date = new Date(e.date);
+        if (date.getFullYear() === currentYear) {
+          data[date.getMonth()].expenses += (Number(e.amount) || 0);
+        }
+      }
+    });
+
+    // filter to show at least current month and previous months
+    const currentMonthIndex = new Date().getMonth();
+    return data.slice(Math.max(0, currentMonthIndex - 5), currentMonthIndex + 1); // Last 6 months
+  };
+
+  const monthlyData = getMonthlyData();
+
+  const categoryData: { name: string; value: number; color: string }[] = expenses ? Object.entries(
+    expenses.reduce((acc: Record<string, number>, curr: any) => {
+      const cat = curr.category || "Other";
+      acc[cat] = (acc[cat] || 0) + Number(curr.amount || 0);
+      return acc;
+    }, {})
+  ).map(([name, value], index) => {
+    const colors = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6"];
+    return { name, value: Number(value), color: colors[index % colors.length] };
+  }).sort((a, b) => b.value - a.value) : [];
+
+  const totalExpenseForPie = categoryData.reduce((acc, item) => acc + item.value, 0) || 1; // avoid division by 0
 
   // Create Expense Mutation
   const createExpenseMutation = useMutation({
@@ -355,24 +381,30 @@ const Financials = () => {
           <CardContent>
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="h-[250px] w-full md:w-1/2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {categoryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                {categoryData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground border-2 border-dashed border-border/50 rounded-full w-48 h-48 mx-auto">
+                    No Data
+                  </div>
+                )}
               </div>
               <div className="w-full md:w-1/2 space-y-4">
                 {categoryData.map((item) => (
@@ -384,9 +416,12 @@ const Financials = () => {
                       </span>
                       <span className="font-bold">{formatINRCompact(item.value)}</span>
                     </div>
-                    <Progress value={(item.value / 680000) * 100} className="h-1" />
+                    <Progress value={(item.value / totalExpenseForPie) * 100} className="h-1" />
                   </div>
                 ))}
+                {categoryData.length === 0 && (
+                  <div className="text-center text-muted-foreground text-sm py-4 border border-dashed rounded-lg">No expenses recorded</div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -419,11 +454,11 @@ const Financials = () => {
                   <tr key={project.id} className="hover:bg-primary/5 transition-colors">
                     <td className="px-6 py-4 font-bold">{project.title}</td>
                     <td className="px-6 py-4 text-muted-foreground">{project.client?.name}</td>
-                    <td className="px-6 py-4 text-right font-mono">{formatINR(project.budget_revenue || 50000)}</td>
-                    <td className="px-6 py-4 text-right font-mono">{formatINR(project.budget_cost || 15000)}</td>
+                    <td className="px-6 py-4 text-right font-mono">{formatINR(project.budget_revenue || 0)}</td>
+                    <td className="px-6 py-4 text-right font-mono">{formatINR(project.budget_cost || 0)}</td>
                     <td className="px-6 py-4 text-right">
-                      <span className="font-bold text-green-600">
-                        {formatINR((project.budget_revenue || 50000) - (project.budget_cost || 15000))}
+                      <span className={`font-bold ${((project.budget_revenue || 0) - (project.budget_cost || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatINR((project.budget_revenue || 0) - (project.budget_cost || 0))}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
