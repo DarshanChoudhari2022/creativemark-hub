@@ -38,7 +38,7 @@ const Employees = () => {
     customRole: "",
     phone: "", 
     email: "", 
-    salary: 0,
+    salary: 0, amount: 0,
     target: 50 // Default target
   });
   const [phoneError, setPhoneError] = useState("");
@@ -108,6 +108,7 @@ const Employees = () => {
       work_type: logForm.workType,
       location: logForm.location,
       hours: logForm.hours,
+      amount: logForm.amount || 0,
       notes: logForm.notes,
       status: "Completed",
     });
@@ -116,7 +117,7 @@ const Employees = () => {
       toast.error("Failed to add work log: " + error.message);
     } else {
       setLogOpen(false);
-      setLogForm({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, notes: "" });
+      setLogForm({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, amount: 0, notes: "" });
       toast.success("Work log added");
     }
   };
@@ -177,8 +178,7 @@ const Employees = () => {
                     </div>
                     <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Monthly Salary ₹</Label><Input type="number" value={form.salary} onChange={(e) => setForm({ ...form, salary: +e.target.value })} /></div>
+                  <div className="grid grid-cols-1 gap-3">
                     <div><Label>Lead Target</Label><Input type="number" value={form.target} onChange={(e) => setForm({ ...form, target: +e.target.value })} /></div>
                   </div>
                 </div>
@@ -209,10 +209,10 @@ const Employees = () => {
         {filtered.map((emp) => {
           const isOpen = detailId === emp.id;
           const assignedClientsList = clients?.filter((c: any) => emp.assignedClients.includes(c.id)) || [];
-          const salary = emp.salary ?? emp.base_rate ?? 0;
           const advanceTaken = emp.advance_taken ?? 0;
           const duesPending = emp.dues_pending ?? 0;
-          const netPayable = salary - advanceTaken + duesPending;
+          const totalEarned = (emp.work_logs || []).reduce((s: number, l: any) => s + (l.amount || 0), 0);
+          const netPayable = totalEarned - advanceTaken + duesPending;
           const joiningDateVal = emp.date_joined || new Date().toISOString();
 
           const totalHours = emp.work_logs?.reduce((s, l) => {
@@ -246,8 +246,8 @@ const Employees = () => {
                         <div className="font-semibold text-foreground">{emp.activeLeadsCount} / {emp.target}</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-xs uppercase">Net Salary</div>
-                        <div className="font-semibold text-foreground">{formatINR(netPayable)}</div>
+                        <div className="text-xs uppercase">Total Earned</div>
+                        <div className="font-semibold text-foreground">{formatINR(totalEarned)}</div>
                       </div>
                     </div>
                     <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -277,13 +277,13 @@ const Employees = () => {
                         </div>
                       </div>
 
-                      {/* Salary Section */}
+                      {/* Earnings Section */}
                       <div className="space-y-3">
-                        <h4 className="font-bold text-sm flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Salary &amp; Dues</h4>
+                        <h4 className="font-bold text-sm flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Earnings & Dues</h4>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="p-3 bg-card rounded-lg border border-border">
-                            <div className="text-xs text-muted-foreground">Monthly Salary</div>
-                            <div className="text-lg font-bold">{formatINR(salary)}</div>
+                            <div className="text-xs text-muted-foreground">Total Earned</div>
+                            <div className="text-lg font-bold text-green-600">{formatINR(totalEarned)}</div>
                           </div>
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Advance Taken</div>
@@ -298,6 +298,7 @@ const Employees = () => {
                             <div className="text-lg font-bold">{formatINR(netPayable)}</div>
                           </div>
                         </div>
+                        <div className="text-[10px] text-muted-foreground">Work count: {(emp.work_logs || []).length} jobs</div>
                       </div>
 
                       {/* Work Log Section */}
@@ -311,7 +312,7 @@ const Employees = () => {
                             <Plus className="h-3 w-3" /> Log Work
                           </Button>
                         </div>
-                        <div className="text-xs text-muted-foreground mb-1">{totalHours.toFixed(1)} total hours logged</div>
+                        <div className="text-xs text-muted-foreground mb-1">{totalHours.toFixed(1)} hours logged · {formatINR(totalEarned)} earned</div>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
                           {(emp.work_logs || []).slice(0, 5).map((log: any, i: number) => {
                             const duration = log.hours ?? (log.reportingTime && log.endTime ? ((new Date(`2000-01-01T${log.endTime}`).getTime() - new Date(`2000-01-01T${log.reportingTime}`).getTime()) / (1000 * 60 * 60)).toFixed(1) : null);
@@ -324,6 +325,7 @@ const Employees = () => {
                                 <div className="text-right shrink-0 ml-2">
                                   <div className="font-mono">{formatDateDDMMYYYY(log.date)}</div>
                                   <div className="text-muted-foreground">{duration ?? "—"}h</div>
+                                  {log.amount > 0 && <div className="font-semibold text-green-600">{formatINR(log.amount)}</div>}
                                 </div>
                               </div>
                             );
@@ -363,6 +365,7 @@ const Employees = () => {
               <div><Label>Location</Label><Input value={logForm.location} onChange={(e) => setLogForm({ ...logForm, location: e.target.value })} placeholder="e.g. Office, Hadapsar" /></div>
               <div><Label>Hours</Label><Input type="number" min={0} max={24} value={logForm.hours} onChange={(e) => setLogForm({ ...logForm, hours: +e.target.value })} /></div>
             </div>
+            <div><Label>Amount Earned (₹) *</Label><Input type="number" value={logForm.amount || ""} onChange={(e) => setLogForm({ ...logForm, amount: +e.target.value })} placeholder="e.g. 5000" /></div>
             <div><Label>Notes</Label><Textarea value={logForm.notes} onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })} rows={2} /></div>
           </div>
           <DialogFooter>

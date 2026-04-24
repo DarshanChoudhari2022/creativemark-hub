@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, Camera, FileText, Wallet, Instagram, Facebook, Twitter, Linkedin, Send, Plus, Trash2, Bell, MessageSquare, Download } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, Camera, FileText, Wallet, Instagram, Facebook, Twitter, Linkedin, Send, Plus, Trash2, Bell, MessageSquare, Download, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,11 @@ const ClientDetail = () => {
   const [shootForm, setShootForm] = useState({ date: "", time: "", location: "", crew: [] as string[], notes: "", billAmount: 0 });
   const [postForm, setPostForm] = useState({ date: "", platform: "Instagram", postType: "Image", caption: "", status: "Draft" });
   const [payForm, setPayForm] = useState({ invoiceNo: "", date: "", amount: 0, status: "Paid", notes: "", paymentMode: "UPI" as string, chequeNo: "", transactionId: "" });
+  const [meetOpen, setMeetOpen] = useState(false);
+  const [meetForm, setMeetForm] = useState({ date: "", time: "", mom: "", actionItems: "", nextMeetDate: "", notes: "" });
+  const [editPayOpen, setEditPayOpen] = useState(false);
+  const [editPayId, setEditPayId] = useState<string | null>(null);
+  const [editPayForm, setEditPayForm] = useState({ invoiceNo: "", date: "", amount: 0, status: "Paid", notes: "", paymentMode: "UPI" as string, chequeNo: "", transactionId: "" });
 
   const fetchClient = useCallback(async () => {
     if (!id) return;
@@ -70,19 +75,27 @@ const ClientDetail = () => {
       return;
     }
 
-    const [servicesRes, shootsRes, postsRes, paymentsRes, eRes, billsRes] = await Promise.all([
+    const [servicesRes, shootsRes, postsRes, paymentsRes, eRes, billsRes, meetingsRes] = await Promise.all([
       supabase.from("client_services").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("client_shoots").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("client_posts").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("payment_history").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("employees").select("id, name, role, phone"),
       supabase.from("quotations").select("*").eq("client_id", id).order("created_at", { ascending: false }).then(r => r.data || [], () => []),
+      supabase.from("client_meetings").select("*").eq("client_id", id).order("meeting_date", { ascending: false }).then(r => r.data || [], () => []),
     ]);
+
+    // Auto-compute Total Billed from invoices (BL- prefix or is_bill flag)
+    const billsArr = billsRes || [];
+    const invoices = billsArr.filter((b: any) => b.is_bill || (b.quotation_number || "").startsWith("BL-"));
+    const computedBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
+    const paidTotal = (paymentsRes || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+    const finalBilled = computedBilled > 0 ? computedBilled : (clientData.total_billed || 0);
 
     setClient({
       ...clientData,
-      totalBilled: clientData.total_billed || 0,
-      outstanding: clientData.outstanding || 0,
+      totalBilled: finalBilled,
+      outstanding: finalBilled > 0 ? Math.max(0, finalBilled - paidTotal) : (clientData.outstanding || 0),
       monthlyRetainer: clientData.monthly_retainer || 0,
       paymentStatus: clientData.payment_status || "Current",
       services: servicesRes || [],
@@ -90,7 +103,8 @@ const ClientDetail = () => {
       posts: postsRes || [],
       paymentHistory: paymentsRes || [],
       assignedEmployees: clientData.assigned_employees || [],
-      bills: billsRes || [],
+      bills: billsArr,
+      meetings: meetingsRes || [],
     });
     setEmployees(eRes.data || []);
     setLoading(false);
@@ -260,6 +274,68 @@ const ClientDetail = () => {
       totalPaid: totalReceived,
       balanceDue: client.outstanding,
     });
+  };
+
+  // ── Meeting handlers ──
+  const handleAddMeeting = async () => {
+    if (!meetForm.date) return toast.error("Meeting date is required");
+    const { error } = await supabase.from("client_meetings").insert({
+      client_id: id, meeting_date: meetForm.date, meeting_time: meetForm.time || null,
+      mom: meetForm.mom || null, action_items: meetForm.actionItems || null,
+      next_meeting_date: meetForm.nextMeetDate || null, notes: meetForm.notes || null,
+    });
+    if (error) return toast.error("Failed: " + error.message);
+    // Sync to main Calendar
+    const startTime = meetForm.time ? new Date(`${meetForm.date}T${meetForm.time}:00`).toISOString() : new Date(`${meetForm.date}T09:00:00`).toISOString();
+    await supabase.from("calendar_events").insert({ title: `Meeting: ${client.name}`, type: "Meeting", start_time: startTime, client_name: client.name, notes: meetForm.mom || null, status: "Scheduled" });
+    if (meetForm.nextMeetDate) {
+      await supabase.from("calendar_events").insert({ title: `Next Meeting: ${client.name}`, type: "Meeting", start_time: new Date(`${meetForm.nextMeetDate}T09:00:00`).toISOString(), client_name: client.name, notes: "Follow-up", status: "Scheduled" });
+    }
+    toast.success("Meeting logged & synced to Calendar!");
+    setMeetOpen(false);
+    setMeetForm({ date: "", time: "", mom: "", actionItems: "", nextMeetDate: "", notes: "" });
+    fetchClient();
+  };
+
+  const handleShareMOM = (meet: any) => {
+    const lines = [
+      `*Meeting Summary — ${client.name}*`,
+      `Date: ${formatDateDDMMYYYY(new Date(meet.meeting_date))}`,
+      meet.meeting_time ? `Time: ${meet.meeting_time}` : "",
+      meet.mom ? `\n*MOM:*\n${meet.mom}` : "",
+      meet.action_items ? `\n*Action Items:*\n${meet.action_items}` : "",
+      meet.next_meeting_date ? `\n*Next Meeting:* ${formatDateDDMMYYYY(new Date(meet.next_meeting_date))}` : "",
+      meet.notes ? `\n*Notes:* ${meet.notes}` : "",
+      "\n— CreativeMark Advertising",
+    ].filter(Boolean).join("\n");
+    window.open(waLink(client.whatsapp || client.phone, lines), "_blank");
+  };
+
+  // ── Payment edit handlers ──
+  const openEditPayment = (entry: any) => {
+    setEditPayId(entry.id);
+    setEditPayForm({
+      invoiceNo: entry.invoice_no || "", date: entry.date || "", amount: entry.amount || 0,
+      status: entry.status || "Paid", notes: entry.notes || "",
+      paymentMode: entry.payment_mode || entry.paymentMode || "Cash",
+      chequeNo: entry.cheque_no || "", transactionId: entry.transaction_id || "",
+    });
+    setEditPayOpen(true);
+  };
+
+  const handleUpdatePayment = async () => {
+    if (!editPayId || !editPayForm.amount || !editPayForm.date) return toast.error("Amount and date required");
+    const { error } = await supabase.from("payment_history").update({
+      invoice_no: editPayForm.invoiceNo, date: editPayForm.date, amount: editPayForm.amount,
+      status: editPayForm.status, payment_mode: editPayForm.paymentMode,
+      cheque_no: editPayForm.chequeNo || null, transaction_id: editPayForm.transactionId || null,
+      notes: editPayForm.notes,
+    }).eq("id", editPayId);
+    if (error) return toast.error("Update failed: " + error.message);
+    toast.success("Payment updated");
+    setEditPayOpen(false);
+    setEditPayId(null);
+    fetchClient();
   };
 
   const sendPaymentReminder = () => {
@@ -464,23 +540,72 @@ const ClientDetail = () => {
           </div>
         </TabsContent>
 
-        {/* Social Calendar — shows next meeting from calendar_events */}
+        {/* Social Calendar — Meeting Log */}
         <TabsContent value="social">
           <Card className="p-5">
-            <h3 className="font-bold text-base mb-3 flex items-center gap-2"><Calendar className="h-4 w-4 text-primary" /> Upcoming Events & Next Meeting</h3>
-            {client.posts.length > 0 ? (
-              <div className="space-y-2">
-                {client.posts.map((post: any) => (
-                  <div key={post.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                    <div>
-                      <div className="text-sm font-semibold">{post.caption || "Untitled"}</div>
-                      <Badge variant="outline" className="text-[10px] mt-0.5">{post.post_type || post.postType}</Badge>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base flex items-center gap-2"><Calendar className="h-4 w-4 text-primary" /> Meeting Log</h3>
+              <Dialog open={meetOpen} onOpenChange={setMeetOpen}>
+                <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4 mr-1" /> Log Meeting</Button></DialogTrigger>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader><DialogTitle>Log a Meeting</DialogTitle></DialogHeader>
+                  <div className="grid gap-3 py-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label>Date *</Label><Input type="date" value={meetForm.date} onChange={e => setMeetForm(f => ({ ...f, date: e.target.value }))} /></div>
+                      <div><Label>Time</Label><Input type="time" value={meetForm.time} onChange={e => setMeetForm(f => ({ ...f, time: e.target.value }))} /></div>
                     </div>
-                    <div className="text-xs font-mono text-muted-foreground">{formatDateDDMMYYYY(new Date(post.date))}</div>
+                    <div><Label>Minutes of Meeting (MOM)</Label><Textarea rows={3} value={meetForm.mom} onChange={e => setMeetForm(f => ({ ...f, mom: e.target.value }))} placeholder="Key discussion points..." /></div>
+                    <div><Label>Action Items</Label><Textarea rows={2} value={meetForm.actionItems} onChange={e => setMeetForm(f => ({ ...f, actionItems: e.target.value }))} placeholder={"1. Follow up on proposal\n2. Send revised quote"} /></div>
+                    <div><Label>Next Meeting Date</Label><Input type="date" value={meetForm.nextMeetDate} onChange={e => setMeetForm(f => ({ ...f, nextMeetDate: e.target.value }))} /></div>
+                    <div><Label>Notes / Reminders</Label><Textarea rows={2} value={meetForm.notes} onChange={e => setMeetForm(f => ({ ...f, notes: e.target.value }))} placeholder="Custom notes, reminders..." /></div>
+                  </div>
+                  <DialogFooter><Button onClick={handleAddMeeting}>Save Meeting</Button></DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Next Meeting Banner */}
+            {(() => {
+              const upcoming = (client.meetings || []).find((m: any) => m.next_meeting_date && new Date(m.next_meeting_date) >= new Date(new Date().toDateString()));
+              if (!upcoming) return null;
+              return (
+                <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-blue-600 font-semibold">📅 Next Meeting</div>
+                    <div className="font-bold text-blue-800">{formatDateDDMMYYYY(new Date(upcoming.next_meeting_date))}</div>
+                  </div>
+                  {(client.whatsapp || client.phone) && (
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => {
+                      window.open(waLink(client.whatsapp || client.phone, `Hi ${client.name}, reminder about our meeting on ${formatDateDDMMYYYY(new Date(upcoming.next_meeting_date))}.\n— CreativeMark Advertising`), "_blank");
+                    }}><Send className="h-3.5 w-3.5 mr-1" /> Remind via WhatsApp</Button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Meeting History */}
+            {(client.meetings || []).length > 0 ? (
+              <div className="space-y-3">
+                {(client.meetings || []).map((meet: any) => (
+                  <div key={meet.id} className="p-4 rounded-lg border border-border bg-muted/20">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="font-semibold text-sm">{formatDateDDMMYYYY(new Date(meet.meeting_date))}{meet.meeting_time ? ` at ${meet.meeting_time}` : ""}</div>
+                        {meet.next_meeting_date && <div className="text-xs text-blue-600 mt-0.5">Next: {formatDateDDMMYYYY(new Date(meet.next_meeting_date))}</div>}
+                      </div>
+                      {(client.whatsapp || client.phone) && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs text-green-700 border-green-300" onClick={() => handleShareMOM(meet)}>
+                          <Send className="h-3 w-3 mr-1" /> Share MOM
+                        </Button>
+                      )}
+                    </div>
+                    {meet.mom && <div className="mb-2"><div className="text-[10px] font-semibold text-muted-foreground mb-0.5">MOM:</div><div className="text-sm whitespace-pre-wrap">{meet.mom}</div></div>}
+                    {meet.action_items && <div className="mb-2"><div className="text-[10px] font-semibold text-muted-foreground mb-0.5">Action Items:</div><div className="text-sm whitespace-pre-wrap">{meet.action_items}</div></div>}
+                    {meet.notes && <div><div className="text-[10px] font-semibold text-muted-foreground mb-0.5">Notes:</div><div className="text-sm whitespace-pre-wrap text-muted-foreground">{meet.notes}</div></div>}
                   </div>
                 ))}
               </div>
-            ) : <div className="text-sm text-muted-foreground text-center py-6">No upcoming events</div>}
+            ) : <div className="text-sm text-muted-foreground text-center py-8">No meetings logged yet. Click "Log Meeting" to record your first meeting.</div>}
           </Card>
         </TabsContent>
 
@@ -657,6 +782,42 @@ const ClientDetail = () => {
                 <DialogFooter><Button onClick={handleAddPayment}>Save & Record Payment</Button></DialogFooter>
               </DialogContent>
             </Dialog>
+
+          {/* Edit Payment Dialog */}
+          <Dialog open={editPayOpen} onOpenChange={setEditPayOpen}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Edit Payment</DialogTitle></DialogHeader>
+              <div className="grid gap-3 py-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Invoice #</Label><Input value={editPayForm.invoiceNo} onChange={e => setEditPayForm(p => ({ ...p, invoiceNo: e.target.value }))} /></div>
+                  <div><Label>Date *</Label><Input type="date" value={editPayForm.date} onChange={e => setEditPayForm(p => ({ ...p, date: e.target.value }))} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Amount *</Label><Input type="number" value={editPayForm.amount || ""} onChange={e => setEditPayForm(p => ({ ...p, amount: Number(e.target.value) }))} /></div>
+                  <div><Label>Payment Mode</Label>
+                    <Select value={editPayForm.paymentMode} onValueChange={v => setEditPayForm(p => ({ ...p, paymentMode: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{["Cash","UPI","NEFT","Cheque","Bank Transfer","Google Pay","PhonePe"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {editPayForm.paymentMode === "Cheque" && (
+                  <div><Label>Cheque Number</Label><Input value={editPayForm.chequeNo} onChange={e => setEditPayForm(p => ({ ...p, chequeNo: e.target.value }))} /></div>
+                )}
+                {["UPI","NEFT","Bank Transfer","Google Pay","PhonePe"].includes(editPayForm.paymentMode) && (
+                  <div><Label>Transaction ID</Label><Input value={editPayForm.transactionId} onChange={e => setEditPayForm(p => ({ ...p, transactionId: e.target.value }))} /></div>
+                )}
+                <div><Label>Status</Label>
+                  <Select value={editPayForm.status} onValueChange={v => setEditPayForm(p => ({ ...p, status: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{["Paid","Pending","Partial","Bounced"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Notes</Label><Textarea value={editPayForm.notes} onChange={e => setEditPayForm(p => ({ ...p, notes: e.target.value }))} /></div>
+              </div>
+              <DialogFooter><Button onClick={handleUpdatePayment}>Update Payment</Button></DialogFooter>
+            </DialogContent>
+          </Dialog>
           </div>
 
           {/* Bill Summary */}
@@ -683,7 +844,10 @@ const ClientDetail = () => {
                     <TableCell><PaymentBadge status={entry.status} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{entry.notes || "—"}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleGenerateReceipt(entry)}><Download className="h-3 w-3 mr-1" />Receipt</Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openEditPayment(entry)}><Edit2 className="h-3 w-3" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleGenerateReceipt(entry)}><Download className="h-3 w-3 mr-1" />Receipt</Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )) : (

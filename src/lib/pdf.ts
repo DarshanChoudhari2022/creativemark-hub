@@ -353,9 +353,22 @@ export async function generateQuotationPDF(q: any) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-    doc.text("Account Name: ______________________________    Bank: ______________________________", 16, y + 13);
-    doc.text("A/C No: ______________________________    IFSC: ______________________________", 16, y + 19);
-    doc.text("UPI: ______________________________", 16, y + 25);
+    
+    if (q.bankDetails || q.upiId) {
+      const bDetails = q.bankDetails ? q.bankDetails.split('\n') : [];
+      let bY = y + 13;
+      bDetails.forEach((line: string) => {
+        doc.text(line, 16, bY);
+        bY += 5;
+      });
+      if (q.upiId) {
+        doc.text(`UPI: ${q.upiId}`, 16, Math.max(bY, y + 25));
+      }
+    } else {
+      doc.text("Account Name: ______________________________    Bank: ______________________________", 16, y + 13);
+      doc.text("A/C No: ______________________________    IFSC: ______________________________", 16, y + 19);
+      doc.text("UPI: ______________________________", 16, y + 25);
+    }
     y += 34;
   }
 

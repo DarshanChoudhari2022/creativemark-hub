@@ -52,6 +52,8 @@ const Quotations = () => {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [terms, setTerms] = useState(DEFAULT_TERMS_QUOTATION);
   const [notes, setNotes] = useState("");
+  const [bankDetails, setBankDetails] = useState("");
+  const [upiId, setUpiId] = useState("");
 
   // Update terms when type changes if they are still the default
   useEffect(() => {
@@ -164,6 +166,8 @@ const Quotations = () => {
       grand_total: total,
       terms,
       internal_notes: notes,
+      bank_details: bankDetails,
+      upi_id: upiId,
     }).select().single();
 
     if (error) { toast.error("Failed to create: " + error.message); return; }
@@ -224,6 +228,8 @@ const Quotations = () => {
     setDiscountPercent(0);
     setTerms(type === "Bill" ? DEFAULT_TERMS_BILL : DEFAULT_TERMS_QUOTATION); 
     setNotes("");
+    setBankDetails("");
+    setUpiId("");
   };
 
   const shareViaWhatsApp = (q: any) => {
@@ -262,6 +268,8 @@ const Quotations = () => {
       sgstAmount: q.sgst,
       discountPercent: q.discount_percent,
       discountAmount: q.discount_amount,
+      bankDetails: q.bank_details,
+      upiId: q.upi_id,
     };
     await generateQuotationPDF(pdfData as any);
     toast.success("PDF downloaded");
@@ -334,6 +342,14 @@ const Quotations = () => {
 
     setQuotations(prev => prev.map(x => x.id === q.id ? { ...x, type: "Bill", status: "Sent", quote_number: quoteNumber, due_date: dueDate } : x));
     toast.success("Converted to Bill successfully");
+  };
+
+  const deleteQuotation = async (q: any) => {
+    if (!confirm(`Are you sure you want to delete ${q.type} ${q.quote_number}?`)) return;
+    const { error } = await supabase.from("quotations").delete().eq("id", q.id);
+    if (error) { toast.error("Failed to delete: " + error.message); return; }
+    setQuotations(prev => prev.filter(x => x.id !== q.id));
+    toast.success(`${q.type} deleted`);
   };
 
   if (loading) {
@@ -480,6 +496,34 @@ const Quotations = () => {
                       className="text-xs"
                     />
                   </div>
+                  
+                  {type === "Bill" && (
+                    <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                      <div className="col-span-2">
+                        <Label className="text-primary font-semibold">Bank Details for Payment (Optional)</Label>
+                        <p className="text-[10px] text-muted-foreground mb-2">If left blank, empty placeholders will be shown for the client to fill or you to write.</p>
+                      </div>
+                      <div>
+                        <Label>Bank Account Details</Label>
+                        <Textarea 
+                          value={bankDetails} 
+                          onChange={(e) => setBankDetails(e.target.value)} 
+                          rows={3} 
+                          placeholder="Bank Name: HDFC Bank&#10;A/C Name: CreativeMark&#10;A/C No: 1234567890&#10;IFSC: HDFC0001234" 
+                          className="text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <Label>UPI ID</Label>
+                        <Input 
+                          value={upiId} 
+                          onChange={(e) => setUpiId(e.target.value)} 
+                          placeholder="creativemark@upi" 
+                          className="text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => { setAddOpen(false); resetForm(); }}>Cancel</Button>
@@ -540,6 +584,7 @@ const Quotations = () => {
                       <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setPreviewQ(q)} title="Preview"><Eye className="h-4 w-4" /></Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => downloadPDF(q)} title="Download"><Download className="h-4 w-4" /></Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600" onClick={() => shareViaWhatsApp(q)} title="WhatsApp"><Send className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" className="h-8 px-2 text-red-600 hover:bg-red-50" onClick={() => deleteQuotation(q)} title="Delete"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                 </TableCell>
               </TableRow>

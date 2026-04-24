@@ -1,0 +1,2 @@
+ALTER TABLE quotations ADD COLUMN IF NOT EXISTS bank_details TEXT;
+ALTER TABLE quotations ADD COLUMN IF NOT EXISTS upi_id TEXT;
