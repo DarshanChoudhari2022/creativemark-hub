@@ -65,7 +65,6 @@ const Leads = () => {
     source: "Walk-in" as Lead["source"], heat: "Warm" as LeadHeat,
     assignedTo: "", services: "", notes: "", partnerRef: "",
     lastInteractionDate: "", actionItem: "", nextCallDate: "",
-    lastInteractionDate: "", actionItem: "", nextCallDate: "",
     customCategory: "", customSource: "",
     whatsappError: "",
   });

@@ -2,202 +2,399 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Quotation, Partner } from "@/types";
 
-const BRAND_RED_R = 232, BRAND_RED_G = 25, BRAND_RED_B = 44;
+// ── Brand Colors ──────────────────────────────────────────────
+const BRAND_RED = { r: 200, g: 16, b: 32 };
+const BRAND_BLACK = { r: 26, g: 26, b: 26 };
+const BRAND_GRAY = { r: 120, g: 120, b: 120 };
 
+// ── Company Info ──────────────────────────────────────────────
+const COMPANY = {
+  name: "CreativeMark",
+  tagline: "Advertising | Digital Marketing | Branding | Multimedia",
+  phone1: "+91 7447332829",
+  phone2: "+91 9890976952",
+  email: "creativemarkadvertising@gmail.com",
+  website: "https://creativemarkadvertising.com/",
+  address: "Pune, Maharashtra, India",
+  bankName: "HDFC Bank",
+  accountName: "CreativeMark Solutions",
+  accountNo: "50100456789123",
+  ifsc: "HDFC0001234",
+  branch: "Baner, Pune",
+};
+
+// ── Default Professional Terms ────────────────────────────────
+const PROFESSIONAL_TERMS_QUOTATION = [
+  "1. This quotation is valid for 15 days from the date of issue.",
+  "2. A 50% advance payment is required to commence work. Balance due upon completion.",
+  "3. Any changes in scope after approval will be quoted separately.",
+  "4. Delivery timelines begin after receipt of advance payment and all required materials from the client.",
+  "5. All intellectual property rights shall be transferred to the client only after full payment.",
+  "6. Cancellation after work has commenced will attract charges for work already completed.",
+  "7. GST will be charged as applicable at the prevailing rate.",
+  "8. This document is system-generated and does not require a physical signature.",
+];
+
+const PROFESSIONAL_TERMS_BILL = [
+  "1. Payment is due within 15 days from the date of this invoice.",
+  "2. Late payments will attract an interest of 2% per month on the outstanding amount.",
+  "3. All disputes are subject to the jurisdiction of courts in Pune, Maharashtra.",
+  "4. Services rendered are non-refundable once delivered and approved by the client.",
+  "5. GST has been charged as applicable at the prevailing rate.",
+  "6. Please quote the invoice number in all payment communications.",
+  "7. This document is system-generated and does not require a physical signature.",
+];
+
+// ── Helpers ───────────────────────────────────────────────────
 function formatDate(date: Date | string) {
-  return new Date(date).toLocaleDateString("en-IN");
+  const d = new Date(date);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
-function addLetterhead(doc: jsPDF) {
-  // Red header bar
-  doc.setFillColor(BRAND_RED_R, BRAND_RED_G, BRAND_RED_B);
-  doc.rect(0, 0, 210, 30, "F");
+function fmtINR(amount: number | string): string {
+  const val = typeof amount === "string" ? parseFloat(amount.replace(/[^\d.]/g, "")) : amount;
+  if (isNaN(val)) return "Rs. 0";
+  
+  const formatter = new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  return formatter.format(val).replace("₹", "Rs. ").trim();
+}
 
-  // Company name
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(20);
+// ── Load logo as base64 for PDF embedding ─────────────────────
+let cachedLogo: string | null = null;
+async function loadLogo(): Promise<string | null> {
+  if (cachedLogo) return cachedLogo;
+  const logoPaths = ["/logo.jpeg", "/logo-full.png", "logo.jpeg"];
+  
+  for (const path of logoPaths) {
+    try {
+      const resp = await fetch(path);
+      if (!resp.ok) continue;
+      const blob = await resp.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          cachedLogo = reader.result as string;
+          resolve(cachedLogo);
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.error(`Failed to load logo from ${path}`, e);
+    }
+  }
+  return null;
+}
+
+// ── Letterhead ────────────────────────────────────────────────
+function addLetterhead(doc: jsPDF, logoBase64: string | null) {
+  const pageW = doc.internal.pageSize.getWidth();
+
+  // Decorative Top Accent (Slim Red Bar)
+  doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.rect(0, 0, pageW, 2, "F");
+
+  // Logo (if available)
+  if (logoBase64) {
+    // Logo is wide, place it on the left
+    doc.addImage(logoBase64, "JPEG", 12, 8, 60, 18, undefined, 'FAST');
+  } else {
+    // Fallback text logo (Brand Red)
+    doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("CreativeMark", 15, 22);
+  }
+
+  // Right side: Company details
+  const rX = pageW - 15;
+  doc.setFontSize(10);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.setFont("helvetica", "bold");
-  doc.text("CreativeMark", 15, 16);
-
-  // Tagline
-  doc.setFontSize(8);
+  doc.text(COMPANY.name, rX, 12, { align: "right" });
+  
   doc.setFont("helvetica", "normal");
-  doc.text("Advertising | Digital Marketing | Branding | Multimedia", 15, 23);
+  doc.setFontSize(7.5);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text(COMPANY.tagline, rX, 16.5, { align: "right" });
+  
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text(`${COMPANY.phone1} | ${COMPANY.email}`, rX, 21, { align: "right" });
+  
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setFont("helvetica", "bold");
+  doc.text(COMPANY.website.replace("https://", ""), rX, 25.5, { align: "right" });
+  // Make it clickable
+  const webW = doc.getTextWidth(COMPANY.website.replace("https://", ""));
+  doc.link(rX - webW, 25.5 - 3, webW, 5, { url: COMPANY.website });
 
-  // Contact info right
-  doc.setFontSize(7);
-  doc.text("+91 98765 43210 | hello@creativemark.in", 195, 16, { align: "right" });
-  doc.text("301, Baner Road, Pune — 411045", 195, 21, { align: "right" });
+  // Divider Line
+  doc.setDrawColor(230, 230, 230);
+  doc.setLineWidth(0.5);
+  doc.line(12, 32, pageW - 12, 32);
 
-  // Reset color
-  doc.setTextColor(26, 26, 26);
+  // Reset text color for body
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.setFont("helvetica", "normal");
 }
 
+// ── Footer ────────────────────────────────────────────────────
 function addFooter(doc: jsPDF, pageNum: number) {
-  const y = 280;
-  doc.setDrawColor(200, 200, 200);
-  doc.line(15, y, 195, y);
-  doc.setFontSize(7);
-  doc.setTextColor(150, 150, 150);
-  doc.text("CreativeMark — www.creativemark.in", 15, y + 5);
-  doc.text(`Page ${pageNum}`, 195, y + 5, { align: "right" });
-  doc.setTextColor(26, 26, 26);
+  const pageW = doc.internal.pageSize.getWidth();
+  const y = 285;
+  
+  doc.setDrawColor(230, 230, 230);
+  doc.setLineWidth(0.3);
+  doc.line(12, y, pageW - 12, y);
+
+  doc.setFontSize(7.5);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  const footerWebText = `Official Website: ${COMPANY.website.replace("https://", "").replace(/\/$/, "")}`;
+  doc.text(footerWebText, 15, y + 6);
+  
+  // Make footer website clickable
+  const fwW = doc.getTextWidth(footerWebText);
+  doc.link(15, y + 6 - 3, fwW, 5, { url: COMPANY.website });
+
+  doc.text(`Contact: ${COMPANY.phone1} | ${COMPANY.email}`, pageW / 2, y + 6, { align: "center" });
+  doc.text(`Page ${pageNum}`, pageW - 15, y + 6, { align: "right" });
+  
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
 }
 
-export function generateQuotationPDF(q: any) {
+// ── Quotation / Bill PDF ──────────────────────────────────────
+export async function generateQuotationPDF(q: any) {
   const doc = new jsPDF();
-  addLetterhead(doc);
+  const pageW = doc.internal.pageSize.getWidth();
+  const logoBase64 = await loadLogo();
+  addLetterhead(doc, logoBase64);
 
   const isBill = q.type === "Bill";
-  let y = 40;
+  let y = 36;
 
-  // Title
-  doc.setFontSize(18);
+  // ── Title ─────────────────────────────────────────────────
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.text(isBill ? "TAX INVOICE" : "QUOTATION", 15, y);
-  
-  // Status Badge (optional for internal use, but maybe keep it clean for client)
-  y += 8;
 
-  // Document details
+  // ── Document number badge ─────────────────────────────────
+  const docNum = q.quoteNumber || q.quote_number || q.number || "";
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text(docNum, pageW - 15, y, { align: "right" });
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  y += 10;
+
+  // ── Bill To section ───────────────────────────────────────
+  doc.setFillColor(248, 248, 248);
+  doc.roundedRect(12, y - 2, 85, 26, 2, 2, "F");
+
+  doc.setFontSize(7);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text("BILL TO", 16, y + 3);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  
-  // Left side: To details
   doc.setFont("helvetica", "bold");
-  doc.text("Bill To:", 15, y);
+  doc.text(q.clientName || q.client_name || "Client", 16, y + 9);
   doc.setFont("helvetica", "normal");
-  doc.text(q.clientName || "Client Name", 15, y + 5);
-  if (q.clientPhone) doc.text(`Phone: ${q.clientPhone}`, 15, y + 10);
-  
-  // Right side: Meta details
-  const rightX = 130;
-  doc.text(`${isBill ? "Invoice" : "Quotation"} #: ${q.quoteNumber || q.number}`, rightX, y);
-  doc.text(`Date: ${formatDate(q.date || new Date())}`, rightX, y + 5);
-  if (isBill) {
-    doc.text(`Due Date: ${formatDate(q.dueDate || q.date)}`, rightX, y + 10);
-  } else {
-    doc.text(`Valid Until: ${formatDate(q.validUntil || q.date)}`, rightX, y + 10);
+  doc.setFontSize(8);
+  if (q.clientPhone || q.client_phone) {
+    doc.text(`Phone: ${q.clientPhone || q.client_phone}`, 16, y + 14);
   }
-  
-  y += 20;
+  if (q.clientEmail || q.client_email) {
+    doc.text(`Email: ${q.clientEmail || q.client_email}`, 16, y + 19);
+  }
 
-  // Line items table
+  // ── Document Details (right side) ─────────────────────────
+  const metaX = 120;
+  doc.setFontSize(8);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text("Date:", metaX, y + 4);
+  doc.text(isBill ? "Due Date:" : "Valid Until:", metaX, y + 10);
+  doc.text("Status:", metaX, y + 16);
+
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.setFont("helvetica", "bold");
+  doc.text(formatDate(q.date || new Date()), metaX + 25, y + 4);
+  doc.text(
+    formatDate(q.dueDate || q.due_date || q.validUntil || q.valid_until || q.date || new Date()),
+    metaX + 25, y + 10
+  );
+  doc.text(q.status || "Draft", metaX + 25, y + 16);
+  doc.setFont("helvetica", "normal");
+
+  y += 32;
+
+  // ── Items Table ───────────────────────────────────────────
+  const items = q.items || q.quotation_items || [];
   autoTable(doc, {
     startY: y,
-    head: [["#", "Service & Description", "Qty", "Rate (₹)", "Amount (₹)"]],
-    body: (q.items || []).map((item: any, i: number) => [
+    head: [["#", "Service & Description", "Qty", "Rate (Rs.)", "Amount (Rs.)"]],
+    body: items.map((item: any, i: number) => [
       String(i + 1),
-      { content: `${item.serviceName}\n${item.description || ""}`, styles: { cellPadding: { top: 2, bottom: 2 } } },
-      String(item.quantity),
-      (item.rate || 0).toLocaleString("en-IN"),
-      (item.amount || 0).toLocaleString("en-IN"),
+      item.serviceName || item.service_name || item.description || "",
+      String(item.quantity || 1),
+      fmtINR(item.rate || 0),
+      fmtINR(item.amount || 0),
     ]),
     headStyles: {
-      fillColor: [BRAND_RED_R, BRAND_RED_G, BRAND_RED_B],
+      fillColor: [BRAND_RED.r, BRAND_RED.g, BRAND_RED.b],
       textColor: [255, 255, 255],
       fontStyle: "bold",
-      fontSize: 9,
+      fontSize: 8.5,
+      cellPadding: 4,
     },
-    bodyStyles: { fontSize: 9, cellPadding: 3 },
-    alternateRowStyles: { fillColor: [250, 250, 250] },
+    bodyStyles: {
+      fontSize: 8.5,
+      cellPadding: 4,
+      textColor: [BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b],
+    },
+    alternateRowStyles: { fillColor: [252, 252, 252] },
     columnStyles: {
-      0: { cellWidth: 10, halign: "center" },
-      2: { cellWidth: 15, halign: "center" },
-      3: { cellWidth: 30, halign: "right" },
-      4: { cellWidth: 30, halign: "right" },
+      0: { cellWidth: 12, halign: "center" },
+      1: { cellWidth: "auto" },
+      2: { cellWidth: 16, halign: "center" },
+      3: { cellWidth: 32, halign: "right" },
+      4: { cellWidth: 32, halign: "right", fontStyle: "bold" },
     },
-    margin: { left: 15, right: 15 },
+    margin: { left: 12, right: 12 },
+    tableLineColor: [230, 230, 230],
+    tableLineWidth: 0.1,
   });
 
-  y = (doc as any).lastAutoTable.finalY + 8;
+  y = (doc as any).lastAutoTable.finalY + 10;
 
-  // Totals Area
-  const totalsX = 130;
-  doc.setFontSize(10);
+  // ── Totals ────────────────────────────────────────────────
+  const totalsX = 125;
+
+  doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  
+
   // Subtotal
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
   doc.text("Subtotal:", totalsX, y);
-  doc.text(`₹${(q.subtotal || 0).toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text(fmtINR(q.subtotal || 0), pageW - 15, y, { align: "right" });
   y += 6;
 
   // Discount
-  if ((q.discountAmount || 0) > 0) {
-    doc.setTextColor(34, 197, 94); // emerald-600
-    doc.text(`Discount (${q.discountPercent}%):`, totalsX, y);
-    doc.text(`- ₹${q.discountAmount.toLocaleString("en-IN")}`, 195, y, { align: "right" });
-    doc.setTextColor(26, 26, 26);
+  if ((q.discountAmount || q.discount_amount || 0) > 0) {
+    const dAmt = q.discountAmount || q.discount_amount || 0;
+    const dPct = q.discountPercent || q.discount_percent || 0;
+    doc.setTextColor(34, 150, 80);
+    doc.text(`Discount (${dPct}%):`, totalsX, y);
+    doc.text(`- ${fmtINR(dAmt)}`, pageW - 15, y, { align: "right" });
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
     y += 6;
   }
 
-  // GST Breakdown
-  if (q.gstApplicable) {
-    doc.setFontSize(9);
-    doc.text(`CGST (9%):`, totalsX, y);
-    doc.text(`₹${(q.cgstAmount || 0).toLocaleString("en-IN")}`, 195, y, { align: "right" });
+  // GST
+  if (q.gstApplicable || q.gst_applicable) {
+    doc.setFontSize(8);
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text("CGST (9%):", totalsX, y);
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(fmtINR(q.cgstAmount || q.cgst || 0), pageW - 15, y, { align: "right" });
     y += 5;
-    doc.text(`SGST (9%):`, totalsX, y);
-    doc.text(`₹${(q.sgstAmount || 0).toLocaleString("en-IN")}`, 195, y, { align: "right" });
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text("SGST (9%):", totalsX, y);
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(fmtINR(q.sgstAmount || q.sgst || 0), pageW - 15, y, { align: "right" });
     y += 6;
   }
 
-  // Grand Total
-  doc.setDrawColor(200, 200, 200);
-  doc.line(totalsX, y - 4, 195, y - 4);
+  // Total Amount — highlighted
+  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setLineWidth(0.5);
+  doc.line(totalsX - 2, y - 2, pageW - 12, y - 2);
+
+  doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.roundedRect(totalsX - 2, y, pageW - totalsX + 2 - 10, 10, 1, 1, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(BRAND_RED_R, BRAND_RED_G, BRAND_RED_B);
-  doc.text("Total Amount:", totalsX, y + 2);
-  doc.text(`₹${(q.grandTotal || q.total || 0).toLocaleString("en-IN")}`, 195, y + 2, { align: "right" });
-  doc.setTextColor(26, 26, 26);
-  y += 15;
+  doc.setFontSize(10); // Slightly smaller to be less "big"
+  doc.setTextColor(255, 255, 255);
+  doc.text("Total Amount:", totalsX + 2, y + 7);
+  doc.text(fmtINR(q.grandTotal || q.grand_total || q.total || 0), pageW - 15, y + 7, { align: "right" });
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  y += 18;
 
-  // Terms
-  if (q.terms) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("Terms & Conditions", 15, y);
-    y += 5;
-    doc.setFont("helvetica", "normal");
+  // ── Amount in Words ───────────────────────────────────────
+  const totalVal = q.grandTotal || q.grand_total || q.total || 0;
+  if (totalVal > 0) {
     doc.setFontSize(8);
-    const lines = doc.splitTextToSize(q.terms, 175);
-    doc.text(lines, 15, y);
-    y += lines.length * 4 + 8;
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text(`Amount in words: ${numberToWords(totalVal)} Rupees Only`, 15, y);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    y += 8;
   }
 
-  // Bank Details (only if bill or specific option)
+  // ── Bank Details (for Bill) ───────────────────────────────
   if (isBill) {
-    doc.setFillColor(245, 245, 245);
-    doc.rect(15, y, 180, 20, "F");
+    doc.setFillColor(245, 247, 250);
+    doc.roundedRect(12, y, pageW - 24, 22, 2, 2, "F");
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    doc.text("BANK DETAILS FOR PAYMENT", 20, y + 6);
+    doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+    doc.text("BANK DETAILS FOR PAYMENT", 16, y + 6);
     doc.setFont("helvetica", "normal");
-    doc.text("Account Name: CreativeMark Solutions Pvt Ltd", 20, y + 11);
-    doc.text("Bank: HDFC Bank | A/C: 50100456789123 | IFSC: HDFC0001234 | Branch: Baner, Pune", 20, y + 15);
-    y += 30;
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(`Account Name: ${COMPANY.accountName}`, 16, y + 12);
+    doc.text(`Bank: ${COMPANY.bankName}  |  A/C: ${COMPANY.accountNo}  |  IFSC: ${COMPANY.ifsc}  |  Branch: ${COMPANY.branch}`, 16, y + 17);
+    y += 28;
   }
 
-  // Signature Placeholders
-  doc.setFontSize(9);
-  doc.text("For CreativeMark", 155, y);
-  y += 15;
-  doc.setDrawColor(150, 150, 150);
-  doc.line(150, y, 195, y);
+  // ── Terms & Conditions ────────────────────────────────────
+  const termsToUse = q.terms
+    ? q.terms.split("\n")
+    : isBill ? PROFESSIONAL_TERMS_BILL : PROFESSIONAL_TERMS_QUOTATION;
+
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
-  doc.text("Authorized Signatory", 172, y + 4, { align: "center" });
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text("Terms & Conditions", 15, y);
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  termsToUse.forEach((term: string) => {
+    const lines = doc.splitTextToSize(term.trim(), 170);
+    doc.text(lines, 15, y);
+    y += lines.length * 3.5 + 1;
+  });
+
+  // ── Signature ─────────────────────────────────────────────
+  y = Math.max(y + 8, 250);
+  doc.setFontSize(9);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.setFont("helvetica", "bold");
+  doc.text(`For ${COMPANY.name}`, pageW - 60, y);
+  y += 14;
+  doc.setDrawColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.line(pageW - 70, y, pageW - 15, y);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.text("Authorized Signatory", pageW - 42, y + 4, { align: "center" });
 
   addFooter(doc, 1);
-  doc.save(`${q.quoteNumber || q.number}.pdf`);
+  doc.save(`${q.quoteNumber || q.quote_number || q.number || "document"}.pdf`);
 }
 
-export function generatePartnerAgreementPDF(partner: Partner) {
+// ── Partner Agreement PDF ─────────────────────────────────────
+export async function generatePartnerAgreementPDF(partner: Partner) {
   const doc = new jsPDF();
-  addLetterhead(doc);
+  const logoBase64 = await loadLogo();
+  addLetterhead(doc, logoBase64);
 
-  let y = 40;
+  let y = 36;
 
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
@@ -206,7 +403,7 @@ export function generatePartnerAgreementPDF(partner: Partner) {
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Date: ${formatDateDDMMYYYY(partner.agreementDate || "")}`, 15, y);
+  doc.text(`Date: ${formatDate(partner.agreementDate || "")}`, 15, y);
   y += 8;
 
   doc.setFont("helvetica", "bold");
@@ -225,7 +422,7 @@ export function generatePartnerAgreementPDF(partner: Partner) {
   if (partner.commissionType === "Percentage") {
     doc.text(`Type: Percentage — ${partner.commissionRate}% of project value`, 15, y);
   } else {
-    doc.text(`Type: Flat Amount — ₹${partner.commissionRate?.toLocaleString("en-IN")} per referred lead`, 15, y);
+    doc.text(`Type: Flat Amount — ${fmtINR(partner.commissionRate || 0)} per referred lead`, 15, y);
   }
   y += 10;
 
@@ -251,7 +448,7 @@ export function generatePartnerAgreementPDF(partner: Partner) {
 
   y += 15;
   doc.setFontSize(10);
-  doc.text("For CreativeMark", 15, y);
+  doc.text(`For ${COMPANY.name}`, 15, y);
   doc.text(`Partner: ${partner.name}`, 110, y);
   y += 12;
   doc.setDrawColor(100, 100, 100);
@@ -266,8 +463,21 @@ export function generatePartnerAgreementPDF(partner: Partner) {
   doc.save(`Agreement-${partner.name.replace(/\s+/g, "-")}.pdf`);
 }
 
-function formatDateDDMMYYYY(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+// ── Number to Words (Indian system) ───────────────────────────
+function numberToWords(num: number): string {
+  if (num === 0) return "Zero";
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+    "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+  function convert(n: number): string {
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
+    if (n < 1000) return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " and " + convert(n % 100) : "");
+    if (n < 100000) return convert(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + convert(n % 1000) : "");
+    if (n < 10000000) return convert(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + convert(n % 100000) : "");
+    return convert(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 ? " " + convert(n % 10000000) : "");
+  }
+  return convert(Math.round(num));
 }

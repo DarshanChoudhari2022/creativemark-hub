@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
-import { SERVICE_PRESETS, DEFAULT_TERMS } from "@/data/quotations";
+import { SERVICE_PRESETS, DEFAULT_TERMS_QUOTATION, DEFAULT_TERMS_BILL } from "@/data/quotations";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { generateQuotationPDF } from "@/lib/pdf";
@@ -50,7 +50,7 @@ const Quotations = () => {
   const [items, setItems] = useState<LineItem[]>([emptyItem()]);
   const [gstEnabled, setGstEnabled] = useState(false); // DEFAULT OFF
   const [discountPercent, setDiscountPercent] = useState(0);
-  const [terms, setTerms] = useState(DEFAULT_TERMS);
+  const [terms, setTerms] = useState(DEFAULT_TERMS_QUOTATION);
   const [notes, setNotes] = useState("");
 
   // Fetch data
@@ -228,12 +228,14 @@ const Quotations = () => {
     else toast.error("No phone number found for this recipient");
   };
 
-  const downloadPDF = (q: any) => {
+  const downloadPDF = async (q: any) => {
     // Map Supabase shape to PDF generator expected shape
     const pdfData = {
       ...q,
       quoteNumber: q.quote_number,
       clientName: q.client_name,
+      clientPhone: q.client_phone,
+      clientEmail: q.client_email,
       items: (q.quotation_items || []).map((i: any) => ({
         description: i.description || i.service_name,
         serviceName: i.service_name,
@@ -249,7 +251,7 @@ const Quotations = () => {
       discountPercent: q.discount_percent,
       discountAmount: q.discount_amount,
     };
-    generateQuotationPDF(pdfData as any);
+    await generateQuotationPDF(pdfData as any);
     toast.success("PDF downloaded");
   };
 

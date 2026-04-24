@@ -218,8 +218,8 @@ const Partners = () => {
                 <TableCell className={`text-right font-semibold ${p.pendingCommission > 0 ? "text-primary" : ""}`}>{formatINR(p.pendingCommission)}</TableCell>
                 <TableCell><Badge variant="outline" className={`text-[11px] ${p.status === "Active" ? "bg-green-100 text-green-700 border-green-200" : "bg-gray-100 text-gray-500"}`}>{p.status}</Badge></TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
-                    generatePartnerAgreementPDF(p);
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={async () => {
+                    await generatePartnerAgreementPDF(p);
                     toast.success("Agreement PDF downloaded");
                   }}>
                     <FileText className="h-3.5 w-3.5" /> Agreement
@@ -298,8 +298,8 @@ const Partners = () => {
             </div>
 
             <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => {
-                generatePartnerAgreementPDF(detailPartner);
+              <Button variant="outline" onClick={async () => {
+                await generatePartnerAgreementPDF(detailPartner);
                 toast.success("Agreement PDF downloaded");
               }}>
                 <Download className="h-4 w-4" /> Download Agreement
