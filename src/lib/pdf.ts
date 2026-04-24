@@ -532,3 +532,116 @@ function numberToWords(num: number): string {
   }
   return convert(Math.round(num));
 }
+
+// ── Receipt PDF ──────────────────────────────────────────────
+export async function generateReceiptPDF(receipt: {
+  clientName: string;
+  invoiceNo: string;
+  date: string;
+  amount: number;
+  paymentMode: string;
+  chequeNo?: string;
+  transactionId?: string;
+  notes?: string;
+  totalBilled?: number;
+  totalPaid?: number;
+  balanceDue?: number;
+}) {
+  const doc = new jsPDF();
+  const pageW = doc.internal.pageSize.getWidth();
+  const logoBase64 = await loadLogo();
+  addLetterhead(doc, logoBase64);
+
+  let y = 38;
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text("PAYMENT RECEIPT", pageW / 2, y, { align: "center" });
+  y += 4;
+  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setLineWidth(0.5);
+  doc.line(65, y, pageW - 65, y);
+  y += 12;
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  const details: [string, string][] = [
+    ["Receipt Date", formatDate(receipt.date)],
+    ["Invoice Reference", receipt.invoiceNo || "\u2014"],
+    ["Client Name", receipt.clientName],
+    ["Payment Mode", receipt.paymentMode || "Cash"],
+  ];
+  if (receipt.chequeNo) details.push(["Cheque No.", receipt.chequeNo]);
+  if (receipt.transactionId) details.push(["Transaction ID", receipt.transactionId]);
+
+  details.forEach(([label, value]) => {
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text(`${label}:`, 20, y);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(value, 70, y);
+    y += 6;
+  });
+  y += 8;
+
+  doc.setFillColor(248, 248, 248);
+  doc.roundedRect(15, y - 2, pageW - 30, 30, 3, 3, "F");
+  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(15, y - 2, pageW - 30, 30, 3, 3, "S");
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text("Amount Received:", 22, y + 8);
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text(fmtINR(receipt.amount), 22, y + 20);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text(`(${numberToWords(receipt.amount)} Rupees Only)`, 22, y + 26);
+  y += 38;
+
+  if (receipt.totalBilled && receipt.totalBilled > 0) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text("Account Summary", 20, y); y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.text(`Total Billed: ${fmtINR(receipt.totalBilled)}`, 20, y); y += 5;
+    doc.text(`Total Paid: ${fmtINR(receipt.totalPaid || 0)}`, 20, y); y += 5;
+    const bal = receipt.balanceDue ?? (receipt.totalBilled - (receipt.totalPaid || 0));
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(bal > 0 ? BRAND_RED.r : 0, bal > 0 ? BRAND_RED.g : 128, bal > 0 ? BRAND_RED.b : 0);
+    doc.text(`Balance Due: ${fmtINR(bal)}`, 20, y); y += 10;
+  }
+
+  if (receipt.notes) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text(`Notes: ${receipt.notes}`, 20, y); y += 8;
+  }
+
+  y = Math.max(y + 15, 220);
+  doc.setDrawColor(220, 220, 220);
+  doc.line(15, y, pageW - 15, y); y += 8;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text(`For ${COMPANY.name}`, 15, y); y += 18;
+  doc.setDrawColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.line(15, y, 80, y); y += 5;
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "normal");
+  doc.text("Authorized Signatory", 15, y); y += 12;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text("Thank you for your payment. We value your business!", pageW / 2, y, { align: "center" });
+  addFooter(doc, 1);
+  doc.save(`Receipt_${receipt.clientName.replace(/\s+/g, "_")}_${receipt.invoiceNo || "payment"}.pdf`);
+}

@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, Camera, FileText, Wallet, Instagram, Facebook, Twitter, Linkedin, Send, Plus, Trash2, Bell } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, Camera, FileText, Wallet, Instagram, Facebook, Twitter, Linkedin, Send, Plus, Trash2, Bell, MessageSquare, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader, PaymentBadge } from "@/components/shared";
 import { supabase } from "@/lib/supabase";
 import type { Client } from "@/types";
-import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
+import { formatINR, formatDateDDMMYYYY, waLink, smsLink } from "@/lib/format";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
+import { generateReceiptPDF } from "@/lib/pdf";
 import { toast } from "sonner";
 
 const PLATFORM_ICONS: Record<string, React.ElementType> = {
@@ -46,10 +47,12 @@ const ClientDetail = () => {
   const [shootOpen, setShootOpen] = useState(false);
   const [postOpen, setPostOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
+  const [svcOpen, setSvcOpen] = useState(false);
+  const [svcName, setSvcName] = useState("");
   const [teamEmpId, setTeamEmpId] = useState("");
   const [shootForm, setShootForm] = useState({ date: "", time: "", location: "", crew: [] as string[], notes: "", billAmount: 0 });
   const [postForm, setPostForm] = useState({ date: "", platform: "Instagram", postType: "Image", caption: "", status: "Draft" });
-  const [payForm, setPayForm] = useState({ invoiceNo: "", date: "", amount: 0, status: "Pending", notes: "" });
+  const [payForm, setPayForm] = useState({ invoiceNo: "", date: "", amount: 0, status: "Paid", notes: "", paymentMode: "UPI" as string, chequeNo: "", transactionId: "" });
 
   const fetchClient = async () => {
     if (!id) return;
@@ -177,20 +180,85 @@ const ClientDetail = () => {
       date: payForm.date,
       amount: payForm.amount,
       status: payForm.status,
+      payment_mode: payForm.paymentMode,
+      cheque_no: payForm.chequeNo || null,
+      transaction_id: payForm.transactionId || null,
       notes: payForm.notes
     });
     if (error) return toast.error(error.message);
     
-    if (payForm.status === 'Paid') {
-      await supabase.from('clients').update({
-        outstanding: Math.max(0, (client.outstanding || 0) - Number(payForm.amount))
-      }).eq('id', id);
-    }
+    // Always update outstanding when recording a received payment
+    await supabase.from('clients').update({
+      outstanding: Math.max(0, (client.outstanding || 0) - Number(payForm.amount))
+    }).eq('id', id);
     
-    toast.success("Payment recorded");
+    const savedForm = { ...payForm };
+    toast.success("Payment recorded! ✅", {
+      action: {
+        label: "Generate Receipt",
+        onClick: () => {
+          generateReceiptPDF({
+            clientName: client.name,
+            invoiceNo: savedForm.invoiceNo,
+            date: savedForm.date,
+            amount: savedForm.amount,
+            paymentMode: savedForm.paymentMode,
+            chequeNo: savedForm.chequeNo,
+            transactionId: savedForm.transactionId,
+            notes: savedForm.notes,
+            totalBilled: client.totalBilled,
+            totalPaid: totalReceived + savedForm.amount,
+            balanceDue: Math.max(0, client.totalBilled - totalReceived - savedForm.amount),
+          });
+        }
+      }
+    });
     setPayOpen(false);
-    setPayForm({ invoiceNo: "", date: "", amount: 0, status: "Pending", notes: "" });
+    setPayForm({ invoiceNo: "", date: "", amount: 0, status: "Paid", notes: "", paymentMode: "UPI", chequeNo: "", transactionId: "" });
     fetchClient();
+  };
+
+  const handleAddService = async () => {
+    if (!svcName.trim()) return toast.error("Service name required");
+    const { error } = await supabase.from('client_services').insert({ client_id: id, service_name: svcName.trim(), active: true });
+    if (error) return toast.error(error.message);
+    toast.success("Service added");
+    setSvcOpen(false);
+    setSvcName("");
+    fetchClient();
+  };
+
+  const handleRemoveService = async (svcId: string) => {
+    const { error } = await supabase.from('client_services').delete().eq('id', svcId);
+    if (error) return toast.error(error.message);
+    toast.success("Service removed");
+    fetchClient();
+  };
+
+  const handleGenerateReceipt = (entry: any) => {
+    generateReceiptPDF({
+      clientName: client.name,
+      invoiceNo: entry.invoice_no || entry.invoiceNo || "",
+      date: entry.date,
+      amount: entry.amount,
+      paymentMode: entry.payment_mode || entry.paymentMode || "Cash",
+      chequeNo: entry.cheque_no || "",
+      transactionId: entry.transaction_id || "",
+      notes: entry.notes,
+      totalBilled: client.totalBilled,
+      totalPaid: totalReceived,
+      balanceDue: client.outstanding,
+    });
+  };
+
+  const sendPaymentReminder = () => {
+    const msg = WHATSAPP_TEMPLATES.RECOVERY_SOFT(client.name, formatINR(client.outstanding), "");
+    window.open(waLink(client.whatsapp, msg), "_blank");
+  };
+
+  const sendPaymentReminderSMS = () => {
+    const msg = `Hi ${client.name}, this is a friendly reminder from CreativeMark regarding your pending balance of ${formatINR(client.outstanding)}. Kindly process the payment at the earliest. Thank you!`;
+    window.open(smsLink(client.phone, msg), "_blank");
   };
 
 
@@ -213,6 +281,7 @@ const ClientDetail = () => {
   }
 
   const assigned = employees.filter((e) => client.assignedEmployees.includes(e.id));
+  const totalReceived = useMemo(() => (client.paymentHistory || []).reduce((s: number, p: any) => s + (p.amount || 0), 0), [client.paymentHistory]);
 
   return (
     <div>
@@ -254,13 +323,13 @@ const ClientDetail = () => {
             <div className="text-xs text-muted-foreground">Total Billed</div>
             <div className="text-xl font-extrabold">{formatINR(client.totalBilled)}</div>
           </div>
+          <div className="text-center p-3 bg-green-50 rounded-lg">
+            <div className="text-xs text-muted-foreground">Received</div>
+            <div className="text-xl font-extrabold text-green-600">{formatINR(totalReceived)}</div>
+          </div>
           <div className="text-center p-3 bg-muted/30 rounded-lg">
             <div className="text-xs text-muted-foreground">Outstanding</div>
             <div className={`text-xl font-extrabold ${client.outstanding > 0 ? "text-primary" : ""}`}>{formatINR(client.outstanding)}</div>
-          </div>
-          <div className="text-center p-3 bg-muted/30 rounded-lg">
-            <div className="text-xs text-muted-foreground">Monthly Retainer</div>
-            <div className="text-xl font-extrabold">{client.monthlyRetainer > 0 ? formatINR(client.monthlyRetainer) : "—"}</div>
           </div>
           <div className="text-center p-3 bg-muted/30 rounded-lg">
             <div className="text-xs text-muted-foreground">Team Members</div>
@@ -293,15 +362,28 @@ const ClientDetail = () => {
         <TabsContent value="services">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="p-5">
-              <h3 className="font-bold text-base mb-3">Active Services</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-base">Active Services</h3>
+                <Dialog open={svcOpen} onOpenChange={setSvcOpen}>
+                  <DialogTrigger asChild><Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1" />Add</Button></DialogTrigger>
+                  <DialogContent className="max-w-sm">
+                    <DialogHeader><DialogTitle>Add Service</DialogTitle></DialogHeader>
+                    <div><Label>Service Name</Label><Input value={svcName} onChange={e => setSvcName(e.target.value)} placeholder="e.g. Social Media, Reels, Logo Design" /></div>
+                    <DialogFooter><Button onClick={handleAddService}>Save</Button></DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
               <div className="space-y-2">
                 {client.services.map((s: any) => {
                   const serviceName = typeof s === 'string' ? s : (s.service_name || s.serviceName);
-                  const serviceId = typeof s === 'string' ? s : (s.id || s.service_name);
+                  const serviceId = typeof s === 'string' ? s : s.id;
                   return (
-                    <div key={serviceId} className="flex items-center gap-2 p-2 rounded-lg border border-border">
-                      <span className="h-2 w-2 rounded-full bg-primary" />
-                      <span className="text-sm font-medium">{serviceName}</span>
+                    <div key={serviceId} className="flex items-center justify-between p-2 rounded-lg border border-border">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                        <span className="text-sm font-medium">{serviceName}</span>
+                      </div>
+                      {typeof s !== 'string' && s.id && <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRemoveService(s.id)}><Trash2 className="h-3 w-3" /></Button>}
                     </div>
                   );
                 })}
@@ -495,31 +577,40 @@ const ClientDetail = () => {
 
         {/* Payment History */}
         <TabsContent value="payments">
-          <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
             {client.outstanding > 0 && client.whatsapp && (
-              <a href={waLink(client.whatsapp, `Hi ${client.name}, this is a friendly reminder regarding your pending balance of ₹${client.outstanding}. Kindly clear the dues at the earliest. Thank you! — CreativeMark`)} target="_blank" rel="noopener">
-                <Button size="sm" variant="outline" className="text-green-700 border-green-300 hover:bg-green-50"><Bell className="h-4 w-4 mr-1" /> Send Payment Reminder</Button>
-              </a>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="text-green-700 border-green-300 hover:bg-green-50" onClick={sendPaymentReminder}><Send className="h-4 w-4 mr-1" /> WhatsApp Reminder</Button>
+                <Button size="sm" variant="outline" className="text-blue-700 border-blue-300 hover:bg-blue-50" onClick={sendPaymentReminderSMS}><MessageSquare className="h-4 w-4 mr-1" /> SMS Reminder</Button>
+              </div>
             )}
             <Dialog open={payOpen} onOpenChange={setPayOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4 mr-1" /> Record Payment</Button></DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Record Payment Received</DialogTitle></DialogHeader>
                 <div className="grid gap-3 py-2">
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label>Invoice #</Label><Input value={payForm.invoiceNo} onChange={e => setPayForm(p => ({ ...p, invoiceNo: e.target.value }))} placeholder="INV-001" /></div>
-                    <div><Label>Date</Label><Input type="date" value={payForm.date} onChange={e => setPayForm(p => ({ ...p, date: e.target.value }))} /></div>
+                    <div><Label>Date *</Label><Input type="date" value={payForm.date} onChange={e => setPayForm(p => ({ ...p, date: e.target.value }))} /></div>
                   </div>
-                  <div><Label>Amount (₹)</Label><Input type="number" value={payForm.amount || ""} onChange={e => setPayForm(p => ({ ...p, amount: Number(e.target.value) }))} /></div>
-                  <div><Label>Status</Label>
-                    <Select value={payForm.status} onValueChange={v => setPayForm(p => ({ ...p, status: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{["Pending","Paid","Overdue","Partial"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Amount (₹) *</Label><Input type="number" value={payForm.amount || ""} onChange={e => setPayForm(p => ({ ...p, amount: Number(e.target.value) }))} /></div>
+                    <div><Label>Payment Mode</Label>
+                      <Select value={payForm.paymentMode} onValueChange={v => setPayForm(p => ({ ...p, paymentMode: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{["Cash","UPI","NEFT","Cheque","Bank Transfer","Google Pay","PhonePe"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div><Label>Notes</Label><Textarea value={payForm.notes} onChange={e => setPayForm(p => ({ ...p, notes: e.target.value }))} /></div>
+                  {payForm.paymentMode === "Cheque" && (
+                    <div><Label>Cheque Number</Label><Input value={payForm.chequeNo} onChange={e => setPayForm(p => ({ ...p, chequeNo: e.target.value }))} placeholder="e.g. 123456" /></div>
+                  )}
+                  {["UPI","NEFT","Bank Transfer","Google Pay","PhonePe"].includes(payForm.paymentMode) && (
+                    <div><Label>Transaction ID / Reference</Label><Input value={payForm.transactionId} onChange={e => setPayForm(p => ({ ...p, transactionId: e.target.value }))} placeholder="e.g. TXN202604240001" /></div>
+                  )}
+                  <div><Label>Notes</Label><Textarea value={payForm.notes} onChange={e => setPayForm(p => ({ ...p, notes: e.target.value }))} placeholder="e.g. Partial payment for April services" /></div>
                 </div>
-                <DialogFooter><Button onClick={handleAddPayment}>Save Payment</Button></DialogFooter>
+                <DialogFooter><Button onClick={handleAddPayment}>Save & Record Payment</Button></DialogFooter>
               </DialogContent>
             </Dialog>
           </div>
@@ -527,28 +618,32 @@ const ClientDetail = () => {
           {/* Bill Summary */}
           <div className="grid grid-cols-3 gap-3 mb-4">
             <Card className="p-3 text-center"><div className="text-xs text-muted-foreground">Total Billed</div><div className="text-lg font-bold">{formatINR(client.totalBilled)}</div></Card>
-            <Card className="p-3 text-center"><div className="text-xs text-muted-foreground">Outstanding</div><div className={`text-lg font-bold ${client.outstanding > 0 ? "text-red-600" : "text-green-600"}`}>{formatINR(client.outstanding)}</div></Card>
-            <Card className="p-3 text-center"><div className="text-xs text-muted-foreground">Retainer</div><div className="text-lg font-bold">{client.monthlyRetainer > 0 ? formatINR(client.monthlyRetainer) : "—"}</div></Card>
+            <Card className="p-3 text-center bg-green-50"><div className="text-xs text-muted-foreground">Received</div><div className="text-lg font-bold text-green-600">{formatINR(totalReceived)}</div></Card>
+            <Card className="p-3 text-center"><div className="text-xs text-muted-foreground">Pending</div><div className={`text-lg font-bold ${client.outstanding > 0 ? "text-red-600" : "text-green-600"}`}>{formatINR(client.outstanding)}</div></Card>
           </div>
 
           <Card>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Invoice #</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead>Notes</TableHead>
+                  <TableHead>Invoice #</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Mode</TableHead><TableHead>Status</TableHead><TableHead>Notes</TableHead><TableHead className="text-right">Receipt</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(client.paymentHistory || []).length > 0 ? (client.paymentHistory || []).map((entry: any, i: number) => (
                   <TableRow key={entry.id || i}>
-                    <TableCell className="font-mono font-semibold text-sm">{entry.invoice_no || entry.invoiceNo}</TableCell>
+                    <TableCell className="font-mono font-semibold text-sm">{entry.invoice_no || entry.invoiceNo || "—"}</TableCell>
                     <TableCell className="font-mono text-xs">{formatDateDDMMYYYY(new Date(entry.date))}</TableCell>
                     <TableCell className="text-right font-semibold">{formatINR(entry.amount)}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px]">{entry.payment_mode || entry.paymentMode || "Cash"}</Badge></TableCell>
                     <TableCell><PaymentBadge status={entry.status} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{entry.notes || "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleGenerateReceipt(entry)}><Download className="h-3 w-3 mr-1" />Receipt</Button>
+                    </TableCell>
                   </TableRow>
                 )) : (
-                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
