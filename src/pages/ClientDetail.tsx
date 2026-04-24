@@ -70,12 +70,13 @@ const ClientDetail = () => {
       return;
     }
 
-    const [servicesRes, shootsRes, postsRes, paymentsRes, eRes] = await Promise.all([
+    const [servicesRes, shootsRes, postsRes, paymentsRes, eRes, billsRes] = await Promise.all([
       supabase.from("client_services").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("client_shoots").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("client_posts").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("payment_history").select("*").eq("client_id", id).then(r => r.data || [], () => []),
       supabase.from("employees").select("id, name, role, phone"),
+      supabase.from("quotations").select("*").eq("client_id", id).order("created_at", { ascending: false }).then(r => r.data || [], () => []),
     ]);
 
     setClient({
@@ -89,6 +90,7 @@ const ClientDetail = () => {
       posts: postsRes || [],
       paymentHistory: paymentsRes || [],
       assignedEmployees: clientData.assigned_employees || [],
+      bills: billsRes || [],
     });
     setEmployees(eRes.data || []);
     setLoading(false);
@@ -404,6 +406,32 @@ const ClientDetail = () => {
                   );
                 })}
                 {client.services.length === 0 && <div className="text-sm text-muted-foreground text-center py-4">No services assigned</div>}
+              </div>
+
+              {/* Bills Section */}
+              <div className="mt-5 pt-4 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-bold flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-primary" /> Bills & Quotations</h4>
+                  <Link to="/quotations"><Button size="sm" variant="outline" className="text-xs h-7"><Plus className="h-3 w-3 mr-1" />New Bill</Button></Link>
+                </div>
+                {client.bills && client.bills.length > 0 ? (
+                  <div className="space-y-2">
+                    {client.bills.map((bill: any) => (
+                      <div key={bill.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border">
+                        <div>
+                          <div className="text-sm font-semibold">{bill.quote_number}</div>
+                          <div className="text-xs text-muted-foreground">{formatDateDDMMYYYY(new Date(bill.created_at))} &middot; {bill.type === "Bill" ? "Invoice" : "Quote"}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-bold">{formatINR(bill.grand_total || 0)}</div>
+                          <Badge variant={bill.status === "Paid" ? "default" : "outline"} className={`text-[10px] ${bill.status === "Paid" ? "bg-green-100 text-green-700" : bill.status === "Sent" ? "bg-blue-100 text-blue-700" : ""}`}>{bill.status}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground text-center py-3">No bills raised yet. Create one from Quotations.</div>
+                )}
               </div>
             </Card>
             <Card className="p-5">

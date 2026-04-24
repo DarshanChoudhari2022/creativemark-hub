@@ -16,11 +16,6 @@ const COMPANY = {
   email: "creativemarkadvertising@gmail.com",
   website: "https://creativemarkadvertising.com/",
   address: "Pune, Maharashtra, India",
-  bankName: "HDFC Bank",
-  accountName: "CreativeMark Advertising",
-  accountNo: "50100234567890",
-  ifsc: "HDFC0000123",
-  branch: "Pune Main Branch",
 };
 
 // ── Default Partner Agreement Terms ───────────────────────────
@@ -64,13 +59,30 @@ function formatDate(date: Date | string) {
 function fmtINR(amount: number | string): string {
   const val = typeof amount === "string" ? parseFloat(amount.replace(/[^\d.]/g, "")) : amount;
   if (isNaN(val)) return "Rs. 0.00";
-  
-  const formatter = new Intl.NumberFormat('en-IN', {
-    style: 'decimal',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return "Rs. " + formatter.format(val);
+  return "Rs. " + formatIndianNumber(val);
+}
+
+function formatIndianNumber(num: number): string {
+  const fixed = Math.abs(num).toFixed(2);
+  const parts = fixed.split(".");
+  let intPart = parts[0];
+  const decPart = parts[1];
+  const sign = num < 0 ? "-" : "";
+
+  // Indian grouping: last 3 digits, then groups of 2
+  if (intPart.length > 3) {
+    let last3 = intPart.slice(-3);
+    let remaining = intPart.slice(0, -3);
+    let groups: string[] = [];
+    while (remaining.length > 2) {
+      groups.unshift(remaining.slice(-2));
+      remaining = remaining.slice(0, -2);
+    }
+    if (remaining.length > 0) groups.unshift(remaining);
+    intPart = groups.join(",") + "," + last3;
+  }
+
+  return sign + intPart + "." + decPart;
 }
 
 // ── Load logo as base64 for PDF embedding ─────────────────────
@@ -261,17 +273,23 @@ export async function generateQuotationPDF(q: any) {
       fmtINR(item.rate || 0),
       fmtINR(item.amount || 0),
     ]),
-    headStyles: { fillColor: [BRAND_RED.r, BRAND_RED.g, BRAND_RED.b], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5, cellPadding: 4 },
-    bodyStyles: { fontSize: 8.5, cellPadding: 4, textColor: [BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b] },
+    headStyles: { fillColor: [BRAND_RED.r, BRAND_RED.g, BRAND_RED.b], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5, cellPadding: 3 },
+    bodyStyles: { fontSize: 8.5, cellPadding: 3, textColor: [BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b] },
     alternateRowStyles: { fillColor: [252, 252, 252] },
-    columnStyles: { 0: { cellWidth: 12, halign: "center" }, 1: { cellWidth: "auto" }, 2: { cellWidth: 16, halign: "center" }, 3: { cellWidth: 32, halign: "right" }, 4: { cellWidth: 32, halign: "right", fontStyle: "bold" } },
+    columnStyles: {
+      0: { cellWidth: 12, halign: "center" },
+      1: { cellWidth: "auto" },
+      2: { cellWidth: 14, halign: "center" },
+      3: { cellWidth: 38, halign: "right" },
+      4: { cellWidth: 40, halign: "right", fontStyle: "bold" }
+    },
     margin: { left: 12, right: 12 },
     tableLineColor: [230, 230, 230],
     tableLineWidth: 0.1,
   });
 
   y = (doc as any).lastAutoTable.finalY + 10;
-  const totalsX = 125;
+  const totalsX = 115;
 
   doc.setFontSize(9);
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
@@ -325,16 +343,20 @@ export async function generateQuotationPDF(q: any) {
 
   if (isBill) {
     doc.setFillColor(245, 247, 250);
-    doc.roundedRect(12, y, pageW - 24, 22, 2, 2, "F");
+    doc.roundedRect(12, y, pageW - 24, 28, 2, 2, "F");
+    doc.setDrawColor(220, 220, 220);
+    doc.roundedRect(12, y, pageW - 24, 28, 2, 2, "S");
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
     doc.text("BANK DETAILS FOR PAYMENT", 16, y + 6);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-    doc.text(`Account Name: ${COMPANY.accountName}`, 16, y + 12);
-    doc.text(`Bank: ${COMPANY.bankName}  |  A/C: ${COMPANY.accountNo}  |  IFSC: ${COMPANY.ifsc}`, 16, y + 17);
-    y += 28;
+    doc.setFontSize(8);
+    doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+    doc.text("Account Name: ______________________________    Bank: ______________________________", 16, y + 13);
+    doc.text("A/C No: ______________________________    IFSC: ______________________________", 16, y + 19);
+    doc.text("UPI: ______________________________", 16, y + 25);
+    y += 34;
   }
 
   const termsToUse = q.terms ? q.terms.split("\n") : isBill ? PROFESSIONAL_TERMS_BILL : PROFESSIONAL_TERMS_QUOTATION;
