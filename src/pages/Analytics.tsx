@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/shared";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
 import { formatINR, formatINRCompact } from "@/lib/format";
 import { Wallet, Briefcase, FileSignature, Target, Users, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Masked } from "@/components/Masked";
 import { supabase } from "@/lib/supabase";
 
 const KPICard = ({ icon: Icon, label, value, hint, color }: {
@@ -15,7 +16,7 @@ const KPICard = ({ icon: Icon, label, value, hint, color }: {
     </div>
     <div>
       <div className="text-sm font-semibold text-muted-foreground">{label}</div>
-      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-2xl font-bold"><Masked placeholder="•••••">{value}</Masked></div>
       {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
     </div>
   </Card>
@@ -228,7 +229,7 @@ export default function Analytics() {
                 {categoryData.map((c, i) => (
                   <div key={c.name} className="flex items-center gap-2 text-sm font-medium">
                     <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="truncate">{c.name}</span>: {formatINRCompact(c.value)}
+                    <Masked><span className="truncate">{c.name}</span>: {formatINRCompact(c.value)}</Masked>
                   </div>
                 ))}
               </div>
@@ -278,7 +279,7 @@ export default function Analytics() {
                   <div key={s.name} className="flex items-center gap-2 text-sm">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
                     <span className="text-muted-foreground text-xs">{s.name}</span>
-                    <span className="font-semibold text-xs ml-auto">{s.value}</span>
+                    <Masked><span className="font-semibold text-xs ml-auto">{s.value}</span></Masked>
                   </div>
                 ))}
               </div>

@@ -18,6 +18,7 @@ import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { generateQuotationPDF } from "@/lib/pdf";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { Masked } from "@/components/Masked";
 import type { QuotationBillStatus, LineItem } from "@/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -552,12 +553,12 @@ const Quotations = () => {
               <TableRow key={q.id}>
                 <TableCell><Badge variant="outline" className="text-[10px]">{q.type}</Badge></TableCell>
                 <TableCell className="font-mono font-semibold">{q.quote_number}</TableCell>
-                <TableCell className="font-semibold">{q.client_name} {q.lead_id ? <span className="text-[10px] text-muted-foreground ml-1">(Lead)</span> : ""}</TableCell>
+                <TableCell className="font-semibold"><Masked>{q.client_name}</Masked> {q.lead_id ? <span className="text-[10px] text-muted-foreground ml-1">(Lead)</span> : ""}</TableCell>
                 <TableCell className="text-sm text-muted-foreground font-mono">{q.date ? formatDateDDMMYYYY(new Date(q.date)) : ""}</TableCell>
                 <TableCell className="text-sm text-muted-foreground font-mono">{(q.due_date || q.valid_until) ? formatDateDDMMYYYY(new Date(q.due_date || q.valid_until)) : "—"}</TableCell>
-                <TableCell className="text-right font-bold">{formatINR(q.grand_total || 0)}</TableCell>
-                <TableCell className="text-right text-green-600 font-semibold text-sm">{q.type === "Bill" && (q.amount_paid || 0) > 0 ? formatINR(q.amount_paid) : "—"}</TableCell>
-                <TableCell className={`text-right font-bold text-sm ${q.type === "Bill" && (q.grand_total || 0) - (q.amount_paid || 0) > 0 ? "text-primary" : ""}`}>{q.type === "Bill" ? formatINR((q.grand_total || 0) - (q.amount_paid || 0)) : "—"}</TableCell>
+                <TableCell className="text-right font-bold"><Masked placeholder="₹•••••">{formatINR(q.grand_total || 0)}</Masked></TableCell>
+                <TableCell className="text-right text-green-600 font-semibold text-sm"><Masked placeholder="₹•••••">{q.type === "Bill" && (q.amount_paid || 0) > 0 ? formatINR(q.amount_paid) : "—"}</Masked></TableCell>
+                <TableCell className={`text-right font-bold text-sm ${q.type === "Bill" && (q.grand_total || 0) - (q.amount_paid || 0) > 0 ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{q.type === "Bill" ? formatINR((q.grand_total || 0) - (q.amount_paid || 0)) : "—"}</Masked></TableCell>
                 <TableCell>
                   <Select value={q.status} onValueChange={(v) => updateStatus(q, v)}>
                     <SelectTrigger className="h-7 w-auto border-0 p-0">
@@ -613,7 +614,7 @@ const Quotations = () => {
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">To:</span> <span className="font-semibold">{previewQ.client_name}</span></div>
+                <div><span className="text-muted-foreground">To:</span> <span className="font-semibold"><Masked>{previewQ.client_name}</Masked></span></div>
                 <div><span className="text-muted-foreground">Date:</span> <span className="font-mono">{previewQ.date ? formatDateDDMMYYYY(new Date(previewQ.date)) : ""}</span></div>
                 <div><span className="text-muted-foreground">{previewQ.type === "Bill" ? "Due Date:" : "Valid Until:"}</span> <span className="font-mono">{(previewQ.due_date || previewQ.valid_until) ? formatDateDDMMYYYY(new Date(previewQ.due_date || previewQ.valid_until)) : "—"}</span></div>
               </div>
@@ -630,8 +631,8 @@ const Quotations = () => {
                     <TableRow key={i}>
                       <TableCell>{item.description || item.service_name}</TableCell>
                       <TableCell className="text-center">{item.quantity}</TableCell>
-                      <TableCell className="text-right">{formatINR(item.rate)}</TableCell>
-                      <TableCell className="text-right font-semibold">{formatINR(item.amount)}</TableCell>
+                      <TableCell className="text-right"><Masked placeholder="₹•••">{formatINR(item.rate)}</Masked></TableCell>
+                      <TableCell className="text-right font-semibold"><Masked placeholder="₹•••">{formatINR(item.amount)}</Masked></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -639,22 +640,22 @@ const Quotations = () => {
 
               <div className="flex justify-end">
                 <div className="w-64 space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatINR(previewQ.subtotal || 0)}</span></div>
-                  {(previewQ.discount_amount || 0) > 0 && <div className="flex justify-between text-green-600"><span>Discount ({previewQ.discount_percent}%)</span><span>-{formatINR(previewQ.discount_amount)}</span></div>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><Masked placeholder="₹•••••"><span>{formatINR(previewQ.subtotal || 0)}</span></Masked></div>
+                  {(previewQ.discount_amount || 0) > 0 && <div className="flex justify-between text-green-600"><span>Discount ({previewQ.discount_percent}%)</span><Masked placeholder="-₹•••"><span>-{formatINR(previewQ.discount_amount)}</span></Masked></div>}
                   {previewQ.gst_applicable && (
                     <>
-                      <div className="flex justify-between"><span className="text-muted-foreground">CGST (9%)</span><span>{formatINR(previewQ.cgst || 0)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">SGST (9%)</span><span>{formatINR(previewQ.sgst || 0)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">CGST (9%)</span><Masked placeholder="₹•••"><span>{formatINR(previewQ.cgst || 0)}</span></Masked></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">SGST (9%)</span><Masked placeholder="₹•••"><span>{formatINR(previewQ.sgst || 0)}</span></Masked></div>
                     </>
                   )}
-                  <div className="flex justify-between border-t border-border mt-2 pt-2 text-lg font-bold text-primary"><span>Total</span><span>{formatINR(previewQ.grand_total || 0)}</span></div>
+                  <div className="flex justify-between border-t border-border mt-2 pt-2 text-lg font-bold text-primary"><span>Total</span><Masked placeholder="₹•••••"><span>{formatINR(previewQ.grand_total || 0)}</span></Masked></div>
                   {previewQ.type === "Bill" && (previewQ.amount_paid || 0) > 0 && (
                     <>
-                      <div className="flex justify-between text-green-600 mt-1"><span>Amount Received</span><span>{formatINR(previewQ.amount_paid)}</span></div>
+                      <div className="flex justify-between text-green-600 mt-1"><span>Amount Received</span><Masked placeholder="₹•••••"><span>{formatINR(previewQ.amount_paid)}</span></Masked></div>
                       <div className="flex justify-between border-t border-border pt-1 mt-1 font-bold text-lg">
                         <span>Balance Due</span>
                         <span className={(previewQ.grand_total || 0) - (previewQ.amount_paid || 0) > 0 ? "text-primary" : "text-green-600"}>
-                          {(previewQ.grand_total || 0) - (previewQ.amount_paid || 0) <= 0 ? "PAID IN FULL" : formatINR((previewQ.grand_total || 0) - (previewQ.amount_paid || 0))}
+                          <Masked placeholder="₹•••••">{(previewQ.grand_total || 0) - (previewQ.amount_paid || 0) <= 0 ? "PAID IN FULL" : formatINR((previewQ.grand_total || 0) - (previewQ.amount_paid || 0))}</Masked>
                         </span>
                       </div>
                     </>

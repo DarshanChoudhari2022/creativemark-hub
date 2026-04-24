@@ -15,6 +15,7 @@ import { useSupabaseTable } from "@/hooks/useSupabase";
 import { supabase } from "@/lib/supabase";
 import { formatINR, formatDateDDMMYYYY, waLink, isValidIndianPhone } from "@/lib/format";
 import { toast } from "sonner";
+import { Masked } from "@/components/Masked";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { Employee, EmployeeRole, WorkLog } from "@/types";
 
@@ -232,7 +233,7 @@ const Employees = () => {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold">{emp.name}</span>
+                        <span className="font-bold"><Masked>{emp.name}</Masked></span>
                         <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[emp.status] || ""}`}>{emp.status}</Badge>
                         {emp.onFieldToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">On Field</span>}
                       </div>
@@ -249,7 +250,7 @@ const Employees = () => {
                       </div>
                       <div className="text-center">
                         <div className="text-xs uppercase">Total Earned</div>
-                        <div className="font-semibold text-foreground">{formatINR(totalEarned)}</div>
+                        <div className="font-semibold text-foreground"><Masked placeholder="₹•••••">{formatINR(totalEarned)}</Masked></div>
                       </div>
                     </div>
                     <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -263,8 +264,8 @@ const Employees = () => {
                       <div className="space-y-3">
                         <h4 className="font-bold text-sm flex items-center gap-1.5"><UsersIcon className="h-4 w-4" /> Contact &amp; Details</h4>
                         <div className="space-y-2 text-sm">
-                          <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-muted-foreground" /> {emp.phone}</div>
-                          <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /> {emp.email}</div>
+                          <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-muted-foreground" /> <Masked>{emp.phone}</Masked></div>
+                          <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /> <Masked>{emp.email}</Masked></div>
                           <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 text-muted-foreground" /> Joined {formatDateDDMMYYYY(joiningDateVal)}</div>
                         </div>
                         <div className="pt-2">
@@ -272,7 +273,7 @@ const Employees = () => {
                           {assignedClientsList.length > 0 ? (
                             <div className="flex flex-wrap gap-1.5">
                               {assignedClientsList.map(c => (
-                                <span key={c.id} className="text-xs px-2 py-0.5 rounded-full bg-muted font-medium">{c.name}</span>
+                                <span key={c.id} className="text-xs px-2 py-0.5 rounded-full bg-muted font-medium"><Masked>{c.name}</Masked></span>
                               ))}
                             </div>
                           ) : <span className="text-xs text-muted-foreground">No clients assigned</span>}
@@ -285,19 +286,19 @@ const Employees = () => {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Total Earned</div>
-                            <div className="text-lg font-bold text-green-600">{formatINR(totalEarned)}</div>
+                            <div className="text-lg font-bold text-green-600"><Masked placeholder="₹•••••">{formatINR(totalEarned)}</Masked></div>
                           </div>
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Advance Taken</div>
-                            <div className={`text-lg font-bold ${advanceTaken > 0 ? "text-amber-600" : ""}`}>{formatINR(advanceTaken)}</div>
+                            <div className={`text-lg font-bold ${advanceTaken > 0 ? "text-amber-600" : ""}`}><Masked placeholder="₹•••••">{formatINR(advanceTaken)}</Masked></div>
                           </div>
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Dues Pending</div>
-                            <div className={`text-lg font-bold ${duesPending > 0 ? "text-primary" : ""}`}>{formatINR(duesPending)}</div>
+                            <div className={`text-lg font-bold ${duesPending > 0 ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{formatINR(duesPending)}</Masked></div>
                           </div>
                           <div className="p-3 bg-card rounded-lg border border-border">
                             <div className="text-xs text-muted-foreground">Net Payable</div>
-                            <div className="text-lg font-bold">{formatINR(netPayable)}</div>
+                            <div className="text-lg font-bold"><Masked placeholder="₹•••••">{formatINR(netPayable)}</Masked></div>
                           </div>
                         </div>
                         <div className="text-[10px] text-muted-foreground">Work count: {(emp.work_logs || []).length} jobs</div>
@@ -314,7 +315,7 @@ const Employees = () => {
                             <Plus className="h-3 w-3" /> Log Work
                           </Button>
                         </div>
-                        <div className="text-xs text-muted-foreground mb-1">{totalHours.toFixed(1)} hours logged · {formatINR(totalEarned)} earned</div>
+                        <div className="text-xs text-muted-foreground mb-1">{totalHours.toFixed(1)} hours logged · <Masked placeholder="₹•••••">{formatINR(totalEarned)}</Masked> earned</div>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
                           {(emp.work_logs || []).slice(0, 5).map((log: any, i: number) => {
                             const duration = log.hours ?? (log.reportingTime && log.endTime ? ((new Date(`2000-01-01T${log.endTime}`).getTime() - new Date(`2000-01-01T${log.reportingTime}`).getTime()) / (1000 * 60 * 60)).toFixed(1) : null);
@@ -327,7 +328,7 @@ const Employees = () => {
                                 <div className="text-right shrink-0 ml-2">
                                   <div className="font-mono">{formatDateDDMMYYYY(log.date)}</div>
                                   <div className="text-muted-foreground">{duration ?? "—"}h</div>
-                                  {log.amount > 0 && <div className="font-semibold text-green-600">{formatINR(log.amount)}</div>}
+                                  {log.amount > 0 && <div className="font-semibold text-green-600"><Masked placeholder="₹•••">{formatINR(log.amount)}</Masked></div>}
                                 </div>
                               </div>
                             );

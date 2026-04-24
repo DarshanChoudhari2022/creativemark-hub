@@ -16,6 +16,7 @@ import { useSupabaseTable } from "@/hooks/useSupabase";
 import { supabase } from "@/lib/supabase";
 import { formatINR, formatDateDDMMYYYY, waLink, smsLink, isValidIndianPhone } from "@/lib/format";
 import { toast } from "sonner";
+import { Masked } from "@/components/Masked";
 import { useNavigate } from "react-router-dom";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import type { Lead, LeadStage, LeadHeat, ClientCategory, LeadQuotationStatus, LeadPaymentStatus } from "@/types";
@@ -502,7 +503,7 @@ const Leads = () => {
                         )}
                         <div className="flex items-start justify-between mb-1">
                           <div className="flex items-center gap-1.5 overflow-hidden">
-                            <div className="font-semibold text-sm truncate">{lead.name}</div>
+                            <div className="font-semibold text-sm truncate"><Masked>{lead.name}</Masked></div>
                             {lead.isSmartLead && (
                               <Badge variant="secondary" className="h-4 px-1 text-[8px] bg-purple-100 text-purple-700 border-purple-200 shrink-0">
                                 <Zap className="h-2 w-2" />
@@ -511,9 +512,9 @@ const Leads = () => {
                           </div>
                           <HeatIcon className={`h-4 w-4 shrink-0 ${heat.color}`} />
                         </div>
-                        <div className="text-xs text-muted-foreground truncate mb-2">{lead.organization}</div>
+                        <div className="text-xs text-muted-foreground truncate mb-2"><Masked>{lead.organization}</Masked></div>
                         <div className="flex items-center justify-between mb-2">
-                          <div className="text-xs font-semibold text-primary">{formatINR(lead.estimatedValue)}</div>
+                          <div className="text-xs font-semibold text-primary"><Masked placeholder="₹•••••">{formatINR(lead.estimatedValue)}</Masked></div>
                           {lead.nextCallDate && (
                             <div className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                               new Date(lead.nextCallDate) < new Date(new Date().setHours(0,0,0,0)) 
@@ -568,17 +569,17 @@ const Leads = () => {
                   >
                     <TableCell>
                       <div className="font-semibold flex items-center gap-2">
-                        {l.name}
+                        <Masked>{l.name}</Masked>
                         {l.isSmartLead && <Badge variant="secondary" className="h-4 text-[8px] bg-purple-100 text-purple-700 border-purple-200">SMART</Badge>}
                         {isOverdue && <Badge className="h-4 text-[8px] bg-red-600 animate-pulse border-0">URGENT</Badge>}
                       </div>
                       <div className="text-[10px] text-muted-foreground">{l.assignedToName}</div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{l.organization}</TableCell>
+                    <TableCell className="text-muted-foreground"><Masked>{l.organization}</Masked></TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px] font-medium">{l.category}</Badge></TableCell>
                     <TableCell><StageBadge stage={l.stage} /></TableCell>
                     <TableCell><span className="flex items-center gap-1.5"><HeatIcon className={`h-4 w-4 ${heat.color}`} />{l.heat}</span></TableCell>
-                    <TableCell className="text-right font-bold text-primary">{formatINR(l.estimatedValue)}</TableCell>
+                    <TableCell className="text-right font-bold text-primary"><Masked placeholder="₹•••••">{formatINR(l.estimatedValue)}</Masked></TableCell>
                     <TableCell>
                       {l.nextCallDate ? (
                         <div className={`flex items-center gap-1.5 font-bold text-xs ${isOverdue ? "text-red-600" : isToday ? "text-amber-600" : "text-blue-600"}`}>
@@ -705,15 +706,15 @@ const Leads = () => {
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">Estimated Value</div>
-                    <div className="font-bold text-primary text-lg">{formatINR(detailLead.estimatedValue)}</div>
+                    <div className="font-bold text-primary text-lg"><Masked placeholder="₹•••••">{formatINR(detailLead.estimatedValue)}</Masked></div>
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3"/> Phone</div>
-                    <div>{detailLead.phone}</div>
+                    <div><Masked>{detailLead.phone}</Masked></div>
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1"><MessageCircle className="h-3 w-3"/> WhatsApp</div>
-                    <div>{detailLead.whatsapp || detailLead.phone || "—"}</div>
+                    <div><Masked>{detailLead.whatsapp || detailLead.phone || "—"}</Masked></div>
                   </div>
                 </div>
 
