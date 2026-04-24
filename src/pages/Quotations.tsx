@@ -270,6 +270,7 @@ const Quotations = () => {
       discountAmount: q.discount_amount,
       bankDetails: q.bank_details,
       upiId: q.upi_id,
+      amountPaid: q.amount_paid || 0,
     };
     await generateQuotationPDF(pdfData as any);
     toast.success("PDF downloaded");
@@ -542,6 +543,7 @@ const Quotations = () => {
             <TableRow>
               <TableHead>Type</TableHead><TableHead>Number</TableHead><TableHead>Recipient</TableHead><TableHead>Date</TableHead>
               <TableHead>Due / Valid</TableHead><TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Balance</TableHead>
               <TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -554,6 +556,8 @@ const Quotations = () => {
                 <TableCell className="text-sm text-muted-foreground font-mono">{q.date ? formatDateDDMMYYYY(new Date(q.date)) : ""}</TableCell>
                 <TableCell className="text-sm text-muted-foreground font-mono">{(q.due_date || q.valid_until) ? formatDateDDMMYYYY(new Date(q.due_date || q.valid_until)) : "—"}</TableCell>
                 <TableCell className="text-right font-bold">{formatINR(q.grand_total || 0)}</TableCell>
+                <TableCell className="text-right text-green-600 font-semibold text-sm">{q.type === "Bill" && (q.amount_paid || 0) > 0 ? formatINR(q.amount_paid) : "—"}</TableCell>
+                <TableCell className={`text-right font-bold text-sm ${q.type === "Bill" && (q.grand_total || 0) - (q.amount_paid || 0) > 0 ? "text-primary" : ""}`}>{q.type === "Bill" ? formatINR((q.grand_total || 0) - (q.amount_paid || 0)) : "—"}</TableCell>
                 <TableCell>
                   <Select value={q.status} onValueChange={(v) => updateStatus(q, v)}>
                     <SelectTrigger className="h-7 w-auto border-0 p-0">
@@ -590,7 +594,7 @@ const Quotations = () => {
               </TableRow>
             ))}
             {filtered.length === 0 && (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No documents found — create your first quotation</TableCell></TableRow>
+               <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No documents found — create your first quotation</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -643,7 +647,18 @@ const Quotations = () => {
                       <div className="flex justify-between"><span className="text-muted-foreground">SGST (9%)</span><span>{formatINR(previewQ.sgst || 0)}</span></div>
                     </>
                   )}
-                  <div className="flex justify-between border-t border-border pt-1 font-bold text-lg"><span>Total</span><span className="text-primary">{formatINR(previewQ.grand_total || 0)}</span></div>
+                  <div className="flex justify-between border-t border-border mt-2 pt-2 text-lg font-bold text-primary"><span>Total</span><span>{formatINR(previewQ.grand_total || 0)}</span></div>
+                  {previewQ.type === "Bill" && (previewQ.amount_paid || 0) > 0 && (
+                    <>
+                      <div className="flex justify-between text-green-600 mt-1"><span>Amount Received</span><span>{formatINR(previewQ.amount_paid)}</span></div>
+                      <div className="flex justify-between border-t border-border pt-1 mt-1 font-bold text-lg">
+                        <span>Balance Due</span>
+                        <span className={(previewQ.grand_total || 0) - (previewQ.amount_paid || 0) > 0 ? "text-primary" : "text-green-600"}>
+                          {(previewQ.grand_total || 0) - (previewQ.amount_paid || 0) <= 0 ? "PAID IN FULL" : formatINR((previewQ.grand_total || 0) - (previewQ.amount_paid || 0))}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 

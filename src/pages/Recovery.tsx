@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { AlertTriangle, Send, Phone, Mail, MessageSquare, CheckCircle2, Clock, Search, Filter, RefreshCw, IndianRupee, Share2, Copy } from "lucide-react";
+import { AlertTriangle, Send, Phone, Mail, MessageSquare, CheckCircle2, Clock, Search, Filter, RefreshCw, IndianRupee, Share2, Copy, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { generateReceiptPDF } from "@/lib/pdf";
 
 /* Recovery is now derived from Bills (quotations where type='Bill' and status != 'Paid') */
 
@@ -44,6 +45,12 @@ const Recovery = () => {
   const [reminderHistory, setReminderHistory] = useState<any[]>([]);
   const [inlinePayId, setInlinePayId] = useState<string | null>(null);
   const [inlinePayAmount, setInlinePayAmount] = useState(0);
+  const [inlinePayMode, setInlinePayMode] = useState("Cash");
+  const [inlinePayCheque, setInlinePayCheque] = useState("");
+  const [inlinePayTxnId, setInlinePayTxnId] = useState("");
+  const [dialogPayMode, setDialogPayMode] = useState("Cash");
+  const [dialogPayCheque, setDialogPayCheque] = useState("");
+  const [dialogPayTxnId, setDialogPayTxnId] = useState("");
 
   const fetchRecoveries = async () => {
     setLoading(true);
@@ -114,72 +121,94 @@ const Recovery = () => {
     }).then(() => {});
   };
 
-  const markPartialPayment = async (recovery: RecoveryRow, amount: number) => {
+  const markPartialPayment = async (recovery: RecoveryRow, amount: number, payMode = "Cash", chequeNo = "", txnId = "") => {
     if (amount <= 0) { toast.error("Enter a valid amount"); return; }
     const newPaid = recovery.amountPaid + amount;
     const fullyPaid = newPaid >= recovery.amountDue;
     const balanceDue = Math.max(0, recovery.amountDue - newPaid);
 
-    const updateData: any = {
+    const { error } = await supabase.from("quotations").update({
       amount_paid: newPaid,
       status: fullyPaid ? "Paid" : "Overdue",
-    };
-
-    const { error } = await supabase.from("quotations").update(updateData).eq("id", recovery.id);
+    }).eq("id", recovery.id);
     if (error) { toast.error("Failed to record payment: " + error.message); return; }
 
-    // Also record in payment_history
+    // Fetch client_id for syncing
+    const { data: qData } = await supabase.from("quotations").select("client_id").eq("id", recovery.id).single();
+    const clientId = qData?.client_id || null;
+
+    // Record in payment_history with full mode details
     await supabase.from("payment_history").insert({
-      client_id: null,
+      client_id: clientId,
       invoice_no: recovery.invoiceNo,
       date: new Date().toISOString().slice(0, 10),
       amount,
       status: "Paid",
-      payment_mode: "Cash",
-      notes: `${fullyPaid ? "Full" : "Partial"} payment against ${recovery.invoiceNo}`,
+      payment_mode: payMode,
+      cheque_no: chequeNo || null,
+      transaction_id: txnId || null,
+      notes: `${fullyPaid ? "Full" : "Partial"} payment against ${recovery.invoiceNo} via ${payMode}${chequeNo ? ` (Cheque: ${chequeNo})` : ""}${txnId ? ` (Txn: ${txnId})` : ""}`,
     });
+
+    // Sync client outstanding across all bills
+    if (clientId) {
+      const { data: allBills } = await supabase.from("quotations").select("grand_total, amount_paid").eq("client_id", clientId).eq("type", "Bill");
+      if (allBills) {
+        const totalBilled = allBills.reduce((s: number, b: any) => s + (b.grand_total || 0), 0);
+        const totalPaidAll = allBills.reduce((s: number, b: any) => s + (b.amount_paid || 0), 0);
+        await supabase.from("clients").update({ total_billed: totalBilled, outstanding: totalBilled - totalPaidAll }).eq("id", clientId);
+      }
+    }
 
     await supabase.from("recovery_notes").insert({
       quotation_id: recovery.id,
-      note: `${fullyPaid ? "Full" : "Partial"} payment of ${formatINR(amount)} received. Balance: ${formatINR(balanceDue)}`,
+      note: `${fullyPaid ? "Full" : "Partial"} payment of ${formatINR(amount)} received via ${payMode}${chequeNo ? ` (Cheque: ${chequeNo})` : ""}. Balance: ${formatINR(balanceDue)}`,
       created_at: new Date().toISOString(),
     });
 
+    // Reset all payment form state
     setPartialAmount(0);
     setInlinePayId(null);
     setInlinePayAmount(0);
+    setInlinePayMode("Cash");
+    setInlinePayCheque("");
+    setInlinePayTxnId("");
+    setDialogPayMode("Cash");
+    setDialogPayCheque("");
+    setDialogPayTxnId("");
+
+    // Prepare receipt data for download
+    const receiptData = {
+      clientName: recovery.clientName,
+      invoiceNo: recovery.invoiceNo,
+      date: new Date().toISOString().slice(0, 10),
+      amount,
+      paymentMode: payMode,
+      chequeNo: chequeNo || undefined,
+      transactionId: txnId || undefined,
+      totalBilled: recovery.amountDue,
+      totalPaid: newPaid,
+      balanceDue,
+      notes: `Payment via ${payMode}${chequeNo ? ` | Cheque: ${chequeNo}` : ""}${txnId ? ` | Txn: ${txnId}` : ""}`,
+    };
 
     if (fullyPaid) {
       toast.success("Invoice fully paid! 🎉", {
-        action: {
-          label: "📱 Send Receipt",
-          onClick: () => {
-            const msg = WHATSAPP_TEMPLATES.PAYMENT_RECEIVED(recovery.clientName, recovery.invoiceNo, formatINR(amount));
-            window.open(waLink(recovery.whatsapp, msg), "_blank");
-          }
-        }
+        duration: 8000,
+        action: { label: "📥 Download Receipt", onClick: () => generateReceiptPDF(receiptData) }
       });
       setSelected(null);
     } else {
-      // Auto-generate outstanding message
-      const waMsg = WHATSAPP_TEMPLATES.PARTIAL_PAYMENT_RECEIVED(
-        recovery.clientName, recovery.invoiceNo,
-        formatINR(amount), formatINR(recovery.amountDue),
-        formatINR(newPaid), formatINR(balanceDue)
-      );
-      toast.success(`Partial payment of ${formatINR(amount)} recorded! Balance: ${formatINR(balanceDue)}`, {
+      toast.success(`Partial payment of ${formatINR(amount)} via ${payMode} recorded! Balance: ${formatINR(balanceDue)}`, {
         duration: 8000,
-        action: {
-          label: "📱 Share on WhatsApp",
-          onClick: () => window.open(waLink(recovery.whatsapp, waMsg), "_blank"),
-        }
+        action: { label: "📥 Receipt", onClick: () => generateReceiptPDF(receiptData) }
       });
     }
     fetchRecoveries();
   };
 
-  const markFullPayment = (recovery: RecoveryRow) => {
-    markPartialPayment(recovery, recovery.amountDue - recovery.amountPaid);
+  const markFullPayment = (recovery: RecoveryRow, payMode = "Cash", chequeNo = "", txnId = "") => {
+    markPartialPayment(recovery, recovery.amountDue - recovery.amountPaid, payMode, chequeNo, txnId);
   };
 
   const openDetail = async (r: RecoveryRow) => {
@@ -312,27 +341,42 @@ const Recovery = () => {
               {/* Inline partial payment row */}
               {inlinePayId === r.id && !r.received && (
                 <TableRow key={`pay-${r.id}`} className="bg-blue-50/50">
-                  <TableCell colSpan={3}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-blue-700">Record Payment for {r.clientName}:</span>
-                    </div>
-                  </TableCell>
-                  <TableCell colSpan={2}>
-                    <div className="flex items-center gap-2">
-                      <Input type="number" className="h-8 w-32 text-sm" placeholder="Amount ₹" value={inlinePayAmount || ""} onChange={(e) => setInlinePayAmount(+e.target.value)} />
-                    </div>
-                  </TableCell>
-                  <TableCell colSpan={3}>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs" onClick={() => markPartialPayment(r, inlinePayAmount)}>Record ₹{inlinePayAmount.toLocaleString("en-IN")}</Button>
-                      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setInlinePayId(null); setInlinePayAmount(0); }}>Cancel</Button>
-                      {r.amountPaid > 0 && (
-                        <Button size="sm" variant="ghost" className="h-8 text-xs text-green-600" onClick={() => {
-                          const msg = WHATSAPP_TEMPLATES.OUTSTANDING_REMINDER(r.clientName, r.invoiceNo, formatINR(r.amountDue), formatINR(r.amountPaid), formatINR(balance));
-                          navigator.clipboard.writeText(msg.replace(/\*/g, ""));
-                          toast.success("Outstanding message copied!");
-                        }}><Copy className="h-3 w-3 mr-1" /> Copy Msg</Button>
-                      )}
+                  <TableCell colSpan={8}>
+                    <div className="p-2 space-y-2">
+                      <div className="text-xs font-semibold text-blue-700">Record Payment for {r.clientName} — Balance: {formatINR(balance)}</div>
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div>
+                          <Label className="text-[10px]">Amount ₹</Label>
+                          <Input type="number" className="h-8 w-28 text-sm" placeholder="Amount" value={inlinePayAmount || ""} onChange={(e) => setInlinePayAmount(+e.target.value)} />
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Mode</Label>
+                          <Select value={inlinePayMode} onValueChange={setInlinePayMode}>
+                            <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Cash">Cash</SelectItem>
+                              <SelectItem value="Cheque">Cheque</SelectItem>
+                              <SelectItem value="UPI">UPI</SelectItem>
+                              <SelectItem value="NEFT">NEFT / RTGS</SelectItem>
+                              <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {inlinePayMode === "Cheque" && (
+                          <div>
+                            <Label className="text-[10px]">Cheque No.</Label>
+                            <Input className="h-8 w-32 text-sm" placeholder="Cheque #" value={inlinePayCheque} onChange={(e) => setInlinePayCheque(e.target.value)} />
+                          </div>
+                        )}
+                        {(inlinePayMode === "UPI" || inlinePayMode === "NEFT" || inlinePayMode === "Bank Transfer") && (
+                          <div>
+                            <Label className="text-[10px]">Txn / UTR ID</Label>
+                            <Input className="h-8 w-36 text-sm" placeholder="Transaction ID" value={inlinePayTxnId} onChange={(e) => setInlinePayTxnId(e.target.value)} />
+                          </div>
+                        )}
+                        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs" onClick={() => markPartialPayment(r, inlinePayAmount, inlinePayMode, inlinePayCheque, inlinePayTxnId)}>Record ₹{inlinePayAmount.toLocaleString("en-IN")}</Button>
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setInlinePayId(null); setInlinePayAmount(0); setInlinePayMode("Cash"); setInlinePayCheque(""); setInlinePayTxnId(""); }}>Cancel</Button>
+                      </div>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -386,16 +430,43 @@ const Recovery = () => {
               </div>
             </div>
 
-            {/* Partial Payment */}
-            <div className="mt-4 p-3 border border-border rounded-lg">
-              <h4 className="font-bold text-sm mb-2">Record Payment</h4>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
+            {/* Record Payment */}
+            <div className="mt-4 p-3 border border-border rounded-lg space-y-3">
+              <h4 className="font-bold text-sm">Record Payment</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
                   <Label className="text-xs">Amount ₹</Label>
                   <Input type="number" value={partialAmount} onChange={(e) => setPartialAmount(+e.target.value)} placeholder="Enter amount" />
                 </div>
-                <Button size="sm" variant="outline" onClick={() => markPartialPayment(selected, partialAmount)}>Record Partial</Button>
-                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => markFullPayment(selected)}>Mark Full Paid</Button>
+                <div>
+                  <Label className="text-xs">Payment Mode</Label>
+                  <Select value={dialogPayMode} onValueChange={setDialogPayMode}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Cheque">Cheque</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="NEFT">NEFT / RTGS</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {dialogPayMode === "Cheque" && (
+                <div>
+                  <Label className="text-xs">Cheque Number</Label>
+                  <Input value={dialogPayCheque} onChange={(e) => setDialogPayCheque(e.target.value)} placeholder="Enter cheque number" />
+                </div>
+              )}
+              {(dialogPayMode === "UPI" || dialogPayMode === "NEFT" || dialogPayMode === "Bank Transfer") && (
+                <div>
+                  <Label className="text-xs">Transaction / UTR ID</Label>
+                  <Input value={dialogPayTxnId} onChange={(e) => setDialogPayTxnId(e.target.value)} placeholder="Enter transaction reference" />
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => markPartialPayment(selected, partialAmount, dialogPayMode, dialogPayCheque, dialogPayTxnId)}>Record Partial</Button>
+                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => markFullPayment(selected, dialogPayMode, dialogPayCheque, dialogPayTxnId)}>Mark Full Paid</Button>
               </div>
             </div>
 

@@ -333,6 +333,38 @@ export async function generateQuotationPDF(q: any) {
   y += 18;
 
   const totalVal = q.grandTotal || q.grand_total || q.total || 0;
+
+  // Amount Received & Balance Due for bills with payments
+  if (isBill) {
+    const amountPaid = q.amountPaid || q.amount_paid || 0;
+    if (amountPaid > 0) {
+      doc.setFontSize(9);
+      doc.setTextColor(34, 150, 80);
+      doc.setFont("helvetica", "bold");
+      doc.text("Amount Received:", totalsX, y);
+      doc.text(fmtINR(amountPaid), pageW - 15, y, { align: "right" });
+      y += 7;
+
+      const balanceDue = totalVal - amountPaid;
+      doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+      doc.setLineWidth(0.3);
+      doc.line(totalsX - 2, y - 2, pageW - 12, y - 2);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      if (balanceDue <= 0) {
+        doc.setTextColor(34, 150, 80);
+        doc.text("Balance Due:", totalsX, y + 2);
+        doc.text("PAID IN FULL", pageW - 15, y + 2, { align: "right" });
+      } else {
+        doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+        doc.text("Balance Due:", totalsX, y + 2);
+        doc.text(fmtINR(balanceDue), pageW - 15, y + 2, { align: "right" });
+      }
+      y += 12;
+    }
+  }
+
   if (totalVal > 0) {
     doc.setFontSize(8);
     doc.setFont("helvetica", "italic");
