@@ -1,34 +1,34 @@
 import type { Quotation } from "@/types";
 
-export const DEFAULT_TERMS_QUOTATION = `1. This quotation is valid for 15 days from the date of issue.
-2. A 50% advance payment is required to commence work. Balance due upon completion.
-3. Any changes in scope after approval will be quoted separately.
-4. Delivery timelines begin after receipt of advance payment and all required materials from the client.
-5. All intellectual property rights shall be transferred to the client only after full payment.
-6. Cancellation after work has commenced will attract charges for work already completed.
-7. GST will be charged as applicable at the prevailing rate.`;
+export const DEFAULT_TERMS_QUOTATION = `1. Validity: This quotation is valid for a period of 15 days from the date of issue.
+2. Payment Terms: A 50% advance payment is mandatory to initiate the project. The balance 50% is payable upon completion.
+3. Scope of Work: The project will be executed strictly as per the requirements mentioned here. Changes will be billed separately.
+4. Client Responsibilities: Timely delivery depends on the client providing all necessary content and approvals.
+5. Intellectual Property: All creative rights and deliverables remain the property of CreativeMark until the final invoice is paid in full.
+6. Revisions: Includes up to two rounds of minor revisions. Major changes will incur extra charges.
+7. Statutory Levies: GST (18%) and other government taxes are applied as per the prevailing rates.`;
 
-export const DEFAULT_TERMS_BILL = `1. Payment is due within 15 days from the date of this invoice.
-2. Late payments will attract an interest of 2% per month on the outstanding amount.
-3. All disputes are subject to the jurisdiction of courts in Pune, Maharashtra.
-4. Services rendered are non-refundable once delivered and approved by the client.
-5. GST has been charged as applicable at the prevailing rate.
-6. Please quote the invoice number in all payment communications.`;
+export const DEFAULT_TERMS_BILL = `1. Payment Due Date: This invoice is payable immediately upon receipt or within 7 days.
+2. Late Payment: Payments delayed beyond 15 days will attract a late fee of 2% per month.
+3. Disputed Invoices: Any discrepancies must be reported in writing within 48 hours of receipt.
+4. Statutory Compliance: GST has been applied based on the service category.
+5. Jurisdiction: All legal disputes are subject to the exclusive jurisdiction of the courts in Pune, Maharashtra.
+6. Digital Binding: This is a system-generated document and is legally binding without a physical signature.`;
 
 // Keep backward-compatible export
 export const DEFAULT_TERMS = DEFAULT_TERMS_QUOTATION;
 
 export const SERVICE_PRESETS = [
-  { serviceName: "Social Media Management", rate: 15000, unit: "month" },
+  { serviceName: "Social Media Management (Standard)", rate: 15000, unit: "month" },
+  { serviceName: "Social Media Management (Premium)", rate: 25000, unit: "month" },
   { serviceName: "Reel Production (Batch of 4)", rate: 12000, unit: "batch" },
-  { serviceName: "Event Photography (Half Day)", rate: 8000, unit: "event" },
-  { serviceName: "Event Photography (Full Day)", rate: 15000, unit: "event" },
-  { serviceName: "Banner Design", rate: 1500, unit: "piece" },
-  { serviceName: "Logo Design", rate: 10000, unit: "project" },
-  { serviceName: "Website Development", rate: 35000, unit: "project" },
-  { serviceName: "Brand Identity Package", rate: 25000, unit: "project" },
-  { serviceName: "Video Production (1 min)", rate: 20000, unit: "video" },
-  { serviceName: "Political Campaign Package", rate: 50000, unit: "campaign" },
+  { serviceName: "Product Photography", rate: 10000, unit: "session" },
+  { serviceName: "Logo & Brand Identity", rate: 15000, unit: "project" },
+  { serviceName: "WordPress Website (Basic)", rate: 25000, unit: "project" },
+  { serviceName: "E-commerce Website", rate: 45000, unit: "project" },
+  { serviceName: "Meta Ads Management", rate: 10000, unit: "month" },
+  { serviceName: "Video Production (60 Sec)", rate: 18000, unit: "video" },
+  { serviceName: "Political Branding Package", rate: 75000, unit: "campaign" },
 ];
 
 export const quotations: Quotation[] = [];

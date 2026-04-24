@@ -53,6 +53,15 @@ const Quotations = () => {
   const [terms, setTerms] = useState(DEFAULT_TERMS_QUOTATION);
   const [notes, setNotes] = useState("");
 
+  // Update terms when type changes if they are still the default
+  useEffect(() => {
+    if (terms === DEFAULT_TERMS_QUOTATION && type === "Bill") {
+      setTerms(DEFAULT_TERMS_BILL);
+    } else if (terms === DEFAULT_TERMS_BILL && type === "Quotation") {
+      setTerms(DEFAULT_TERMS_QUOTATION);
+    }
+  }, [type]);
+
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
@@ -209,9 +218,12 @@ const Quotations = () => {
   };
 
   const resetForm = () => {
-    setRecipientId(""); setItems([emptyItem()]); setGstEnabled(false); setDiscountPercent(0);
-    setTerms(DEFAULT_TERMS); setNotes("");
-    setType("Quotation");
+    setRecipientId(""); 
+    setItems([emptyItem()]); 
+    setGstEnabled(false); 
+    setDiscountPercent(0);
+    setTerms(type === "Bill" ? DEFAULT_TERMS_BILL : DEFAULT_TERMS_QUOTATION); 
+    setNotes("");
   };
 
   const shareViaWhatsApp = (q: any) => {
@@ -438,8 +450,36 @@ const Quotations = () => {
                     </div>
                   </div>
 
-                  <div><Label>Terms & Conditions</Label><Textarea value={terms} onChange={(e) => setTerms(e.target.value)} rows={2} /></div>
-                  <div><Label>Internal Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Not visible to client" /></div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label>Terms & Conditions</Label>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 text-[10px] text-primary"
+                        onClick={() => setTerms(type === "Bill" ? DEFAULT_TERMS_BILL : DEFAULT_TERMS_QUOTATION)}
+                      >
+                        Reset to Defaults
+                      </Button>
+                    </div>
+                    <Textarea 
+                      value={terms} 
+                      onChange={(e) => setTerms(e.target.value)} 
+                      rows={5} 
+                      className="text-xs leading-relaxed"
+                      placeholder="Enter professional terms and conditions..."
+                    />
+                  </div>
+                  <div>
+                    <Label>Internal Notes</Label>
+                    <Textarea 
+                      value={notes} 
+                      onChange={(e) => setNotes(e.target.value)} 
+                      rows={2} 
+                      placeholder="Not visible to client (e.g., project details, internal deadlines)" 
+                      className="text-xs"
+                    />
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => { setAddOpen(false); resetForm(); }}>Cancel</Button>

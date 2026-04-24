@@ -25,24 +25,25 @@ const COMPANY = {
 
 // ── Default Professional Terms ────────────────────────────────
 const PROFESSIONAL_TERMS_QUOTATION = [
-  "1. This quotation is valid for 15 days from the date of issue.",
-  "2. A 50% advance payment is required to commence work. Balance due upon completion.",
-  "3. Any changes in scope after approval will be quoted separately.",
-  "4. Delivery timelines begin after receipt of advance payment and all required materials from the client.",
-  "5. All intellectual property rights shall be transferred to the client only after full payment.",
-  "6. Cancellation after work has commenced will attract charges for work already completed.",
-  "7. GST will be charged as applicable at the prevailing rate.",
-  "8. This document is system-generated and does not require a physical signature.",
+  "1. Validity: This quotation is valid for a period of 15 days from the date of issue. Prices may be subject to change thereafter.",
+  "2. Payment Terms: A 50% advance payment is mandatory to initiate the project. The remaining 50% balance must be cleared upon project completion or before the final handover of deliverables.",
+  "3. Scope of Work: The project will be executed strictly as per the requirements mentioned in this document. Any additional requests or modifications to the original scope will be billed separately at an hourly rate or as a fixed add-on.",
+  "4. Client Responsibilities: Timely delivery depends on the client providing all necessary content, approvals, and feedback. Delays in providing materials may result in a revised delivery schedule.",
+  "5. Intellectual Property: All creative rights, source files, and final deliverables remain the property of CreativeMark until the final invoice is paid in full. Upon full payment, usage rights are transferred to the client.",
+  "6. Revisions: This quotation includes up to two rounds of minor revisions for the specified services. Major design changes or additional rounds will incur extra charges.",
+  "7. Project Cancellation: If the project is canceled by the client after commencement, the 50% advance will be non-refundable to cover the initial planning and resource allocation costs.",
+  "8. Statutory Levies: GST (18%) and other government taxes are applied as per the prevailing rates and are not included in the basic service rates unless specified.",
+  "9. Confidentiality: Both parties agree not to disclose any proprietary information or trade secrets shared during the project duration.",
 ];
 
 const PROFESSIONAL_TERMS_BILL = [
-  "1. Payment is due within 15 days from the date of this invoice.",
-  "2. Late payments will attract an interest of 2% per month on the outstanding amount.",
-  "3. All disputes are subject to the jurisdiction of courts in Pune, Maharashtra.",
-  "4. Services rendered are non-refundable once delivered and approved by the client.",
-  "5. GST has been charged as applicable at the prevailing rate.",
-  "6. Please quote the invoice number in all payment communications.",
-  "7. This document is system-generated and does not require a physical signature.",
+  "1. Payment Due Date: This invoice is payable immediately upon receipt or within the pre-agreed credit period of 7 days from the invoice date.",
+  "2. Late Payment Interest: Payments delayed beyond 15 days will attract a late fee/interest of 2% per month on the outstanding balance, compounded monthly.",
+  "3. Disputed Invoices: Any discrepancies or disputes regarding this invoice must be reported in writing within 48 hours of receipt; otherwise, it will be considered accepted as final.",
+  "4. Statutory Compliance: GST has been applied based on the service category. TDS, if applicable, should be deducted as per the Income Tax Act and a TDS certificate should be provided.",
+  "5. Finality of Service: Once the deliverables are approved and the final files/services are handed over, no further modifications will be made without a new work order.",
+  "6. Jurisdiction: All transactions are subject to the laws of India. Any legal disputes arising out of this transaction shall be subject to the exclusive jurisdiction of the courts in Pune, Maharashtra.",
+  "7. Digital Binding: This is a system-generated document based on the approved quotation and work order; it is legally binding and does not require a physical signature.",
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -101,8 +102,26 @@ function addLetterhead(doc: jsPDF, logoBase64: string | null) {
 
   // Logo (if available)
   if (logoBase64) {
-    // Logo is wide, place it on the left
-    doc.addImage(logoBase64, "JPEG", 12, 8, 60, 18, undefined, 'FAST');
+    try {
+      // Get image properties to maintain aspect ratio
+      const props = doc.getImageProperties(logoBase64);
+      const ratio = props.width / props.height;
+      const maxW = 60;
+      const maxH = 18;
+      
+      let finalW = maxW;
+      let finalH = maxW / ratio;
+      
+      if (finalH > maxH) {
+        finalH = maxH;
+        finalW = maxH * ratio;
+      }
+      
+      doc.addImage(logoBase64, "JPEG", 12, 6, finalW, finalH, undefined, 'FAST');
+    } catch (e) {
+      // Fallback if properties fail
+      doc.addImage(logoBase64, "JPEG", 12, 6, 60, 15, undefined, 'FAST');
+    }
   } else {
     // Fallback text logo (Brand Red)
     doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
@@ -152,17 +171,21 @@ function addFooter(doc: jsPDF, pageNum: number) {
   doc.setLineWidth(0.3);
   doc.line(12, y, pageW - 12, y);
 
-  doc.setFontSize(7.5);
+  doc.setFontSize(7); // Slightly smaller to prevent overlap
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  const footerWebText = `Official Website: ${COMPANY.website.replace("https://", "").replace(/\/$/, "")}`;
-  doc.text(footerWebText, 15, y + 6);
   
-  // Make footer website clickable
+  // Website on the left
+  const footerWebText = COMPANY.website.replace("https://", "").replace(/\/$/, "");
+  doc.text(footerWebText, 15, y + 6);
   const fwW = doc.getTextWidth(footerWebText);
   doc.link(15, y + 6 - 3, fwW, 5, { url: COMPANY.website });
 
-  doc.text(`Contact: ${COMPANY.phone1} | ${COMPANY.email}`, pageW / 2, y + 6, { align: "center" });
-  doc.text(`Page ${pageNum}`, pageW - 15, y + 6, { align: "right" });
+  // Middle info: Address / Phone
+  doc.text(`${COMPANY.address} | ${COMPANY.phone1}`, pageW / 2, y + 6, { align: "center" });
+
+  // Right side: Email & Page Number
+  const rightText = `${COMPANY.email}  |  Page ${pageNum}`;
+  doc.text(rightText, pageW - 15, y + 6, { align: "right" });
   
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
 }
@@ -316,12 +339,12 @@ export async function generateQuotationPDF(q: any) {
   doc.line(totalsX - 2, y - 2, pageW - 12, y - 2);
 
   doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.roundedRect(totalsX - 2, y, pageW - totalsX + 2 - 10, 10, 1, 1, "F");
+  doc.roundedRect(totalsX - 2, y, pageW - totalsX + 2 - 12, 10, 1, 1, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10); // Slightly smaller to be less "big"
+  doc.setFontSize(10);
   doc.setTextColor(255, 255, 255);
-  doc.text("Total Amount:", totalsX + 2, y + 7);
-  doc.text(fmtINR(q.grandTotal || q.grand_total || q.total || 0), pageW - 15, y + 7, { align: "right" });
+  doc.text("Total Amount:", totalsX + 2, y + 6.5);
+  doc.text(fmtINR(q.grandTotal || q.grand_total || q.total || 0), pageW - 15, y + 6.5, { align: "right" });
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   y += 18;
 
