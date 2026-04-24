@@ -40,7 +40,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Clients = () => {
   const { user } = useAuth();
-  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name)), payment_history(amount), quotations(quotation_number, quote_number, grand_total, total_amount, is_bill)');
+  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name)), payment_history(amount), quotations(quotation_number, quote_number, grand_total, total_amount, type)');
   const [view, setView] = useState<"cards" | "table">("cards");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -57,7 +57,7 @@ const Clients = () => {
   const clients = useMemo(() => {
     return clientsData.map(c => {
       const billsArr = c.quotations || [];
-      const invoices = billsArr.filter((b: any) => b.is_bill || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
+      const invoices = billsArr.filter((b: any) => b.type === "Bill" || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
       const computedBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
       const allBilled = billsArr.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
       const paidTotal = (c.payment_history || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);

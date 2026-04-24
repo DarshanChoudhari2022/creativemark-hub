@@ -57,17 +57,30 @@ export default function Analytics() {
     fetchAll();
   }, []);
 
+  // ── Single source of truth: quotations table (type='Bill') — matches Recovery tab ──
+  const allBills = useMemo(() => 
+    quotations.filter(q => q.type === "Bill" && q.status !== "Cancelled" && q.status !== "Draft"),
+  [quotations]);
+
   // ── KPI computations ──
-  const totalReceived = useMemo(() => payments.reduce((s, p) => s + (p.amount || 0), 0), [payments]);
-  const totalBilled = useMemo(() => quotations.filter(q => q.type === "Bill").reduce((s, q) => s + (q.grand_total || 0), 0), [quotations]);
-  const totalOutstanding = useMemo(() => Math.max(0, totalBilled - totalReceived), [totalBilled, totalReceived]);
+  const totalReceived = useMemo(() => 
+    allBills.reduce((s, q) => s + (q.amount_paid || 0), 0), 
+  [allBills]);
+
+  const totalOutstanding = useMemo(() => 
+    allBills
+      .filter(q => q.status !== "Paid")
+      .reduce((s, q) => s + ((q.grand_total || 0) - (q.amount_paid || 0)), 0),
+  [allBills]);
   
-  const totalDistributed = useMemo(() => 
+  const totalPayroll = useMemo(() => 
     expenses.filter(e => e.category === 'Salary').reduce((s, e) => s + (e.amount || 0), 0), 
   [expenses]);
 
+  const totalDistributed = totalPayroll;
+
   const activeEmployees = useMemo(() => employees.filter(e => e.status === "Active").length, [employees]);
-  const roi = totalDistributed > 0 ? (totalReceived / totalDistributed).toFixed(1) : "∞";
+  const roi = totalDistributed > 0 ? (totalReceived / totalDistributed).toFixed(1) : "0";
 
   // ── Revenue by category (from clients) ──
   const categoryData = useMemo(() => {
@@ -79,33 +92,26 @@ export default function Analytics() {
     return Object.entries(map).map(([name, value]) => ({ name, value })).filter(d => d.value > 0);
   }, [clients]);
 
-  // ── Monthly revenue (from quotations) ──
-  const monthlyRevenue = useMemo(() => {
-    const months: Record<string, { month: string; billed: number; received: number }> = {};
+  // ── Monthly revenue (from quotations — single source of truth) ──
+  const revenueData = useMemo(() => {
+    const months: Record<string, { name: string; billed: number; received: number }> = {};
     const now = new Date();
-    for (let i = 11; i >= 0; i--) {
+    for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
-      months[key] = { month: key, billed: 0, received: 0 };
+      months[key] = { name: key, billed: 0, received: 0 };
     }
-    quotations.filter(q => q.type === "Bill").forEach(q => {
+    allBills.forEach(q => {
       if (!q.date) return;
       const d = new Date(q.date);
       const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
       if (months[key]) {
         months[key].billed += q.grand_total || 0;
-      }
-    });
-    payments.forEach(p => {
-      if (!p.date) return;
-      const d = new Date(p.date);
-      const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
-      if (months[key]) {
-        months[key].received += p.amount || 0;
+        months[key].received += q.amount_paid || 0;
       }
     });
     return Object.values(months);
-  }, [quotations]);
+  }, [allBills]);
 
   // ── Lead conversion funnel ──
   const leadFunnel = useMemo(() => {
@@ -187,11 +193,11 @@ export default function Analytics() {
           <h3 className="font-bold text-lg mb-1">Revenue Trend</h3>
           <p className="text-xs text-muted-foreground mb-4">Billed vs Received — Last 12 months</p>
           <div className="h-72">
-            {monthlyRevenue.some(r => r.billed > 0 || r.received > 0) ? (
+            {revenueData.some(r => r.billed > 0 || r.received > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyRevenue} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                <BarChart data={revenueData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="month" fontSize={11} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="name" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 100000).toFixed(0)}L`} />
                   <Tooltip cursor={{ fill: "hsl(var(--muted))" }} contentStyle={{ borderRadius: 8, fontSize: 12 }} formatter={(v: number) => formatINR(v)} />
                   <Bar dataKey="received" name="Received" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={28} />

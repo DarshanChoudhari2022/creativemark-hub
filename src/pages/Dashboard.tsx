@@ -77,9 +77,20 @@ const Dashboard = () => {
     fetchAll();
   }, []);
 
-  const totalReceived = useMemo(() => payments.reduce((s, p) => s + (p.amount || 0), 0), [payments]);
-  const totalBilled = useMemo(() => quotations.filter(q => q.type === "Bill").reduce((s, c) => s + (c.grand_total || 0), 0), [quotations]);
-  const totalOutstanding = useMemo(() => Math.max(0, totalBilled - totalReceived), [totalBilled, totalReceived]);
+  // ── Single source of truth: quotations table (type='Bill') — matches Recovery tab ──
+  const allBills = useMemo(() => 
+    quotations.filter(q => q.type === "Bill" && q.status !== "Cancelled" && q.status !== "Draft"),
+  [quotations]);
+
+  const totalReceived = useMemo(() => 
+    allBills.reduce((s, q) => s + (q.amount_paid || 0), 0), 
+  [allBills]);
+
+  const totalOutstanding = useMemo(() => 
+    allBills
+      .filter(q => q.status !== "Paid")
+      .reduce((s, q) => s + ((q.grand_total || 0) - (q.amount_paid || 0)), 0),
+  [allBills]);
   
   const totalDistributed = useMemo(() => 
     expenses.filter(e => e.category === 'Salary').reduce((s, e) => s + (e.amount || 0), 0), 
@@ -92,7 +103,7 @@ const Dashboard = () => {
   const partnerLeads = useMemo(() =>
     partners.reduce((s, p) => s + (p.partner_leads?.length || 0), 0), [partners]);
 
-  // ── Revenue chart (monthly from quotations + real payments) ──
+  // ── Revenue chart (monthly from quotations — single source of truth) ──
   const revenueData = useMemo(() => {
     const months: Record<string, { received: number; billed: number }> = {};
     const now = new Date();
@@ -101,25 +112,17 @@ const Dashboard = () => {
       const key = d.toLocaleString("default", { month: "short" });
       months[key] = { received: 0, billed: 0 };
     }
-    quotations.filter(q => q.type === "Bill").forEach(q => {
+    allBills.forEach(q => {
       if (!q.date) return;
       const d = new Date(q.date);
       const key = d.toLocaleString("default", { month: "short" });
       if (months[key]) {
         months[key].billed += q.grand_total || 0;
-      }
-    });
-    // Use actual payments for received amounts
-    payments.forEach(p => {
-      if (!p.date) return;
-      const d = new Date(p.date);
-      const key = d.toLocaleString("default", { month: "short" });
-      if (months[key]) {
-        months[key].received += p.amount || 0;
+        months[key].received += q.amount_paid || 0;
       }
     });
     return Object.entries(months).map(([month, data]) => ({ month, ...data }));
-  }, [quotations, payments]);
+  }, [allBills]);
 
   // ── Lead pipeline ──
   const leadsByStage = useMemo(() => {

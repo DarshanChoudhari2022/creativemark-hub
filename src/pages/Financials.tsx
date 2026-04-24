@@ -105,26 +105,28 @@ const Financials = () => {
     },
   });
 
-  // Calculations
-  const totalRevenue = payments?.reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
-  const totalBilled = quotations?.filter(q => q.type === "Bill").reduce((acc, q) => acc + (q.grand_total || 0), 0) || 0;
+  // Single source of truth: quotations table (type='Bill') — matches Recovery tab
+  const allBills = quotations?.filter(q => q.type === "Bill" && q.status !== "Cancelled" && q.status !== "Draft") || [];
+  const totalRevenue = allBills.reduce((acc, q) => acc + (q.amount_paid || 0), 0);
+  const totalBilled = allBills.reduce((acc, q) => acc + (q.grand_total || 0), 0);
+  const totalOutstanding = allBills.filter(q => q.status !== "Paid").reduce((acc, q) => acc + ((q.grand_total || 0) - (q.amount_paid || 0)), 0);
   const totalExpenses = expenses?.reduce((acc, e) => acc + (Number(e.amount) || 0), 0) || 0;
   const netProfit = totalRevenue - totalExpenses;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
   
-  const unpaidCount = quotations?.filter(q => q.status !== "Paid" && q.status !== "Draft").length || 0;
+  const unpaidCount = allBills.filter(q => q.status !== "Paid").length;
 
-  // Charts Data
+  // Charts Data — uses allBills (quotations) as single source of truth
   const getMonthlyData = () => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentYear = new Date().getFullYear();
     const data = months.map(m => ({ name: m, revenue: 0, expenses: 0 }));
 
-    payments?.forEach(p => {
-      if (p.date) {
-        const date = new Date(p.date);
+    allBills.forEach(q => {
+      if (q.date) {
+        const date = new Date(q.date);
         if (date.getFullYear() === currentYear) {
-          data[date.getMonth()].revenue += (p.amount || 0);
+          data[date.getMonth()].revenue += (q.amount_paid || 0);
         }
       }
     });
@@ -340,7 +342,7 @@ const Financials = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Outstanding Dues</p>
-                <h3 className="text-2xl font-bold mt-1">{formatINR(totalBilled - totalRevenue)}</h3>
+                <h3 className="text-2xl font-bold mt-1">{formatINR(totalOutstanding)}</h3>
               </div>
               <div className="p-2 bg-yellow-500/20 rounded-lg">
                 <AlertCircle className="h-5 w-5 text-yellow-500" />
