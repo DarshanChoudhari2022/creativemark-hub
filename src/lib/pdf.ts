@@ -161,7 +161,7 @@ function addLetterhead(doc: jsPDF, logoBase64: string | null) {
 
   doc.setDrawColor(230, 230, 230);
   doc.setLineWidth(0.3);
-  doc.line(12, 32, pageW - 12, 32);
+  doc.line(12, 30, pageW - 12, 30);
 }
 
 // ── Footer ────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ export async function generateQuotationPDF(q: any) {
   addLetterhead(doc, logoBase64);
 
   const isBill = q.type === "Bill";
-  let y = 36;
+  let y = 38;
 
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
@@ -374,91 +374,147 @@ export async function generatePartnerAgreementPDF(partner: Partner) {
   const logoBase64 = await loadLogo();
   addLetterhead(doc, logoBase64);
 
-  let y = 36;
-  doc.setFontSize(18);
+  let y = 38;
+
+  // ── Title ──
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("PARTNERSHIP AGREEMENT", 15, y);
+  doc.text("REFERRAL PARTNERSHIP AGREEMENT", pageW / 2, y, { align: "center" });
+  y += 4;
+  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setLineWidth(0.5);
+  doc.line(55, y, pageW - 55, y);
   y += 10;
 
-  doc.setFontSize(10);
+  // ── Preamble ──
+  doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  doc.text(`Date of Agreement: ${formatDate(partner.agreementDate || new Date())}`, 15, y);
-  y += 10;
+  const preamble = `This Referral Partnership Agreement ("Agreement") is entered into on ${formatDate(partner.agreementDate || new Date())} between ${COMPANY.name}, having its office at ${COMPANY.address} (hereinafter referred to as "The Company") and ${partner.name}${partner.businessName ? ` (${partner.businessName})` : ''} (hereinafter referred to as "The Partner").`;
+  const pLines = doc.splitTextToSize(preamble, 180);
+  doc.text(pLines, 15, y);
+  y += pLines.length * 4.5 + 8;
 
+  // ── Two-column: Partner Info + Commission ──
   const mid = pageW / 2;
+
+  // Left column - Partner Info
+  doc.setFillColor(248, 248, 248);
+  doc.roundedRect(12, y - 2, mid - 16, 48, 2, 2, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("PARTNER INFORMATION", 15, y);
-  y += 6;
   doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text(`Name: ${partner.name}`, 15, y); y += 5;
-  if (partner.businessName) { doc.text(`Business: ${partner.businessName}`, 15, y); y += 5; }
-  doc.text(`Category: ${partner.category || "Consultant"}`, 15, y); y += 5;
-  doc.text(`Phone: ${partner.phone}`, 15, y); y += 5;
-  doc.text(`Email: ${partner.email}`, 15, y); y += 5;
-  if (partner.pan) { doc.text(`PAN: ${partner.pan}`, 15, y); y += 5; }
-
-  const leftYEnd = y;
-  y = 56;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("PAYMENT & COMMISSION", mid + 5, y);
-  y += 6;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  const commText = partner.commissionType === "Percentage" ? `${partner.commissionRate}% of Net Project Value` : `${fmtINR(partner.commissionRate || 0)} Flat per Lead`;
-  doc.text(`Type: ${partner.commissionType || "Percentage"}`, mid + 5, y); y += 5;
-  doc.text(`Rate: ${commText}`, mid + 5, y); y += 10;
-
-  doc.setFont("helvetica", "bold");
-  doc.text("BANKING DETAILS", mid + 5, y);
-  y += 6;
-  if (partner.bankAccount) {
-    doc.text(`A/C Holder: ${partner.accountHolder || partner.name}`, mid + 5, y); y += 5;
-    doc.text(`Bank: ${partner.bankName || "—"}`, mid + 5, y); y += 5;
-    doc.text(`A/C No: ${partner.bankAccount}`, mid + 5, y); y += 5;
-    doc.text(`IFSC: ${partner.ifsc || "—"}`, mid + 5, y); y += 5;
-  } else if (partner.upi) {
-    doc.text(`UPI ID: ${partner.upi}`, mid + 5, y); y += 5;
-  } else {
-    doc.text("Not Provided", mid + 5, y); y += 5;
-  }
-
-  y = Math.max(leftYEnd, y) + 12;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.text("TERMS & CONDITIONS (LEGAL BINDING)", 15, y);
-  y += 7;
+  doc.text("PARTNER DETAILS", 16, y + 4);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  
-  const partnerTerms = partner.agreementTerms ? partner.agreementTerms.split('\n').filter(t => t.trim() !== '') : DEFAULT_PARTNER_TERMS;
-  partnerTerms.forEach(term => {
-    const lines = doc.splitTextToSize(term, 180);
-    if (y + (lines.length * 4) > 275) { addFooter(doc, 1); doc.addPage(); addLetterhead(doc, logoBase64); y = 40; }
-    doc.text(lines, 15, y);
-    y += lines.length * 4 + 2;
+  let ly = y + 11;
+  doc.text(`Name: ${partner.name}`, 16, ly); ly += 5;
+  if (partner.businessName) { doc.text(`Business: ${partner.businessName}`, 16, ly); ly += 5; }
+  doc.text(`Category: ${partner.category || "Consultant"}`, 16, ly); ly += 5;
+  doc.text(`Phone: ${partner.phone}`, 16, ly); ly += 5;
+  doc.text(`Email: ${partner.email || "—"}`, 16, ly); ly += 5;
+  if (partner.pan) { doc.text(`PAN: ${partner.pan}`, 16, ly); ly += 5; }
+
+  // Right column - Commission + Banking
+  doc.setFillColor(248, 248, 248);
+  doc.roundedRect(mid + 2, y - 2, mid - 16, 48, 2, 2, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text("COMMISSION STRUCTURE", mid + 6, y + 4);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  let ry = y + 11;
+  const commText = partner.commissionType === "Percentage" ? `${partner.commissionRate}% of Net Project Value` : `${fmtINR(partner.commissionRate || 0)} Flat per Referral`;
+  doc.text(`Type: ${partner.commissionType || "Percentage"}`, mid + 6, ry); ry += 5;
+  doc.text(`Rate: ${commText}`, mid + 6, ry); ry += 8;
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text("BANKING DETAILS", mid + 6, ry);
+  ry += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  if (partner.bankAccount) {
+    doc.text(`A/C Holder: ${partner.accountHolder || partner.name}`, mid + 6, ry); ry += 5;
+    doc.text(`Bank: ${partner.bankName || "—"}  |  IFSC: ${partner.ifsc || "—"}`, mid + 6, ry); ry += 5;
+    doc.text(`A/C No: ${partner.bankAccount}`, mid + 6, ry);
+  } else if (partner.upi) {
+    doc.text(`UPI ID: ${partner.upi}`, mid + 6, ry);
+  } else {
+    doc.text("Not Provided", mid + 6, ry);
+  }
+
+  y += 56;
+
+  // ── Terms & Conditions ──
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text("TERMS & CONDITIONS", 15, y);
+  y += 2;
+  doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setLineWidth(0.3);
+  doc.line(15, y, 65, y);
+  y += 6;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+
+  const partnerTerms = partner.agreementTerms ? partner.agreementTerms.split('\n').filter((t: string) => t.trim() !== '') : DEFAULT_PARTNER_TERMS;
+  let pageNum = 1;
+  partnerTerms.forEach((term: string) => {
+    const lines = doc.splitTextToSize(term, 178);
+    if (y + (lines.length * 3.8) > 260) {
+      addFooter(doc, pageNum);
+      pageNum++;
+      doc.addPage();
+      addLetterhead(doc, logoBase64);
+      y = 38;
+    }
+    doc.text(lines, 16, y);
+    y += lines.length * 3.8 + 2.5;
   });
 
-  y = Math.max(y + 15, 255);
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text(`For ${COMPANY.name}`, 15, y);
-  doc.text(`Partner: ${partner.name}`, 110, y);
-  y += 15;
-  doc.line(15, y, 80, y); doc.line(110, y, 175, y);
-  y += 5;
-  doc.setFontSize(8);
-  doc.text("Authorized Signatory (Digital)", 15, y);
-  doc.text("Partner Signature / Acceptance", 110, y);
+  // ── Signature Block ──
+  y = Math.max(y + 12, 240);
+  if (y > 260) {
+    addFooter(doc, pageNum);
+    pageNum++;
+    doc.addPage();
+    addLetterhead(doc, logoBase64);
+    y = 50;
+  }
 
-  addFooter(doc, 1);
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.2);
+  doc.line(15, y - 4, pageW - 15, y - 4);
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text(`For ${COMPANY.name}`, 15, y + 2);
+  doc.text(`Partner: ${partner.name}`, 120, y + 2);
+  y += 18;
+  doc.setDrawColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.line(15, y, 80, y);
+  doc.line(120, y, pageW - 15, y);
+  y += 5;
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "normal");
+  doc.text("Authorized Signatory", 15, y);
+  doc.text("Partner Signature / Acceptance", 120, y);
+  y += 5;
+  doc.setFontSize(7);
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text(`Date: ${formatDate(new Date())}`, 15, y);
+  doc.text(`Date: _______________`, 120, y);
+
+  addFooter(doc, pageNum);
   doc.save(`PartnerAgreement_${partner.name.replace(/\s+/g, "_")}.pdf`);
 }
 
