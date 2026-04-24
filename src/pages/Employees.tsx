@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const Employees = () => {
-  const { data: employeesData, loading, insert: insertEmployee } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage)');
+  const { data: employeesData, loading, insert: insertEmployee, refresh: refreshEmployees } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage)');
   const { data: clients } = useSupabaseTable<any>('clients', 'id, name, whatsapp');
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -119,6 +119,8 @@ const Employees = () => {
       setLogOpen(false);
       setLogForm({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, amount: 0, notes: "" });
       toast.success("Work log added");
+      // Immediately refresh employee data to show the new log
+      refreshEmployees();
     }
   };
 
