@@ -57,12 +57,15 @@ const Projects = () => {
   const [newProject, setNewProject] = useState({
     title: "",
     description: "",
+    project_type: "Client Project",
     client_id: "",
     status: "Planning",
     priority: "Medium",
     start_date: "",
     end_date: "",
-    assigned_to: ""
+    assigned_to: "",
+    features_summary: "",
+    project_link: ""
   });
 
   // Fetch Projects
@@ -125,12 +128,15 @@ const Projects = () => {
       setNewProject({
         title: "",
         description: "",
+        project_type: "Client Project",
         client_id: "",
         status: "Planning",
         priority: "Medium",
         start_date: "",
         end_date: "",
-        assigned_to: ""
+        assigned_to: "",
+        features_summary: "",
+        project_link: ""
       });
       toast({
         title: "Project created",
@@ -146,9 +152,38 @@ const Projects = () => {
     },
   });
 
+  // Delete Project Mutation
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("projects").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast({
+        title: "Project deleted",
+        description: "The project has been successfully removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error deleting project",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteProject = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+      deleteProjectMutation.mutate(id);
+    }
+  };
+
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProject.title || !newProject.client_id) {
+    if (!newProject.title || (newProject.project_type === "Client Project" && !newProject.client_id)) {
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields.",
@@ -156,7 +191,16 @@ const Projects = () => {
       });
       return;
     }
-    createProjectMutation.mutate(newProject);
+
+    const payload = { ...newProject };
+    if (payload.project_type === "Inhouse SaaS" || !payload.client_id) {
+      payload.client_id = null as any;
+    }
+    if (!payload.assigned_to) payload.assigned_to = null as any;
+    if (!payload.start_date) payload.start_date = null as any;
+    if (!payload.end_date) payload.end_date = null as any;
+
+    createProjectMutation.mutate(payload);
   };
 
   const filteredProjects = projects?.filter((project) => {
@@ -207,30 +251,71 @@ const Projects = () => {
                 <DialogTitle>Create New Project</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleCreateProject} className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Project Title *</Label>
-                  <Input 
-                    id="title" 
-                    placeholder="e.g. Summer Campaign 2024" 
-                    value={newProject.title}
-                    onChange={(e) => setNewProject({...newProject, title: e.target.value})}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Project Title *</Label>
+                    <Input 
+                      id="title" 
+                      placeholder="e.g. Summer Campaign 2024" 
+                      value={newProject.title}
+                      onChange={(e) => setNewProject({...newProject, title: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="project_type">Project Type *</Label>
+                    <Select value={newProject.project_type} onValueChange={(value) => setNewProject({...newProject, project_type: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Client Project">Client Project</SelectItem>
+                        <SelectItem value="Inhouse SaaS">Inhouse SaaS</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="client">Client *</Label>
-                  <Select onValueChange={(value) => setNewProject({...newProject, client_id: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients?.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.company_name || client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+                {newProject.project_type === "Client Project" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="client">Client *</Label>
+                    <Select onValueChange={(value) => setNewProject({...newProject, client_id: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients?.map((client) => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.company_name || client.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {newProject.project_type === "Inhouse SaaS" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="project_link">SaaS Link</Label>
+                      <Input 
+                        id="project_link" 
+                        placeholder="e.g. https://saas.creativemark.com" 
+                        value={newProject.project_link}
+                        onChange={(e) => setNewProject({...newProject, project_link: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="features_summary">Features Summary</Label>
+                      <Textarea 
+                        id="features_summary" 
+                        placeholder="Key features of the SaaS product..." 
+                        className="h-20"
+                        value={newProject.features_summary}
+                        onChange={(e) => setNewProject({...newProject, features_summary: e.target.value})}
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="priority">Priority</Label>
@@ -398,9 +483,14 @@ const Projects = () => {
               <div className="absolute top-0 left-0 w-1 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
-                  <Badge className={`${getStatusColor(project.status)} border-none px-2 py-0.5 rounded-md font-medium text-[10px] uppercase tracking-wider`}>
-                    {project.status}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={`${getStatusColor(project.status)} border-none px-2 py-0.5 rounded-md font-medium text-[10px] uppercase tracking-wider`}>
+                      {project.status}
+                    </Badge>
+                    <Badge variant="outline" className="border-primary/20 text-primary px-2 py-0.5 rounded-md font-medium text-[10px] uppercase tracking-wider">
+                      {project.project_type || 'Client Project'}
+                    </Badge>
+                  </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-primary/5">
@@ -408,21 +498,41 @@ const Projects = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}`)}>View Details</DropdownMenuItem>
-                      <DropdownMenuItem>Edit Project</DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600">Delete Project</DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/projects/${project.id}`); }}>
+                        View Details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast({ title: "Coming soon", description: "Edit functionality will be available soon." }); }}>
+                        Edit Project
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        className="text-red-600" 
+                        onClick={(e) => handleDeleteProject(e, project.id)}
+                      >
+                        Delete Project
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
                 <CardTitle className="text-xl font-bold mt-3 group-hover:text-primary transition-colors line-clamp-1">{project.title}</CardTitle>
                 <p className="text-sm text-muted-foreground font-medium flex items-center gap-1 mt-1">
-                  {project.client?.company_name || project.client?.name}
+                  {project.project_type === "Inhouse SaaS" ? "Internal Product" : (project.client?.company_name || project.client?.name || "No Client")}
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground line-clamp-2 h-10 italic">
                   {project.description || "No description provided."}
                 </p>
+
+                {project.project_type === "Inhouse SaaS" && (
+                  <div className="text-xs space-y-1 mt-2">
+                    {project.project_link && (
+                      <p><span className="font-semibold text-foreground">Link:</span> <a href={project.project_link} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{project.project_link}</a></p>
+                    )}
+                    {project.features_summary && (
+                      <p className="line-clamp-2"><span className="font-semibold text-foreground">Features:</span> {project.features_summary}</p>
+                    )}
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-xs">
