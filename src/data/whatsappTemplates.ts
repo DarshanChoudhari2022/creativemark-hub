@@ -20,6 +20,12 @@ export const WHATSAPP_TEMPLATES = {
   PAYMENT_RECEIVED: (name: string, invoice: string, amount: string) =>
     `*Hi ${name}*!\n\nWe have successfully received your payment of *${amount}* for invoice *${invoice}*. 🧾\n\nThank you for choosing CreativeMark. We value our partnership! \n\nBest regards,\nTeam CreativeMark`,
 
+  PARTIAL_PAYMENT_RECEIVED: (name: string, invoice: string, amountReceived: string, totalBilled: string, totalPaid: string, balanceDue: string) =>
+    `*Hi ${name}*,\n\nThank you! We have received your partial payment of *${amountReceived}* for invoice *${invoice}*. ✅\n\n📋 *Payment Summary:*\n• Total Invoice Amount: *${totalBilled}*\n• Total Paid: *${totalPaid}*\n• *Outstanding Balance: ${balanceDue}*\n\nKindly arrange for the remaining payment at your earliest convenience. We appreciate your prompt attention! 🙏\n\nBest regards,\nTeam CreativeMark`,
+
+  OUTSTANDING_REMINDER: (name: string, invoice: string, totalBilled: string, totalPaid: string, balanceDue: string) =>
+    `*Hi ${name}*,\n\nThis is a friendly reminder regarding your outstanding balance:\n\n📋 *Invoice:* ${invoice}\n• Total Amount: *${totalBilled}*\n• Paid: *${totalPaid}*\n• *Balance Due: ${balanceDue}*\n\nPlease arrange the remaining payment at your earliest convenience. Feel free to reach out if you have any questions. 😊\n\nBest regards,\nTeam CreativeMark`,
+
   // Recovery / Payment Related
   RECOVERY_SOFT: (client: string, amount: string, invoice: string) => 
     `*Hi ${client}*,\n\nThis is a gentle reminder regarding the outstanding payment of *${amount}* for invoice *${invoice}*. \n\nPlease let us know if you have any questions or need any assistance with the payment process. 😊\n\nBest regards,\nTeam CreativeMark`,

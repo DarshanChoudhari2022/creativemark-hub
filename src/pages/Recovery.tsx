@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { AlertTriangle, Send, Phone, Mail, MessageSquare, CheckCircle2, Clock, Search, Filter, RefreshCw } from "lucide-react";
+import { AlertTriangle, Send, Phone, Mail, MessageSquare, CheckCircle2, Clock, Search, Filter, RefreshCw, IndianRupee, Share2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,8 @@ const Recovery = () => {
   const [templateType, setTemplateType] = useState<"soft" | "firm" | "final">("soft");
   const [partialAmount, setPartialAmount] = useState(0);
   const [reminderHistory, setReminderHistory] = useState<any[]>([]);
+  const [inlinePayId, setInlinePayId] = useState<string | null>(null);
+  const [inlinePayAmount, setInlinePayAmount] = useState(0);
 
   const fetchRecoveries = async () => {
     setLoading(true);
@@ -115,6 +117,7 @@ const Recovery = () => {
     if (amount <= 0) { toast.error("Enter a valid amount"); return; }
     const newPaid = recovery.amountPaid + amount;
     const fullyPaid = newPaid >= recovery.amountDue;
+    const balanceDue = Math.max(0, recovery.amountDue - newPaid);
 
     const updateData: any = {
       amount_paid: newPaid,
@@ -124,27 +127,53 @@ const Recovery = () => {
     const { error } = await supabase.from("quotations").update(updateData).eq("id", recovery.id);
     if (error) { toast.error("Failed to record payment: " + error.message); return; }
 
-    // Log the payment
+    // Also record in payment_history
+    await supabase.from("payment_history").insert({
+      client_id: null,
+      invoice_no: recovery.invoiceNo,
+      date: new Date().toISOString().slice(0, 10),
+      amount,
+      status: "Paid",
+      payment_mode: "Cash",
+      notes: `${fullyPaid ? "Full" : "Partial"} payment against ${recovery.invoiceNo}`,
+    });
+
     await supabase.from("recovery_notes").insert({
       quotation_id: recovery.id,
-      note: `${fullyPaid ? "Full" : "Partial"} payment of ${formatINR(amount)} received`,
+      note: `${fullyPaid ? "Full" : "Partial"} payment of ${formatINR(amount)} received. Balance: ${formatINR(balanceDue)}`,
       created_at: new Date().toISOString(),
     });
 
     setPartialAmount(0);
-    const successMsg = fullyPaid ? "Invoice fully paid! 🎉" : `Partial payment of ${formatINR(amount)} recorded`;
-    
-    toast.success(successMsg, {
-      action: {
-        label: "Send Receipt",
-        onClick: () => {
-          const msg = WHATSAPP_TEMPLATES.PAYMENT_RECEIVED(recovery.clientName, recovery.invoiceNo, formatINR(amount));
-          window.open(waLink(recovery.whatsapp, msg), "_blank");
-        }
-      }
-    });
+    setInlinePayId(null);
+    setInlinePayAmount(0);
 
-    if (fullyPaid) setSelected(null);
+    if (fullyPaid) {
+      toast.success("Invoice fully paid! 🎉", {
+        action: {
+          label: "📱 Send Receipt",
+          onClick: () => {
+            const msg = WHATSAPP_TEMPLATES.PAYMENT_RECEIVED(recovery.clientName, recovery.invoiceNo, formatINR(amount));
+            window.open(waLink(recovery.whatsapp, msg), "_blank");
+          }
+        }
+      });
+      setSelected(null);
+    } else {
+      // Auto-generate outstanding message
+      const waMsg = WHATSAPP_TEMPLATES.PARTIAL_PAYMENT_RECEIVED(
+        recovery.clientName, recovery.invoiceNo,
+        formatINR(amount), formatINR(recovery.amountDue),
+        formatINR(newPaid), formatINR(balanceDue)
+      );
+      toast.success(`Partial payment of ${formatINR(amount)} recorded! Balance: ${formatINR(balanceDue)}`, {
+        duration: 8000,
+        action: {
+          label: "📱 Share on WhatsApp",
+          onClick: () => window.open(waLink(recovery.whatsapp, waMsg), "_blank"),
+        }
+      });
+    }
     fetchRecoveries();
   };
 
@@ -244,14 +273,17 @@ const Recovery = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((r) => (
+            {filtered.map((r) => {
+              const balance = r.amountDue - r.amountPaid;
+              return (
+              <>
               <TableRow key={r.id} className={r.received ? "opacity-50" : ""}>
                 <TableCell className="font-semibold">{r.clientName}</TableCell>
                 <TableCell className="font-mono text-sm">{r.invoiceNo}</TableCell>
                 <TableCell className="text-sm text-muted-foreground font-mono">{r.invoiceDate ? formatDateDDMMYYYY(new Date(r.invoiceDate)) : ""}</TableCell>
                 <TableCell className="text-right">{formatINR(r.amountDue)}</TableCell>
                 <TableCell className="text-right text-green-600 font-semibold">{formatINR(r.amountPaid)}</TableCell>
-                <TableCell className={`text-right font-bold ${!r.received ? "text-primary" : ""}`}>{formatINR(r.amountDue - r.amountPaid)}</TableCell>
+                <TableCell className={`text-right font-bold ${!r.received ? "text-primary" : ""}`}>{formatINR(balance)}</TableCell>
                 <TableCell>
                   {r.received ? (
                     <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs">Paid</Badge>
@@ -264,14 +296,49 @@ const Recovery = () => {
                 <TableCell className="text-right">
                   {!r.received && (
                     <div className="flex items-center justify-end gap-1">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-blue-600" onClick={() => { setInlinePayId(inlinePayId === r.id ? null : r.id); setInlinePayAmount(0); }} title="Record Payment"><IndianRupee className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600" onClick={() => sendWhatsApp(r, "soft")} title="WhatsApp Reminder"><Send className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                        const msg = WHATSAPP_TEMPLATES.OUTSTANDING_REMINDER(r.clientName, r.invoiceNo, formatINR(r.amountDue), formatINR(r.amountPaid), formatINR(balance));
+                        window.open(waLink(r.whatsapp, msg), "_blank");
+                      }} title="Share Outstanding"><Share2 className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDetail(r)} title="Details"><MessageSquare className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600" onClick={() => markFullPayment(r)} title="Mark Paid"><CheckCircle2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   )}
                 </TableCell>
               </TableRow>
-            ))}
+              {/* Inline partial payment row */}
+              {inlinePayId === r.id && !r.received && (
+                <TableRow key={`pay-${r.id}`} className="bg-blue-50/50">
+                  <TableCell colSpan={3}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-blue-700">Record Payment for {r.clientName}:</span>
+                    </div>
+                  </TableCell>
+                  <TableCell colSpan={2}>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" className="h-8 w-32 text-sm" placeholder="Amount ₹" value={inlinePayAmount || ""} onChange={(e) => setInlinePayAmount(+e.target.value)} />
+                    </div>
+                  </TableCell>
+                  <TableCell colSpan={3}>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs" onClick={() => markPartialPayment(r, inlinePayAmount)}>Record ₹{inlinePayAmount.toLocaleString("en-IN")}</Button>
+                      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setInlinePayId(null); setInlinePayAmount(0); }}>Cancel</Button>
+                      {r.amountPaid > 0 && (
+                        <Button size="sm" variant="ghost" className="h-8 text-xs text-green-600" onClick={() => {
+                          const msg = WHATSAPP_TEMPLATES.OUTSTANDING_REMINDER(r.clientName, r.invoiceNo, formatINR(r.amountDue), formatINR(r.amountPaid), formatINR(balance));
+                          navigator.clipboard.writeText(msg.replace(/\*/g, ""));
+                          toast.success("Outstanding message copied!");
+                        }}><Copy className="h-3 w-3 mr-1" /> Copy Msg</Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+              </>
+              );
+            })}
             {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{filter === "received" ? "No received payments" : "No pending invoices — all clear! 🎉"}</TableCell></TableRow>}
           </TableBody>
         </Table>
