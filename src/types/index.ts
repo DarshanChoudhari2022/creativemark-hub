@@ -51,7 +51,7 @@ export type ReminderType = "whatsapp" | "email";
 export type ReminderTemplate = "Friendly" | "Firm" | "Final Notice";
 export type PartnerStatus = "Active" | "Inactive";
 export type CommissionStatus = "Pending" | "Paid";
-export type CommissionType = "Percentage" | "Fixed";
+export type CommissionType = "Percentage" | "Flat";
 export type RecoveryStatus = "Not Due Yet" | "Due Soon" | "Overdue" | "Reminder Sent" | "Partially Paid" | "Paid";
 export type LeadQuotationStatus = "Not Sent" | "Sent" | "Accepted" | "Rejected";
 export type LeadPaymentStatus = "Not Due" | "Pending" | "Paid" | "Overdue";
@@ -467,6 +467,7 @@ export interface Partner {
   commissionType?: CommissionType;
   commissionRate?: number;
   agreementDate?: string;
+  agreementTerms?: string;
 }
 
 // ── Calendar ────────────────────────────────────────────────

@@ -9,7 +9,7 @@ const BRAND_GRAY = { r: 120, g: 120, b: 120 };
 
 // ── Company Info ──────────────────────────────────────────────
 const COMPANY = {
-  name: "CreativeMark",
+  name: "CreativeMark Advertising",
   tagline: "Advertising | Digital Marketing | Branding | Multimedia",
   phone1: "+91 7447332829",
   phone2: "+91 9890976952",
@@ -17,33 +17,42 @@ const COMPANY = {
   website: "https://creativemarkadvertising.com/",
   address: "Pune, Maharashtra, India",
   bankName: "HDFC Bank",
-  accountName: "CreativeMark Solutions",
-  accountNo: "50100456789123",
-  ifsc: "HDFC0001234",
-  branch: "Baner, Pune",
+  accountName: "CreativeMark Advertising",
+  accountNo: "50100234567890",
+  ifsc: "HDFC0000123",
+  branch: "Pune Main Branch",
 };
 
-// ── Default Professional Terms ────────────────────────────────
-const PROFESSIONAL_TERMS_QUOTATION = [
-  "1. Validity: This quotation is valid for a period of 15 days from the date of issue. Prices may be subject to change thereafter.",
-  "2. Payment Terms: A 50% advance payment is mandatory to initiate the project. The remaining 50% balance must be cleared upon project completion or before the final handover of deliverables.",
-  "3. Scope of Work: The project will be executed strictly as per the requirements mentioned in this document. Any additional requests or modifications to the original scope will be billed separately at an hourly rate or as a fixed add-on.",
-  "4. Client Responsibilities: Timely delivery depends on the client providing all necessary content, approvals, and feedback. Delays in providing materials may result in a revised delivery schedule.",
-  "5. Intellectual Property: All creative rights, source files, and final deliverables remain the property of CreativeMark until the final invoice is paid in full. Upon full payment, usage rights are transferred to the client.",
-  "6. Revisions: This quotation includes up to two rounds of minor revisions for the specified services. Major design changes or additional rounds will incur extra charges.",
-  "7. Project Cancellation: If the project is canceled by the client after commencement, the 50% advance will be non-refundable to cover the initial planning and resource allocation costs.",
-  "8. Statutory Levies: GST (18%) and other government taxes are applied as per the prevailing rates and are not included in the basic service rates unless specified.",
-  "9. Confidentiality: Both parties agree not to disclose any proprietary information or trade secrets shared during the project duration.",
+// ── Default Partner Agreement Terms ───────────────────────────
+export const DEFAULT_PARTNER_TERMS = [
+  "1. NATURE OF RELATIONSHIP: This agreement establishes a non-exclusive Referral Partnership. The Partner acts as an independent consultant and not as an employee, legal partner, or representative of CreativeMark Advertising.",
+  "2. COMMISSION ELIGIBILITY: Commission is calculated on the 'Net Project Value' (excluding GST, third-party media spends, hardware costs, and outsourced software licenses). Commission is only earned once the client makes the full payment.",
+  "3. LEAD VALIDITY: All leads must be registered via the CreativeMark CRM. A lead is valid for 90 days from registration. If no conversion occurs within this window, the lead becomes open for other partners or internal sales.",
+  "4. PAYMENT TERMS: Commissions are disbursed within 10-15 working days after CreativeMark Advertising receives the full and final payment from the client. TDS will be deducted as per government norms where applicable.",
+  "5. CONFIDENTIALITY: The Partner agrees to maintain absolute confidentiality regarding CreativeMark's internal pricing structures, strategic processes, and proprietary client data.",
+  "6. BRAND GUIDELINES: The Partner may represent themselves as an 'Authorized Referral Partner'. Use of the company logo on any external marketing material requires prior written approval from the management.",
+  "7. NON-SOLICITATION: During the term of this agreement and for one year thereafter, the Partner shall not directly or indirectly solicit or attempt to hire any employees of CreativeMark Advertising.",
+  "8. TERMINATION: Either party may terminate this agreement with a 15-day written notice. Any unethical practices or misrepresentation will lead to immediate termination and forfeiture of all pending commissions.",
+  "9. LEGAL JURISDICTION: This agreement is governed by the laws of India. Any disputes arising shall be subject to the exclusive jurisdiction of the courts in Pune, Maharashtra."
 ];
 
-const PROFESSIONAL_TERMS_BILL = [
-  "1. Payment Due Date: This invoice is payable immediately upon receipt or within the pre-agreed credit period of 7 days from the invoice date.",
-  "2. Late Payment Interest: Payments delayed beyond 15 days will attract a late fee/interest of 2% per month on the outstanding balance, compounded monthly.",
-  "3. Disputed Invoices: Any discrepancies or disputes regarding this invoice must be reported in writing within 48 hours of receipt; otherwise, it will be considered accepted as final.",
-  "4. Statutory Compliance: GST has been applied based on the service category. TDS, if applicable, should be deducted as per the Income Tax Act and a TDS certificate should be provided.",
-  "5. Finality of Service: Once the deliverables are approved and the final files/services are handed over, no further modifications will be made without a new work order.",
-  "6. Jurisdiction: All transactions are subject to the laws of India. Any legal disputes arising out of this transaction shall be subject to the exclusive jurisdiction of the courts in Pune, Maharashtra.",
-  "7. Digital Binding: This is a system-generated document based on the approved quotation and work order; it is legally binding and does not require a physical signature.",
+// ── Default Professional Terms ────────────────────────────────
+export const PROFESSIONAL_TERMS_QUOTATION = [
+  "1. VALIDITY: This quotation is valid for 15 days from the date of issue. Prices are subject to change after the validity period or if the project scope is modified.",
+  "2. PAYMENT MILESTONES: 50% Advance is required to initiate the project. 30% on completion of major milestones/drafts. 20% Balance before final delivery or deployment.",
+  "3. TAXATION: All prices are exclusive of GST (18%) unless specifically mentioned as 'Inclusive'. GST will be added to the final invoice as per statutory requirements.",
+  "4. REVISIONS: Two rounds of minor modifications are included in the quoted price. Any major design changes or additions to the scope will be billed separately as per hourly rates.",
+  "5. CONTENT PROVISION: The client is responsible for providing all necessary text, images, logos, and specific data required for the project. Delays in content provision will impact the delivery timeline.",
+  "6. APPROVALS: Approval of drafts must be provided in writing (Email/WhatsApp). CreativeMark Advertising is not liable for errors missed by the client during the approval process.",
+  "7. INTELLECTUAL PROPERTY: Final creative rights and source files are transferred to the client ONLY after the full and final payment is cleared in our bank account.",
+];
+
+export const PROFESSIONAL_TERMS_BILL = [
+  "1. PAYMENT DUE: This invoice is payable immediately upon receipt. Late payments beyond 7 days may attract a 2% monthly interest on the outstanding balance.",
+  "2. DISCREPANCIES: Any discrepancies in this invoice must be reported within 24 hours of receipt. After this period, the invoice will be considered final and accepted.",
+  "3. BANK TRANSFERS: Please mention the Invoice Number in the payment remarks. Kindly share the transaction UTR number or screenshot on WhatsApp for faster reconciliation.",
+  "4. TDS COMPLIANCE: If TDS is applicable, please ensure it is deducted as per current income tax slabs and provided with the TDS certificate in a timely manner.",
+  "5. CANCELLATION: In case of project cancellation after initiation, the advance payment remains non-refundable to cover resource time and initial work completed.",
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -54,22 +63,21 @@ function formatDate(date: Date | string) {
 
 function fmtINR(amount: number | string): string {
   const val = typeof amount === "string" ? parseFloat(amount.replace(/[^\d.]/g, "")) : amount;
-  if (isNaN(val)) return "Rs. 0";
+  if (isNaN(val)) return "₹ 0.00";
   
   const formatter = new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
+    style: 'decimal',
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  return formatter.format(val).replace("₹", "Rs. ").trim();
+  return "₹ " + formatter.format(val);
 }
 
 // ── Load logo as base64 for PDF embedding ─────────────────────
 let cachedLogo: string | null = null;
 async function loadLogo(): Promise<string | null> {
   if (cachedLogo) return cachedLogo;
-  const logoPaths = ["/logo.jpeg", "/logo-full.png", "logo.jpeg"];
+  const logoPaths = ["/logo.jpeg", "logo.jpeg", "/logo-full.png", "logo-full.png"];
   
   for (const path of logoPaths) {
     try {
@@ -86,7 +94,7 @@ async function loadLogo(): Promise<string | null> {
         reader.readAsDataURL(blob);
       });
     } catch (e) {
-      console.error(`Failed to load logo from ${path}`, e);
+      console.warn(`Could not load logo from ${path}`);
     }
   }
   return null;
@@ -96,98 +104,98 @@ async function loadLogo(): Promise<string | null> {
 function addLetterhead(doc: jsPDF, logoBase64: string | null) {
   const pageW = doc.internal.pageSize.getWidth();
 
-  // Decorative Top Accent (Slim Red Bar)
+  // Decorative Top Accent
   doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
-  doc.rect(0, 0, pageW, 2, "F");
+  doc.rect(0, 0, pageW, 1.5, "F");
 
-  // Logo (if available)
+  // Logo
   if (logoBase64) {
     try {
-      // Get image properties to maintain aspect ratio
       const props = doc.getImageProperties(logoBase64);
-      const ratio = props.width / props.height;
-      const maxW = 60;
-      const maxH = 18;
+      const imgW = props.width;
+      const imgH = props.height;
+      const ratio = imgW / imgH;
       
-      let finalW = maxW;
-      let finalH = maxW / ratio;
+      let finalW = 45;
+      let finalH = finalW / ratio;
       
-      if (finalH > maxH) {
-        finalH = maxH;
-        finalW = maxH * ratio;
+      if (finalH > 18) {
+        finalH = 18;
+        finalW = finalH * ratio;
       }
       
-      doc.addImage(logoBase64, "JPEG", 12, 6, finalW, finalH, undefined, 'FAST');
+      const yPos = 6 + (18 - finalH) / 2;
+      doc.addImage(logoBase64, props.fileType || "JPEG", 15, yPos, finalW, finalH, undefined, 'FAST');
     } catch (e) {
-      // Fallback if properties fail
-      doc.addImage(logoBase64, "JPEG", 12, 6, 60, 15, undefined, 'FAST');
+      doc.addImage(logoBase64, "JPEG", 15, 8, 35, 12, undefined, 'FAST');
     }
   } else {
-    // Fallback text logo (Brand Red)
     doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
-    doc.text("CreativeMark", 15, 22);
+    doc.text("CreativeMark", 15, 20);
   }
 
   // Right side: Company details
   const rX = pageW - 15;
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.setFont("helvetica", "bold");
   doc.text(COMPANY.name, rX, 12, { align: "right" });
   
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
   doc.text(COMPANY.tagline, rX, 16.5, { align: "right" });
   
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  doc.text(`${COMPANY.phone1} | ${COMPANY.email}`, rX, 21, { align: "right" });
+  doc.setFontSize(8);
+  doc.text(`${COMPANY.phone1}  |  ${COMPANY.email}`, rX, 21, { align: "right" });
   
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.setFont("helvetica", "bold");
-  doc.text(COMPANY.website.replace("https://", ""), rX, 25.5, { align: "right" });
-  // Make it clickable
-  const webW = doc.getTextWidth(COMPANY.website.replace("https://", ""));
-  doc.link(rX - webW, 25.5 - 3, webW, 5, { url: COMPANY.website });
+  doc.setFontSize(9);
+  const displayUrl = COMPANY.website.replace("https://", "").replace(/\/$/, "");
+  doc.text(displayUrl, rX, 26, { align: "right" });
+  doc.link(rX - doc.getTextWidth(displayUrl), 23, doc.getTextWidth(displayUrl), 5, { url: COMPANY.website });
 
-  // Divider Line
   doc.setDrawColor(230, 230, 230);
-  doc.setLineWidth(0.5);
+  doc.setLineWidth(0.3);
   doc.line(12, 32, pageW - 12, 32);
-
-  // Reset text color for body
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  doc.setFont("helvetica", "normal");
 }
 
 // ── Footer ────────────────────────────────────────────────────
 function addFooter(doc: jsPDF, pageNum: number) {
   const pageW = doc.internal.pageSize.getWidth();
-  const y = 285;
+  const pageH = doc.internal.pageSize.getHeight();
+  const footerY = pageH - 28;
   
-  doc.setDrawColor(230, 230, 230);
-  doc.setLineWidth(0.3);
-  doc.line(12, y, pageW - 12, y);
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.2);
+  doc.line(15, footerY, pageW - 15, footerY);
 
-  doc.setFontSize(7); // Slightly smaller to prevent overlap
+  const centerX = pageW / 2;
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  
-  // Website on the left
-  const footerWebText = COMPANY.website.replace("https://", "").replace(/\/$/, "");
-  doc.text(footerWebText, 15, y + 6);
-  const fwW = doc.getTextWidth(footerWebText);
-  doc.link(15, y + 6 - 3, fwW, 5, { url: COMPANY.website });
+  doc.text("CREATIVEMARK ADVERTISING", centerX, footerY + 7, { align: "center" });
 
-  // Middle info: Address / Phone
-  doc.text(`${COMPANY.address} | ${COMPANY.phone1}`, pageW / 2, y + 6, { align: "center" });
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.setFontSize(9);
+  const footerUrl = COMPANY.website.replace("https://", "").replace(/\/$/, "");
+  doc.text(footerUrl, centerX, footerY + 12.5, { align: "center" });
+  doc.link(centerX - (doc.getTextWidth(footerUrl) / 2), footerY + 9, doc.getTextWidth(footerUrl), 5, { url: COMPANY.website });
 
-  // Right side: Email & Page Number
-  const rightText = `${COMPANY.email}  |  Page ${pageNum}`;
-  doc.text(rightText, pageW - 15, y + 6, { align: "right" });
-  
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.setFontSize(7.5);
+  doc.text(`${COMPANY.address}  •  ${COMPANY.phone1}  •  ${COMPANY.email}`, centerX, footerY + 17.5, { align: "center" });
+
+  doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.rect(centerX - 20, pageH - 5, 40, 0.5, "F");
+
+  doc.setFontSize(8);
+  doc.text(`Page ${pageNum}`, pageW - 15, footerY + 12.5, { align: "right" });
 }
 
 // ── Quotation / Bill PDF ──────────────────────────────────────
@@ -200,22 +208,18 @@ export async function generateQuotationPDF(q: any) {
   const isBill = q.type === "Bill";
   let y = 36;
 
-  // ── Title ─────────────────────────────────────────────────
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.text(isBill ? "TAX INVOICE" : "QUOTATION", 15, y);
 
-  // ── Document number badge ─────────────────────────────────
   const docNum = q.quoteNumber || q.quote_number || q.number || "";
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.text(docNum, pageW - 15, y, { align: "right" });
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   y += 10;
 
-  // ── Bill To section ───────────────────────────────────────
   doc.setFillColor(248, 248, 248);
   doc.roundedRect(12, y - 2, 85, 26, 2, 2, "F");
 
@@ -228,14 +232,9 @@ export async function generateQuotationPDF(q: any) {
   doc.text(q.clientName || q.client_name || "Client", 16, y + 9);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  if (q.clientPhone || q.client_phone) {
-    doc.text(`Phone: ${q.clientPhone || q.client_phone}`, 16, y + 14);
-  }
-  if (q.clientEmail || q.client_email) {
-    doc.text(`Email: ${q.clientEmail || q.client_email}`, 16, y + 19);
-  }
+  if (q.clientPhone || q.client_phone) doc.text(`Phone: ${q.clientPhone || q.client_phone}`, 16, y + 14);
+  if (q.clientEmail || q.client_email) doc.text(`Email: ${q.clientEmail || q.client_email}`, 16, y + 19);
 
-  // ── Document Details (right side) ─────────────────────────
   const metaX = 120;
   doc.setFontSize(8);
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
@@ -246,16 +245,11 @@ export async function generateQuotationPDF(q: any) {
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.setFont("helvetica", "bold");
   doc.text(formatDate(q.date || new Date()), metaX + 25, y + 4);
-  doc.text(
-    formatDate(q.dueDate || q.due_date || q.validUntil || q.valid_until || q.date || new Date()),
-    metaX + 25, y + 10
-  );
+  doc.text(formatDate(q.dueDate || q.due_date || q.validUntil || q.valid_until || q.date || new Date()), metaX + 25, y + 10);
   doc.text(q.status || "Draft", metaX + 25, y + 16);
-  doc.setFont("helvetica", "normal");
 
   y += 32;
 
-  // ── Items Table ───────────────────────────────────────────
   const items = q.items || q.quotation_items || [];
   autoTable(doc, {
     startY: y,
@@ -267,58 +261,32 @@ export async function generateQuotationPDF(q: any) {
       fmtINR(item.rate || 0),
       fmtINR(item.amount || 0),
     ]),
-    headStyles: {
-      fillColor: [BRAND_RED.r, BRAND_RED.g, BRAND_RED.b],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize: 8.5,
-      cellPadding: 4,
-    },
-    bodyStyles: {
-      fontSize: 8.5,
-      cellPadding: 4,
-      textColor: [BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b],
-    },
+    headStyles: { fillColor: [BRAND_RED.r, BRAND_RED.g, BRAND_RED.b], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5, cellPadding: 4 },
+    bodyStyles: { fontSize: 8.5, cellPadding: 4, textColor: [BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b] },
     alternateRowStyles: { fillColor: [252, 252, 252] },
-    columnStyles: {
-      0: { cellWidth: 12, halign: "center" },
-      1: { cellWidth: "auto" },
-      2: { cellWidth: 16, halign: "center" },
-      3: { cellWidth: 32, halign: "right" },
-      4: { cellWidth: 32, halign: "right", fontStyle: "bold" },
-    },
+    columnStyles: { 0: { cellWidth: 12, halign: "center" }, 1: { cellWidth: "auto" }, 2: { cellWidth: 16, halign: "center" }, 3: { cellWidth: 32, halign: "right" }, 4: { cellWidth: 32, halign: "right", fontStyle: "bold" } },
     margin: { left: 12, right: 12 },
     tableLineColor: [230, 230, 230],
     tableLineWidth: 0.1,
   });
 
   y = (doc as any).lastAutoTable.finalY + 10;
-
-  // ── Totals ────────────────────────────────────────────────
   const totalsX = 125;
 
   doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-
-  // Subtotal
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
   doc.text("Subtotal:", totalsX, y);
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.text(fmtINR(q.subtotal || 0), pageW - 15, y, { align: "right" });
   y += 6;
 
-  // Discount
   if ((q.discountAmount || q.discount_amount || 0) > 0) {
-    const dAmt = q.discountAmount || q.discount_amount || 0;
-    const dPct = q.discountPercent || q.discount_percent || 0;
     doc.setTextColor(34, 150, 80);
-    doc.text(`Discount (${dPct}%):`, totalsX, y);
-    doc.text(`- ${fmtINR(dAmt)}`, pageW - 15, y, { align: "right" });
-    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+    doc.text(`Discount (${q.discountPercent || q.discount_percent || 0}%):`, totalsX, y);
+    doc.text(`- ${fmtINR(q.discountAmount || q.discount_amount || 0)}`, pageW - 15, y, { align: "right" });
     y += 6;
   }
 
-  // GST
   if (q.gstApplicable || q.gst_applicable) {
     doc.setFontSize(8);
     doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
@@ -333,7 +301,6 @@ export async function generateQuotationPDF(q: any) {
     y += 6;
   }
 
-  // Total Amount — highlighted
   doc.setDrawColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.setLineWidth(0.5);
   doc.line(totalsX - 2, y - 2, pageW - 12, y - 2);
@@ -345,22 +312,17 @@ export async function generateQuotationPDF(q: any) {
   doc.setTextColor(255, 255, 255);
   doc.text("Total Amount:", totalsX + 2, y + 6.5);
   doc.text(fmtINR(q.grandTotal || q.grand_total || q.total || 0), pageW - 15, y + 6.5, { align: "right" });
-  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   y += 18;
 
-  // ── Amount in Words ───────────────────────────────────────
   const totalVal = q.grandTotal || q.grand_total || q.total || 0;
   if (totalVal > 0) {
     doc.setFontSize(8);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
     doc.text(`Amount in words: ${numberToWords(totalVal)} Rupees Only`, 15, y);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
     y += 8;
   }
 
-  // ── Bank Details (for Bill) ───────────────────────────────
   if (isBill) {
     doc.setFillColor(245, 247, 250);
     doc.roundedRect(12, y, pageW - 24, 22, 2, 2, "F");
@@ -371,15 +333,11 @@ export async function generateQuotationPDF(q: any) {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
     doc.text(`Account Name: ${COMPANY.accountName}`, 16, y + 12);
-    doc.text(`Bank: ${COMPANY.bankName}  |  A/C: ${COMPANY.accountNo}  |  IFSC: ${COMPANY.ifsc}  |  Branch: ${COMPANY.branch}`, 16, y + 17);
+    doc.text(`Bank: ${COMPANY.bankName}  |  A/C: ${COMPANY.accountNo}  |  IFSC: ${COMPANY.ifsc}`, 16, y + 17);
     y += 28;
   }
 
-  // ── Terms & Conditions ────────────────────────────────────
-  const termsToUse = q.terms
-    ? q.terms.split("\n")
-    : isBill ? PROFESSIONAL_TERMS_BILL : PROFESSIONAL_TERMS_QUOTATION;
-
+  const termsToUse = q.terms ? q.terms.split("\n") : isBill ? PROFESSIONAL_TERMS_BILL : PROFESSIONAL_TERMS_QUOTATION;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
@@ -394,7 +352,6 @@ export async function generateQuotationPDF(q: any) {
     y += lines.length * 3.5 + 1;
   });
 
-  // ── Signature ─────────────────────────────────────────────
   y = Math.max(y + 8, 250);
   doc.setFontSize(9);
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
@@ -411,100 +368,104 @@ export async function generateQuotationPDF(q: any) {
   doc.save(`${q.quoteNumber || q.quote_number || q.number || "document"}.pdf`);
 }
 
-// ── Partner Agreement PDF ─────────────────────────────────────
 export async function generatePartnerAgreementPDF(partner: Partner) {
   const doc = new jsPDF();
+  const pageW = doc.internal.pageSize.getWidth();
   const logoBase64 = await loadLogo();
   addLetterhead(doc, logoBase64);
 
   let y = 36;
-
-  doc.setFontSize(16);
+  doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.text("PARTNERSHIP AGREEMENT", 15, y);
   y += 10;
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Date: ${formatDate(partner.agreementDate || "")}`, 15, y);
-  y += 8;
-
-  doc.setFont("helvetica", "bold");
-  doc.text("Partner Details", 15, y);
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.text(`Name: ${partner.name}`, 15, y); y += 5;
-  doc.text(`Category: ${partner.category}`, 15, y); y += 5;
-  doc.text(`Phone: ${partner.phone}`, 15, y); y += 5;
-  doc.text(`Email: ${partner.email}`, 15, y); y += 10;
-
-  doc.setFont("helvetica", "bold");
-  doc.text("Commission Structure", 15, y);
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  if (partner.commissionType === "Percentage") {
-    doc.text(`Type: Percentage — ${partner.commissionRate}% of project value`, 15, y);
-  } else {
-    doc.text(`Type: Flat Amount — ${fmtINR(partner.commissionRate || 0)} per referred lead`, 15, y);
-  }
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  doc.text(`Date of Agreement: ${formatDate(partner.agreementDate || new Date())}`, 15, y);
   y += 10;
 
-  // Agreement terms
+  const mid = pageW / 2;
   doc.setFont("helvetica", "bold");
-  doc.text("Terms & Conditions (Mutual Agreement)", 15, y);
+  doc.setFontSize(11);
+  doc.text("PARTNER INFORMATION", 15, y);
   y += 6;
+  doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  
-  const partnerTerms = [
-    "1. Referral & Scope: The Partner agrees to refer potential clients to CreativeMark for services including Digital Marketing, Branding, and Multimedia. A referral is valid only if communicated in writing before the first client contact.",
-    "2. Commission Eligibility: Commission is earned only on the 'Net Project Value' (excluding GST and third-party costs like ad-spend). Eligibility arises only after the client has cleared the full invoice amount.",
-    "3. Payment Terms: Commissions are processed on a monthly basis. Payouts will be made within 15 working days of the following month, subject to receipt of payment from the referred client.",
-    "4. Professional Conduct: The Partner shall represent CreativeMark with integrity. The Partner is not authorized to sign contracts, commit to timelines, or offer discounts on behalf of CreativeMark without written consent.",
-    "5. Non-Circumvention: The Partner agrees not to engage or contract directly with any client referred to CreativeMark for a period of 12 months following the referral, regardless of agreement status.",
-    "6. Confidentiality: Both parties shall maintain strict confidentiality regarding project pricing, client data, and proprietary business strategies shared during the course of this partnership.",
-    "7. Relationship: This agreement does not create an employer-employee relationship. The Partner operates as an independent contractor and is responsible for their own tax liabilities (GST/TDS) as per Indian law.",
-    "8. Termination: This agreement is valid for 12 months and renews automatically unless terminated. Either party may terminate this agreement with 30 days written notice via Email or WhatsApp.",
-    "9. Jurisdiction: Any disputes arising from this agreement shall be subject to the exclusive jurisdiction of the courts in Pune, Maharashtra."
-  ];
+  doc.text(`Name: ${partner.name}`, 15, y); y += 5;
+  if (partner.businessName) { doc.text(`Business: ${partner.businessName}`, 15, y); y += 5; }
+  doc.text(`Category: ${partner.category || "Consultant"}`, 15, y); y += 5;
+  doc.text(`Phone: ${partner.phone}`, 15, y); y += 5;
+  doc.text(`Email: ${partner.email}`, 15, y); y += 5;
+  if (partner.pan) { doc.text(`PAN: ${partner.pan}`, 15, y); y += 5; }
 
+  const leftYEnd = y;
+  y = 56;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("PAYMENT & COMMISSION", mid + 5, y);
+  y += 6;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  const commText = partner.commissionType === "Percentage" ? `${partner.commissionRate}% of Net Project Value` : `${fmtINR(partner.commissionRate || 0)} Flat per Lead`;
+  doc.text(`Type: ${partner.commissionType || "Percentage"}`, mid + 5, y); y += 5;
+  doc.text(`Rate: ${commText}`, mid + 5, y); y += 10;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("BANKING DETAILS", mid + 5, y);
+  y += 6;
+  if (partner.bankAccount) {
+    doc.text(`A/C Holder: ${partner.accountHolder || partner.name}`, mid + 5, y); y += 5;
+    doc.text(`Bank: ${partner.bankName || "—"}`, mid + 5, y); y += 5;
+    doc.text(`A/C No: ${partner.bankAccount}`, mid + 5, y); y += 5;
+    doc.text(`IFSC: ${partner.ifsc || "—"}`, mid + 5, y); y += 5;
+  } else if (partner.upi) {
+    doc.text(`UPI ID: ${partner.upi}`, mid + 5, y); y += 5;
+  } else {
+    doc.text("Not Provided", mid + 5, y); y += 5;
+  }
+
+  y = Math.max(leftYEnd, y) + 12;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
+  doc.text("TERMS & CONDITIONS (LEGAL BINDING)", 15, y);
+  y += 7;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
+  
+  const partnerTerms = partner.agreementTerms ? partner.agreementTerms.split('\n').filter(t => t.trim() !== '') : DEFAULT_PARTNER_TERMS;
   partnerTerms.forEach(term => {
-    const lines = doc.splitTextToSize(term, 175);
-    if (y + (lines.length * 4) > 275) {
-      doc.addPage();
-      addLetterhead(doc, logoBase64);
-      y = 40;
-    }
+    const lines = doc.splitTextToSize(term, 180);
+    if (y + (lines.length * 4) > 275) { addFooter(doc, 1); doc.addPage(); addLetterhead(doc, logoBase64); y = 40; }
     doc.text(lines, 15, y);
     y += lines.length * 4 + 2;
   });
 
-  y += 15;
+  y = Math.max(y + 15, 255);
   doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
   doc.text(`For ${COMPANY.name}`, 15, y);
   doc.text(`Partner: ${partner.name}`, 110, y);
-  y += 12;
-  doc.setDrawColor(100, 100, 100);
-  doc.line(15, y, 80, y);
-  doc.line(110, y, 175, y);
+  y += 15;
+  doc.line(15, y, 80, y); doc.line(110, y, 175, y);
   y += 5;
   doc.setFontSize(8);
-  doc.text("Authorized Signatory", 15, y);
-  doc.text("Partner Signature", 110, y);
+  doc.text("Authorized Signatory (Digital)", 15, y);
+  doc.text("Partner Signature / Acceptance", 110, y);
 
   addFooter(doc, 1);
-  doc.save(`Agreement-${partner.name.replace(/\s+/g, "-")}.pdf`);
+  doc.save(`PartnerAgreement_${partner.name.replace(/\s+/g, "_")}.pdf`);
 }
 
-// ── Number to Words (Indian system) ───────────────────────────
 function numberToWords(num: number): string {
   if (num === 0) return "Zero";
-  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
-    "Seventeen", "Eighteen", "Nineteen"];
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
   const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-
   function convert(n: number): string {
     if (n < 20) return ones[n];
     if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");

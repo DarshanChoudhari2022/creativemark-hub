@@ -9,10 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/shared";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
-import { generatePartnerAgreementPDF } from "@/lib/pdf";
+import { generatePartnerAgreementPDF, DEFAULT_PARTNER_TERMS } from "@/lib/pdf";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import type { CommissionType } from "@/types";
@@ -26,7 +27,10 @@ const Partners = () => {
   const [ledger, setLedger] = useState<any[]>([]);
   const [form, setForm] = useState({
     name: "", phone: "", email: "", whatsapp: "", category: "",
+    businessName: "", address: "", pan: "",
+    bankAccount: "", ifsc: "", accountHolder: "", bankName: "", upi: "",
     commissionType: "Percentage" as CommissionType, commissionRate: 10,
+    agreementTerms: DEFAULT_PARTNER_TERMS.join('\n'),
   });
 
   const fetchPartners = async () => {
@@ -44,6 +48,11 @@ const Partners = () => {
       commissionType: p.commission_type || "Percentage",
       commissionRate: p.commission_rate || 10,
       agreementDate: p.agreement_date || p.created_at?.slice(0, 10),
+      businessName: p.business_name,
+      bankAccount: p.bank_account,
+      accountHolder: p.account_holder,
+      bankName: p.bank_name,
+      agreementTerms: p.agreement_terms || DEFAULT_PARTNER_TERMS.join('\n'),
     }));
     setPartners(mapped);
     setLoading(false);
@@ -52,7 +61,7 @@ const Partners = () => {
   useEffect(() => { fetchPartners(); }, []);
 
   const filtered = useMemo(() =>
-    partners.filter(p => search === "" || p.name.toLowerCase().includes(search.toLowerCase())),
+    partners.filter(p => search === "" || p.name.toLowerCase().includes(search.toLowerCase()) || (p.businessName || "").toLowerCase().includes(search.toLowerCase())),
     [partners, search]);
 
   const addPartner = async () => {
@@ -64,16 +73,32 @@ const Partners = () => {
       email: form.email,
       whatsapp: form.whatsapp || form.phone.replace(/[^0-9]/g, ""),
       category: form.category,
+      business_name: form.businessName,
+      address: form.address,
+      pan: form.pan,
+      bank_account: form.bankAccount,
+      ifsc: form.ifsc,
+      account_holder: form.accountHolder,
+      bank_name: form.bankName,
+      upi: form.upi,
       commission_type: form.commissionType,
       commission_rate: form.commissionRate,
       agreement_date: new Date().toISOString().slice(0, 10),
+      partner_since: new Date().toISOString().slice(0, 10),
+      agreement_terms: form.agreementTerms,
       status: "Active",
     });
 
     if (error) { toast.error("Failed: " + error.message); return; }
 
     setAddOpen(false);
-    setForm({ name: "", phone: "", email: "", whatsapp: "", category: "", commissionType: "Percentage", commissionRate: 10 });
+    setForm({ 
+      name: "", phone: "", email: "", whatsapp: "", category: "", 
+      businessName: "", address: "", pan: "",
+      bankAccount: "", ifsc: "", accountHolder: "", bankName: "", upi: "",
+      commissionType: "Percentage", commissionRate: 10,
+      agreementTerms: DEFAULT_PARTNER_TERMS.join('\n')
+    });
     toast.success("Partner added successfully");
     fetchPartners();
   };
@@ -86,6 +111,21 @@ const Partners = () => {
       .eq("partner_id", p.id)
       .order("created_at", { ascending: false });
     setLedger(data || []);
+  };
+
+  const saveTerms = async () => {
+    if (!detailPartner) return;
+    const { error } = await supabase
+      .from("partners")
+      .update({ agreement_terms: detailPartner.agreementTerms })
+      .eq("id", detailPartner.id);
+
+    if (error) {
+      toast.error("Failed to save terms: " + error.message);
+    } else {
+      toast.success("Agreement terms updated");
+      fetchPartners();
+    }
   };
 
   const totalPending = partners.reduce((s, p) => s + (p.pendingCommission || 0), 0);
@@ -115,30 +155,59 @@ const Partners = () => {
             </div>
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover"><Plus className="h-4 w-4" />Add Partner</Button></DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>Add New Partner</DialogTitle></DialogHeader>
-                <div className="space-y-3">
-                  <div><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                  <div><Label>Category</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Business Consultant" /></div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-                    <div><Label>WhatsApp</Label><Input value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} /></div>
-                  </div>
-                  <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Commission Type</Label>
-                      <Select value={form.commissionType} onValueChange={(v: CommissionType) => setForm({ ...form, commissionType: v })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Percentage">Percentage</SelectItem>
-                          <SelectItem value="Flat">Flat Amount</SelectItem>
-                        </SelectContent>
-                      </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-tight text-muted-foreground">Basic Information</h3>
+                    <div><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                    <div><Label>Business / Agency Name</Label><Input value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} /></div>
+                    <div><Label>Category</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Business Consultant" /></div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                      <div><Label>WhatsApp</Label><Input value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} /></div>
                     </div>
-                    <div><Label>{form.commissionType === "Percentage" ? "Rate (%)" : "Amount (₹)"}</Label>
-                      <Input type="number" value={form.commissionRate} onChange={(e) => setForm({ ...form, commissionRate: +e.target.value })} />
+                    <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                    <div><Label>Address</Label><Textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={2} /></div>
+                    <div><Label>PAN Number</Label><Input value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value })} /></div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-tight text-muted-foreground">Payment & Commission</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label>Commission Type</Label>
+                        <Select value={form.commissionType} onValueChange={(v: CommissionType) => setForm({ ...form, commissionType: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Percentage">Percentage</SelectItem>
+                            <SelectItem value="Flat">Flat Amount</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div><Label>{form.commissionType === "Percentage" ? "Rate (%)" : "Amount (₹)"}</Label>
+                        <Input type="number" value={form.commissionRate} onChange={(e) => setForm({ ...form, commissionRate: +e.target.value })} />
+                      </div>
+                    </div>
+                    <div className="border-t pt-3 mt-3">
+                      <h3 className="text-xs font-bold uppercase tracking-tight text-muted-foreground mb-2">Bank Details</h3>
+                      <div><Label>Account Holder Name</Label><Input value={form.accountHolder} onChange={(e) => setForm({ ...form, accountHolder: e.target.value })} /></div>
+                      <div><Label>Bank Name</Label><Input value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} /></div>
+                      <div><Label>Account Number</Label><Input value={form.bankAccount} onChange={(e) => setForm({ ...form, bankAccount: e.target.value })} /></div>
+                      <div><Label>IFSC Code</Label><Input value={form.ifsc} onChange={(e) => setForm({ ...form, ifsc: e.target.value })} /></div>
+                      <div><Label>UPI ID</Label><Input value={form.upi} onChange={(e) => setForm({ ...form, upi: e.target.value })} /></div>
                     </div>
                   </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Agreement Terms & Conditions (One per line)</Label>
+                  <Textarea 
+                    value={form.agreementTerms} 
+                    onChange={(e) => setForm({ ...form, agreementTerms: e.target.value })} 
+                    rows={8}
+                    placeholder="Enter agreement terms, one per line..."
+                    className="mt-1 font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">These terms will appear on the generated Partnership Agreement PDF.</p>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
@@ -253,6 +322,22 @@ const Partners = () => {
               <div className="p-3 bg-muted/30 rounded-lg"><div className="text-xs text-muted-foreground">Phone</div><div className="text-xs">{detailPartner.phone}</div></div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4 mt-2">
+              <div className="space-y-2 border p-3 rounded-lg">
+                <h4 className="text-xs font-bold uppercase text-muted-foreground">Business Details</h4>
+                <div className="text-sm"><span className="text-muted-foreground">Agency:</span> {detailPartner.businessName || "—"}</div>
+                <div className="text-sm"><span className="text-muted-foreground">PAN:</span> {detailPartner.pan || "—"}</div>
+                <div className="text-sm"><span className="text-muted-foreground">Address:</span> {detailPartner.address || "—"}</div>
+              </div>
+              <div className="space-y-2 border p-3 rounded-lg">
+                <h4 className="text-xs font-bold uppercase text-muted-foreground">Bank / Payment Details</h4>
+                <div className="text-sm"><span className="text-muted-foreground">Bank:</span> {detailPartner.bankName || "—"}</div>
+                <div className="text-sm"><span className="text-muted-foreground">A/C No:</span> {detailPartner.bankAccount || "—"}</div>
+                <div className="text-sm"><span className="text-muted-foreground">IFSC:</span> {detailPartner.ifsc || "—"}</div>
+                <div className="text-sm"><span className="text-muted-foreground">UPI:</span> {detailPartner.upi || "—"}</div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-3 my-2">
               <div className="p-3 bg-card border rounded-lg text-center">
                 <div className="text-2xl font-extrabold">{detailPartner.totalLeadsReferred}</div>
@@ -295,6 +380,23 @@ const Partners = () => {
                   )}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Agreement Terms Editing */}
+            <div className="mt-4 border-t pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-sm">Agreement Terms</h4>
+                <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={saveTerms}>Save Changes</Button>
+              </div>
+              <Textarea 
+                value={detailPartner.agreementTerms}
+                onChange={(e) => setDetailPartner({ ...detailPartner, agreementTerms: e.target.value })}
+                rows={10}
+                className="font-mono text-[11px] leading-relaxed"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1 italic">
+                Tip: Edit these terms and click "Save Changes" to update the partner's legal agreement.
+              </p>
             </div>
 
             <DialogFooter className="mt-4">

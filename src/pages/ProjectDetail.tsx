@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase";
 import { 
   ArrowLeft, 
   Plus, 
@@ -522,7 +522,7 @@ const ProjectDetail = () => {
                             </span>
                           </div>
                           <div className="flex -space-x-2">
-                            <Badge variant="ghost" className="h-6 w-6 p-0 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold" title={task.assignee?.name}>
+                            <Badge variant="secondary" className="h-6 w-6 p-0 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold" title={task.assignee?.name}>
                               {task.assignee?.name?.charAt(0) || "?"}
                             </Badge>
                           </div>
