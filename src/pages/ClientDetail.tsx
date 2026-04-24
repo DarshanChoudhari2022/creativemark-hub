@@ -87,10 +87,11 @@ const ClientDetail = () => {
 
     // Auto-compute Total Billed from invoices (BL- prefix or is_bill flag)
     const billsArr = billsRes || [];
-    const invoices = billsArr.filter((b: any) => b.is_bill || (b.quotation_number || "").startsWith("BL-"));
+    const invoices = billsArr.filter((b: any) => b.is_bill || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
     const computedBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
+    const allBilled = billsArr.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
     const paidTotal = (paymentsRes || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
-    const finalBilled = computedBilled > 0 ? computedBilled : (clientData.total_billed || 0);
+    const finalBilled = computedBilled > 0 ? computedBilled : (allBilled > 0 ? allBilled : (clientData.total_billed || 0));
 
     setClient({
       ...clientData,
@@ -255,6 +256,22 @@ const ClientDetail = () => {
     fetchClient();
   };
 
+  const handleDeletePost = async (postId: string) => {
+    if (!confirm("Delete this post entry?")) return;
+    const { error } = await supabase.from('client_posts').delete().eq('id', postId);
+    if (error) return toast.error(error.message);
+    toast.success("Post deleted");
+    fetchClient();
+  };
+
+  const handleDeleteShoot = async (shootId: string) => {
+    if (!confirm("Delete this shoot entry?")) return;
+    const { error } = await supabase.from('client_shoots').delete().eq('id', shootId);
+    if (error) return toast.error(error.message);
+    toast.success("Shoot deleted");
+    fetchClient();
+  };
+
   const handleGenerateReceipt = (entry: any) => {
     // If totalBilled is 0 or missing, compute from totalReceived + outstanding
     const effectiveTotalBilled = (client.totalBilled && client.totalBilled > 0)
@@ -403,6 +420,14 @@ const ClientDetail = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {client.outstanding > 0 && (client.whatsapp || client.phone) && (
+              <Button size="sm" variant="outline" className="text-amber-700 border-amber-300 hover:bg-amber-50 gap-1.5" onClick={() => {
+                const outstandingMsg = `Dear ${client.name},\n\nThis is a friendly reminder from *CreativeMark Advertising* regarding your outstanding balance.\n\n📋 *Total Billed:* ${formatINR(client.totalBilled)}\n✅ *Received:* ${formatINR(totalReceived)}\n⚠️ *Outstanding:* ${formatINR(client.outstanding)}\n\nKindly arrange the pending payment at the earliest convenience.\n\nThank you for your business! 🙏\n— CreativeMark Advertising`;
+                window.open(waLink(client.whatsapp || client.phone, outstandingMsg), "_blank");
+              }}>
+                <Send className="h-3.5 w-3.5" /> Outstanding Reminder
+              </Button>
+            )}
             {client.whatsapp && (
               <a href={waLink(client.whatsapp, WHATSAPP_TEMPLATES.CLIENT_GREETING(client.name))} target="_blank" rel="noopener">
                 <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"><Send className="h-4 w-4" /> WhatsApp</Button>
@@ -647,7 +672,7 @@ const ClientDetail = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead><TableHead>Platform</TableHead><TableHead>Type</TableHead>
-                  <TableHead>Caption</TableHead><TableHead>Status</TableHead>
+                  <TableHead>Caption</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -667,10 +692,13 @@ const ClientDetail = () => {
                       <TableCell>
                         <Badge variant="outline" className={`text-[10px] ${POST_STATUS_COLORS[post.status] || ""}`}>{post.status}</Badge>
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => handleDeletePost(post.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      </TableCell>
                     </TableRow>
                   );
                 }) : (
-                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">No posts logged</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">No posts logged</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -715,7 +743,7 @@ const ClientDetail = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead><TableHead>Time</TableHead><TableHead>Location</TableHead>
-                  <TableHead>Crew</TableHead><TableHead>Status</TableHead>
+                  <TableHead>Crew</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -735,9 +763,12 @@ const ClientDetail = () => {
                     <TableCell>
                       <Badge variant="outline" className={`text-[10px] ${shoot.status === "Completed" ? "bg-green-100 text-green-700" : shoot.status === "Scheduled" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>{shoot.status}</Badge>
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteShoot(shoot.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </TableCell>
                   </TableRow>
                 )) : (
-                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">No shoots scheduled</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">No shoots scheduled</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>

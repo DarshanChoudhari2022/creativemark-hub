@@ -45,12 +45,13 @@ const Dashboard = () => {
   const [partners, setPartners] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
-      const [cRes, lRes, eRes, qRes, pRes, evRes, tRes] = await Promise.all([
+      const [cRes, lRes, eRes, qRes, pRes, evRes, tRes, payRes] = await Promise.all([
         supabase.from("clients").select("*"),
         supabase.from("leads").select("*, employees!leads_assigned_to_fkey(name)"),
         supabase.from("employees").select("*"),
@@ -58,6 +59,7 @@ const Dashboard = () => {
         supabase.from("partners").select("*, partner_leads(*), partner_ledger(*)"),
         supabase.from("calendar_events").select("*, calendar_event_assignments(employee_id, employees(name))"),
         supabase.from("lead_tasks").select("*, leads(name, organization)"),
+        supabase.from("payment_history").select("*"),
       ]);
       setClients(cRes.data || []);
       setLeads(lRes.data || []);
@@ -66,14 +68,16 @@ const Dashboard = () => {
       setPartners(pRes.data || []);
       setEvents(evRes.data || []);
       setTasks(tRes.data || []);
+      setPayments(payRes.data || []);
       setLoading(false);
     };
     fetchAll();
   }, []);
 
   // ── Computed KPIs ──
-  const totalBilled = useMemo(() => clients.reduce((s, c) => s + (c.total_billed || 0), 0), [clients]);
-  const totalOutstanding = useMemo(() => clients.reduce((s, c) => s + (c.outstanding || 0), 0), [clients]);
+  const totalBilled = useMemo(() => quotations.filter(q => q.type === "Bill").reduce((s, c) => s + (c.grand_total || 0), 0) || clients.reduce((s, c) => s + (c.total_billed || 0), 0), [clients, quotations]);
+  const totalReceived = useMemo(() => payments.reduce((s, p) => s + (p.amount || 0), 0), [payments]);
+  const totalOutstanding = useMemo(() => Math.max(0, totalBilled - totalReceived), [totalBilled, totalReceived]);
   const activeClients = useMemo(() => clients.filter(c => c.status === "Active").length, [clients]);
   const activeLeads = useMemo(() => leads.filter(l => l.stage !== "Converted" && l.stage !== "Lost").length, [leads]);
   const overdueQuotations = useMemo(() =>
@@ -81,7 +85,7 @@ const Dashboard = () => {
   const partnerLeads = useMemo(() =>
     partners.reduce((s, p) => s + (p.partner_leads?.length || 0), 0), [partners]);
 
-  // ── Revenue chart (monthly from quotations) ──
+  // ── Revenue chart (monthly from quotations + real payments) ──
   const revenueData = useMemo(() => {
     const months: Record<string, { received: number; billed: number }> = {};
     const now = new Date();
@@ -96,11 +100,19 @@ const Dashboard = () => {
       const key = d.toLocaleString("default", { month: "short" });
       if (months[key]) {
         months[key].billed += q.grand_total || 0;
-        if (q.status === "Paid") months[key].received += q.grand_total || 0;
+      }
+    });
+    // Use actual payments for received amounts
+    payments.forEach(p => {
+      if (!p.date) return;
+      const d = new Date(p.date);
+      const key = d.toLocaleString("default", { month: "short" });
+      if (months[key]) {
+        months[key].received += p.amount || 0;
       }
     });
     return Object.entries(months).map(([month, data]) => ({ month, ...data }));
-  }, [quotations]);
+  }, [quotations, payments]);
 
   // ── Lead pipeline ──
   const leadsByStage = useMemo(() => {
@@ -231,8 +243,8 @@ const Dashboard = () => {
   }
 
   const kpiData = [
-    { title: "Total Revenue", value: formatINRCompact(totalBilled), accent: false, nav: "/analytics" },
-    { title: "Outstanding", value: formatINRCompact(totalOutstanding), accent: true, nav: "/recovery" },
+    { title: "Total Revenue", value: formatINRCompact(totalReceived), accent: false, nav: "/analytics" },
+    { title: "Outstanding", value: formatINRCompact(totalOutstanding), accent: totalOutstanding > 0, nav: "/recovery" },
     { title: "Active Clients", value: String(activeClients), accent: false, nav: "/clients" },
     { title: "Active Leads", value: String(activeLeads), accent: false, nav: "/leads" },
     { title: "Overdue Invoices", value: String(overdueQuotations), accent: true, nav: "/quotations" },

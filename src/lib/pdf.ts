@@ -342,10 +342,35 @@ export async function generateQuotationPDF(q: any) {
   }
 
   if (isBill) {
+    // Dynamically calculate box height based on content
+    let bankContentLines = 0;
+    const bankLineHeight = 5;
+    const bankPaddingTop = 10; // space for title
+    const bankPaddingBottom = 6;
+
+    if (q.bankDetails || q.upiId) {
+      const bDetails = q.bankDetails ? q.bankDetails.split('\n').filter((l: string) => l.trim()) : [];
+      bankContentLines = bDetails.length;
+      if (q.upiId) bankContentLines += 1;
+    } else {
+      bankContentLines = 3; // placeholder lines
+    }
+
+    const bankBoxHeight = bankPaddingTop + (bankContentLines * bankLineHeight) + bankPaddingBottom;
+
+    // Check if bank box fits on current page, else add a new page
+    const pageH = doc.internal.pageSize.getHeight();
+    if (y + bankBoxHeight + 60 > pageH) {
+      addFooter(doc, doc.getNumberOfPages());
+      doc.addPage();
+      addLetterhead(doc, logoBase64);
+      y = 42;
+    }
+
     doc.setFillColor(245, 247, 250);
-    doc.roundedRect(12, y, pageW - 24, 28, 2, 2, "F");
+    doc.roundedRect(12, y, pageW - 24, bankBoxHeight, 2, 2, "F");
     doc.setDrawColor(220, 220, 220);
-    doc.roundedRect(12, y, pageW - 24, 28, 2, 2, "S");
+    doc.roundedRect(12, y, pageW - 24, bankBoxHeight, 2, 2, "S");
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
@@ -355,21 +380,30 @@ export async function generateQuotationPDF(q: any) {
     doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
     
     if (q.bankDetails || q.upiId) {
-      const bDetails = q.bankDetails ? q.bankDetails.split('\n') : [];
-      let bY = y + 13;
+      const bDetails = q.bankDetails ? q.bankDetails.split('\n').filter((l: string) => l.trim()) : [];
+      let bY = y + bankPaddingTop + 3;
       bDetails.forEach((line: string) => {
-        doc.text(line, 16, bY);
-        bY += 5;
+        doc.text(line.trim(), 16, bY);
+        bY += bankLineHeight;
       });
       if (q.upiId) {
-        doc.text(`UPI: ${q.upiId}`, 16, Math.max(bY, y + 25));
+        doc.text(`UPI: ${q.upiId}`, 16, bY);
       }
     } else {
-      doc.text("Account Name: ______________________________    Bank: ______________________________", 16, y + 13);
-      doc.text("A/C No: ______________________________    IFSC: ______________________________", 16, y + 19);
-      doc.text("UPI: ______________________________", 16, y + 25);
+      doc.text("Account Name: ______________________________    Bank: ______________________________", 16, y + bankPaddingTop + 3);
+      doc.text("A/C No: ______________________________    IFSC: ______________________________", 16, y + bankPaddingTop + 3 + bankLineHeight);
+      doc.text("UPI: ______________________________", 16, y + bankPaddingTop + 3 + bankLineHeight * 2);
     }
-    y += 34;
+    y += bankBoxHeight + 6;
+  }
+
+  // Check if terms fit on current page — if not, add a new page
+  const pageH = doc.internal.pageSize.getHeight();
+  if (y + 50 > pageH) {
+    addFooter(doc, doc.getNumberOfPages());
+    doc.addPage();
+    addLetterhead(doc, logoBase64);
+    y = 42;
   }
 
   const termsToUse = q.terms ? q.terms.split("\n") : isBill ? PROFESSIONAL_TERMS_BILL : PROFESSIONAL_TERMS_QUOTATION;
@@ -382,12 +416,28 @@ export async function generateQuotationPDF(q: any) {
   doc.setFontSize(7);
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
   termsToUse.forEach((term: string) => {
-    const lines = doc.splitTextToSize(term.trim(), 170);
-    doc.text(lines, 15, y);
-    y += lines.length * 3.5 + 1;
+    const termLines = doc.splitTextToSize(term.trim(), 170);
+    // Check if this term block fits, else add a new page
+    if (y + termLines.length * 3.5 + 2 > pageH - 30) {
+      addFooter(doc, doc.getNumberOfPages());
+      doc.addPage();
+      addLetterhead(doc, logoBase64);
+      y = 42;
+    }
+    doc.text(termLines, 15, y);
+    y += termLines.length * 3.5 + 1;
   });
 
-  y = Math.max(y + 8, 250);
+  // Signature block — ensure it fits on the page
+  const sigBlockHeight = 30;
+  if (y + sigBlockHeight > pageH - 20) {
+    addFooter(doc, doc.getNumberOfPages());
+    doc.addPage();
+    addLetterhead(doc, logoBase64);
+    y = 42;
+  }
+
+  y = Math.max(y + 8, Math.min(250, pageH - 50));
   doc.setFontSize(9);
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
   doc.setFont("helvetica", "bold");
@@ -399,7 +449,7 @@ export async function generateQuotationPDF(q: any) {
   doc.setFont("helvetica", "normal");
   doc.text("Authorized Signatory", pageW - 42, y + 4, { align: "center" });
 
-  addFooter(doc, 1);
+  addFooter(doc, doc.getNumberOfPages());
   doc.save(`${q.quoteNumber || q.quote_number || q.number || "document"}.pdf`);
 }
 
