@@ -40,7 +40,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Clients = () => {
   const { user } = useAuth();
-  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name))');
+  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name)), payment_history(amount), quotations(quotation_number, quote_number, grand_total, total_amount, is_bill)');
   const [view, setView] = useState<"cards" | "table">("cards");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -55,13 +55,24 @@ const Clients = () => {
   const [whatsappError, setWhatsappError] = useState("");
 
   const clients = useMemo(() => {
-    return clientsData.map(c => ({
-      ...c,
-      serviceLabels: c.client_services?.filter((s: any) => s.active).map((s: any) => s.service_name) || [],
-      assignedEmployees: c.client_assignments?.map((a: any) => a.employee_id) || [],
-      assignedEmployeeNames: c.client_assignments?.map((a: any) => a.employees?.name).filter(Boolean) || [],
-      paymentStatus: c.payment_status, // map snake_case to camelCase if needed
-    }));
+    return clientsData.map(c => {
+      const billsArr = c.quotations || [];
+      const invoices = billsArr.filter((b: any) => b.is_bill || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
+      const computedBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
+      const allBilled = billsArr.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
+      const paidTotal = (c.payment_history || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+      const finalBilled = computedBilled > 0 ? computedBilled : (allBilled > 0 ? allBilled : (c.total_billed || 0));
+      const outstanding = finalBilled > 0 ? Math.max(0, finalBilled - paidTotal) : (c.outstanding || 0);
+
+      return {
+        ...c,
+        serviceLabels: c.client_services?.filter((s: any) => s.active).map((s: any) => s.service_name) || [],
+        assignedEmployees: c.client_assignments?.map((a: any) => a.employee_id) || [],
+        assignedEmployeeNames: c.client_assignments?.map((a: any) => a.employees?.name).filter(Boolean) || [],
+        paymentStatus: c.payment_status, // map snake_case to camelCase if needed
+        outstanding,
+      };
+    });
   }, [clientsData]);
 
   const filtered = useMemo(() => {

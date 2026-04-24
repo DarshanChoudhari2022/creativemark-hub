@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Flame, Thermometer, Snowflake, Phone, Mail, Calendar, Search, LayoutGrid, List, MessageSquare, MessageCircle, Briefcase, Bell, BellRing, FileText, CreditCard, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Flame, Thermometer, Snowflake, Phone, Mail, Calendar, Search, LayoutGrid, List, MessageSquare, MessageCircle, Briefcase, Bell, BellRing, FileText, CreditCard, CheckCircle, XCircle, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,13 +51,14 @@ const kanbanStages: LeadStage[] = ["New", "Contacted", "Quotation Sent", "Negoti
 const Leads = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { data: leadsData, loading: leadsLoading, refresh: refreshLeads, insert: insertLead, update: updateLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
+  const { data: leadsData, loading: leadsLoading, refresh: refreshLeads, insert: insertLead, update: updateLead, remove: removeLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
   const { data: smartLeadsData, loading: smartLoading, refresh: refreshSmart } = useSupabaseTable<any>('smart_leads', '*, assigned_to(name)');
   const { data: employees } = useSupabaseTable<any>('employees', 'id, name');
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
   const [callLogOpen, setCallLogOpen] = useState(false);
   const [phoneError, setPhoneError] = useState("");
@@ -150,7 +151,7 @@ const Leads = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads, detailLead?.id]); // Also depend on detailLead.id to re-sync if the user switches leads
 
-  const addLead = async () => {
+  const saveLead = async () => {
     if (!form.name || !form.company) { toast.error("Name and company are required"); return; }
     if (form.phone && !isValidIndianPhone(form.phone)) { setPhoneError("Enter valid Indian number"); return; }
     if (form.whatsapp && !isValidIndianPhone(form.whatsapp)) { setForm(f => ({ ...f, whatsappError: "Enter valid Indian number" })); return; }
@@ -159,7 +160,7 @@ const Leads = () => {
       return; 
     }
     
-    const { error } = await insert({
+    const leadData: any = {
       name: form.name, 
       organization: form.company, 
       category: form.category === "Other" ? form.customCategory : form.category,
@@ -167,7 +168,6 @@ const Leads = () => {
       whatsapp: form.whatsapp || form.phone.replace(/[^0-9+]/g, ""),
       email: form.email,
       source: form.source === "Other" ? form.customSource : form.source, 
-      stage: "New", 
       heat: form.heat,
       assigned_to: form.assignedTo || null,
       estimated_value: form.estimatedValue,
@@ -176,15 +176,26 @@ const Leads = () => {
       last_interaction_date: form.lastInteractionDate || null,
       action_item: form.actionItem || null,
       next_call_date: form.nextCallDate || null,
-      quotation_status: "Not Sent",
-      payment_status: "Not Due",
-      lifecycle_stage: "Lead",
-    });
+    };
+
+    let error;
+    if (editLeadId) {
+      const res = await updateLead(editLeadId, leadData);
+      error = res.error;
+    } else {
+      leadData.stage = "New";
+      leadData.quotation_status = "Not Sent";
+      leadData.payment_status = "Not Due";
+      leadData.lifecycle_stage = "Lead";
+      const res = await insertLead(leadData);
+      error = res.error;
+    }
 
     if (error) {
-      toast.error("Failed to add lead: " + error.message);
+      toast.error(`Failed to ${editLeadId ? "update" : "add"} lead: ` + error.message);
     } else {
       setAddOpen(false);
+      setEditLeadId(null);
       setForm({
         name: "", company: "", category: "Other", phone: "", whatsapp: "", email: "", estimatedValue: 0,
         source: "Walk-in", heat: "Warm", assignedTo: "", services: "", notes: "", partnerRef: "",
@@ -193,7 +204,19 @@ const Leads = () => {
         whatsappError: "",
       });
       setPhoneError("");
-      toast.success("Lead added successfully");
+      toast.success(`Lead ${editLeadId ? "updated" : "added"} successfully`);
+    }
+  };
+
+  const handleDeleteLead = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this lead? This action cannot be undone.")) {
+      const { error } = await removeLead(id);
+      if (error) {
+        toast.error("Failed to delete lead: " + error.message);
+      } else {
+        toast.success("Lead deleted successfully");
+        setDetailLead(null);
+      }
     }
   };
 
@@ -334,10 +357,23 @@ const Leads = () => {
                 <List className="h-4 w-4" />
               </Button>
             </div>
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
-              <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover"><Plus className="h-4 w-4" />Add Lead</Button></DialogTrigger>
+            <Dialog open={addOpen} onOpenChange={(open) => {
+              setAddOpen(open);
+              if (!open) {
+                 setEditLeadId(null);
+                 setForm({
+                    name: "", company: "", category: "Other", phone: "", whatsapp: "", email: "", estimatedValue: 0,
+                    source: "Walk-in", heat: "Warm", assignedTo: "", services: "", notes: "", partnerRef: "",
+                    lastInteractionDate: "", actionItem: "", nextCallDate: "",
+                    customCategory: "", customSource: "",
+                    whatsappError: "",
+                 });
+                 setPhoneError("");
+              }
+            }}>
+              <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover" onClick={() => setEditLeadId(null)}><Plus className="h-4 w-4" />Add Lead</Button></DialogTrigger>
               <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Add New Lead</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>{editLeadId ? "Edit Lead" : "Add New Lead"}</DialogTitle></DialogHeader>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Contact Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="John Doe" /></div>
                   <div><Label>Company/Organization *</Label><Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="ABC Corp" /></div>
@@ -418,7 +454,7 @@ const Leads = () => {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="bg-primary hover:bg-primary-hover" onClick={addLead}>Save Lead</Button>
+                  <Button className="bg-primary hover:bg-primary-hover" onClick={saveLead}>{editLeadId ? "Save Changes" : "Save Lead"}</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -598,6 +634,36 @@ const Leads = () => {
                       <MessageSquare className="h-4 w-4" />
                     </Button>
                   )}
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-primary hover:bg-primary/10" onClick={() => {
+                     setEditLeadId(detailLead.id);
+                     setForm({
+                        name: detailLead.name,
+                        company: detailLead.organization,
+                        category: (["Politician", "Clothing", "Motors"].includes(detailLead.category) ? detailLead.category : "Other") as ClientCategory,
+                        customCategory: !["Politician", "Clothing", "Motors"].includes(detailLead.category) ? detailLead.category : "",
+                        phone: detailLead.phone || "",
+                        whatsapp: detailLead.whatsapp || "",
+                        email: detailLead.email || "",
+                        estimatedValue: detailLead.estimatedValue || 0,
+                        source: (["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner"].includes(detailLead.source) ? detailLead.source : "Other") as Lead["source"],
+                        customSource: !["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner"].includes(detailLead.source) ? detailLead.source : "",
+                        heat: detailLead.heat,
+                        assignedTo: detailLead.assignedTo || "",
+                        services: detailLead.servicesInterested?.join(", ") || "",
+                        notes: detailLead.notes || "",
+                        partnerRef: detailLead.partnerRef || "",
+                        lastInteractionDate: detailLead.lastInteractionDate || "",
+                        actionItem: detailLead.actionItem || "",
+                        nextCallDate: detailLead.nextCallDate || "",
+                        whatsappError: "",
+                     });
+                     setAddOpen(true);
+                  }} title="Edit Lead">
+                     <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-red-600 hover:bg-red-50" onClick={() => handleDeleteLead(detailLead.id)} title="Delete Lead">
+                     <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </DialogTitle>
             </DialogHeader>

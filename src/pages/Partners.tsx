@@ -23,6 +23,7 @@ const Partners = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [editPartnerId, setEditPartnerId] = useState<string | null>(null);
   const [detailPartner, setDetailPartner] = useState<any | null>(null);
   const [ledger, setLedger] = useState<any[]>([]);
   const [form, setForm] = useState({
@@ -64,10 +65,10 @@ const Partners = () => {
     partners.filter(p => search === "" || p.name.toLowerCase().includes(search.toLowerCase()) || (p.businessName || "").toLowerCase().includes(search.toLowerCase())),
     [partners, search]);
 
-  const addPartner = async () => {
+  const savePartner = async () => {
     if (!form.name) { toast.error("Partner name is required"); return; }
 
-    const { error } = await supabase.from("partners").insert({
+    const partnerData = {
       name: form.name,
       phone: form.phone,
       email: form.email,
@@ -83,15 +84,27 @@ const Partners = () => {
       upi: form.upi,
       commission_type: form.commissionType,
       commission_rate: form.commissionRate,
-      agreement_date: new Date().toISOString().slice(0, 10),
-      partner_since: new Date().toISOString().slice(0, 10),
       agreement_terms: form.agreementTerms,
-      status: "Active",
-    });
+    };
 
-    if (error) { toast.error("Failed: " + error.message); return; }
+    let error;
+    if (editPartnerId) {
+      const res = await supabase.from("partners").update(partnerData).eq("id", editPartnerId);
+      error = res.error;
+    } else {
+      const res = await supabase.from("partners").insert({
+        ...partnerData,
+        agreement_date: new Date().toISOString().slice(0, 10),
+        partner_since: new Date().toISOString().slice(0, 10),
+        status: "Active",
+      });
+      error = res.error;
+    }
+
+    if (error) { toast.error(`Failed to ${editPartnerId ? "update" : "add"}: ` + error.message); return; }
 
     setAddOpen(false);
+    setEditPartnerId(null);
     setForm({ 
       name: "", phone: "", email: "", whatsapp: "", category: "", 
       businessName: "", address: "", pan: "",
@@ -99,7 +112,7 @@ const Partners = () => {
       commissionType: "Percentage", commissionRate: 10,
       agreementTerms: DEFAULT_PARTNER_TERMS.join('\n')
     });
-    toast.success("Partner added successfully");
+    toast.success(`Partner ${editPartnerId ? "updated" : "added"} successfully`);
     fetchPartners();
   };
 
@@ -153,10 +166,22 @@ const Partners = () => {
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search…" className="pl-9 w-48" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
-              <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover"><Plus className="h-4 w-4" />Add Partner</Button></DialogTrigger>
+            <Dialog open={addOpen} onOpenChange={(open) => {
+              setAddOpen(open);
+              if (!open) {
+                setEditPartnerId(null);
+                setForm({ 
+                  name: "", phone: "", email: "", whatsapp: "", category: "", 
+                  businessName: "", address: "", pan: "",
+                  bankAccount: "", ifsc: "", accountHolder: "", bankName: "", upi: "",
+                  commissionType: "Percentage", commissionRate: 10,
+                  agreementTerms: DEFAULT_PARTNER_TERMS.join('\n')
+                });
+              }
+            }}>
+              <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover" onClick={() => setEditPartnerId(null)}><Plus className="h-4 w-4" />Add Partner</Button></DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Add New Partner</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>{editPartnerId ? "Edit Partner" : "Add New Partner"}</DialogTitle></DialogHeader>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <h3 className="text-xs font-bold uppercase tracking-tight text-muted-foreground">Basic Information</h3>
@@ -211,7 +236,7 @@ const Partners = () => {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="bg-primary hover:bg-primary-hover" onClick={addPartner}>Save Partner</Button>
+                  <Button className="bg-primary hover:bg-primary-hover" onClick={savePartner}>{editPartnerId ? "Save Changes" : "Save Partner"}</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -308,10 +333,36 @@ const Partners = () => {
         {detailPartner && (
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Handshake className="h-5 w-5 text-primary" />
-                {detailPartner.name}
-                <Badge variant="outline" className={`${detailPartner.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100"}`}>{detailPartner.status}</Badge>
+              <DialogTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Handshake className="h-5 w-5 text-primary" />
+                  {detailPartner.name}
+                  <Badge variant="outline" className={`${detailPartner.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100"}`}>{detailPartner.status}</Badge>
+                </div>
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-primary hover:bg-primary/10" onClick={() => {
+                  setEditPartnerId(detailPartner.id);
+                  setForm({
+                    name: detailPartner.name || "",
+                    phone: detailPartner.phone || "",
+                    email: detailPartner.email || "",
+                    whatsapp: detailPartner.whatsapp || "",
+                    category: detailPartner.category || "",
+                    businessName: detailPartner.businessName || "",
+                    address: detailPartner.address || "",
+                    pan: detailPartner.pan || "",
+                    bankAccount: detailPartner.bankAccount || "",
+                    ifsc: detailPartner.ifsc || "",
+                    accountHolder: detailPartner.accountHolder || "",
+                    bankName: detailPartner.bankName || "",
+                    upi: detailPartner.upi || "",
+                    commissionType: detailPartner.commissionType || "Percentage",
+                    commissionRate: detailPartner.commissionRate || 10,
+                    agreementTerms: detailPartner.agreementTerms || DEFAULT_PARTNER_TERMS.join('\n'),
+                  });
+                  setAddOpen(true);
+                }}>
+                  Edit
+                </Button>
               </DialogTitle>
             </DialogHeader>
 
