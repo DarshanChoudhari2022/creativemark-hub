@@ -42,7 +42,7 @@ const Employees = () => {
     target: 50 // Default target
   });
   const [phoneError, setPhoneError] = useState("");
-  const [logForm, setLogForm] = useState({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, notes: "" });
+  const [logForm, setLogForm] = useState({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, amount: 0, notes: "" });
 
   const employees = useMemo(() => {
     return employeesData.map(e => {
@@ -92,7 +92,7 @@ const Employees = () => {
       toast.error("Failed to add employee: " + error.message);
     } else {
       setAddOpen(false);
-      setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0, target: 50 });
+      setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0, amount: 0, target: 50 });
       setPhoneError("");
       toast.success("Employee added successfully");
     }
