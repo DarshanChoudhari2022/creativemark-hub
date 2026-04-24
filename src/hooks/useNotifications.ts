@@ -189,8 +189,10 @@ export const useNotifications = () => {
   useEffect(() => {
     if (!user) return;
 
+    // Use a unique channel name per mount to prevent 'cannot add postgres_changes callbacks after subscribe' errors
+    const channelId = `user-notifications-${user.id}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     const channel = supabase
-      .channel(`user-notifications-${user.id}`)
+      .channel(channelId)
       .on(
         'postgres_changes',
         {

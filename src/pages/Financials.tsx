@@ -102,6 +102,8 @@ const Financials = () => {
   const totalExpenses = expenses?.reduce((acc, e) => acc + (Number(e.amount) || 0), 0) || 0;
   const netProfit = totalRevenue - totalExpenses;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+  
+  const unpaidCount = quotations?.filter(q => q.status !== "Paid" && q.status !== "Draft").length || 0;
 
   // Charts Data
   const getMonthlyData = () => {
@@ -278,9 +280,9 @@ const Financials = () => {
                 <TrendingUp className="h-5 w-5 text-primary" />
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-2 text-xs text-green-600">
-              <ArrowUpRight className="h-3 w-3" />
-              <span>+12.5% from last month</span>
+            {/* Dynamic change could be added here later */}
+            <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Total revenue collected across all paid invoices</span>
             </div>
           </CardContent>
         </Card>
@@ -296,9 +298,9 @@ const Financials = () => {
                 <TrendingDown className="h-5 w-5 text-red-500" />
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-2 text-xs text-red-600">
-              <ArrowDownRight className="h-3 w-3" />
-              <span>+5.2% from last month</span>
+            {/* Dynamic change could be added here later */}
+            <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Total logged expenses</span>
             </div>
           </CardContent>
         </Card>
@@ -336,7 +338,7 @@ const Financials = () => {
               </div>
             </div>
             <div className="mt-4 flex items-center gap-2 text-xs text-yellow-600 font-medium">
-              <span>Attention required for 5 invoices</span>
+              <span>{unpaidCount > 0 ? `Attention required for ${unpaidCount} invoice${unpaidCount === 1 ? '' : 's'}` : 'All caught up'}</span>
             </div>
           </CardContent>
         </Card>
