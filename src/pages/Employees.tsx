@@ -17,7 +17,15 @@ import { formatINR, formatDateDDMMYYYY, waLink, isValidIndianPhone } from "@/lib
 import { toast } from "sonner";
 import { Masked } from "@/components/Masked";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { createClient } from "@supabase/supabase-js";
 import type { Employee, EmployeeRole, WorkLog } from "@/types";
+
+// Create a separate Supabase client for signing up users without logging out the Admin
+const tempSupabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co',
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key',
+  { auth: { persistSession: false, autoRefreshToken: false } }
+);
 
 const STATUS_COLORS: Record<string, string> = {
   Active: "bg-green-100 text-green-700 border-green-200",
@@ -75,8 +83,25 @@ const Employees = () => {
     if (!form.name) { toast.error("Employee name is required"); return; }
     if (form.role === "Others" && !form.customRole.trim()) { toast.error("Please specify the custom role"); return; }
     if (form.phone && !isValidIndianPhone(form.phone)) { setPhoneError("Enter valid Indian number"); return; }
+    if (!form.email) { toast.error("Email is required for creating a login account"); return; }
     
+    // 1. Create the Auth User
+    const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+      email: form.email,
+      password: "Creative@123", // Default password
+      options: { data: { full_name: form.name } }
+    });
+
+    if (authError) {
+      toast.error("Failed to create login: " + authError.message);
+      return;
+    }
+
+    const userId = authData?.user?.id;
+
+    // 2. Insert into the Database
     const { error } = await insertEmployee({
+      id: userId, // Ensure DB ID matches Auth ID
       name: form.name,
       role: form.role === "Others" ? "Employee" : form.role,
       custom_role: form.role === "Others" ? form.customRole : null,
@@ -141,6 +166,32 @@ const Employees = () => {
         subtitle={`${employees.length} team members`}
         actions={
           <>
+            <Button 
+              variant="outline" 
+              className="border-primary text-primary hover:bg-primary/10 mr-2"
+              onClick={async () => {
+                toast.loading("Generating logins for existing employees...", { id: 'gen-logins' });
+                let count = 0;
+                for (const emp of employees) {
+                  if (!emp.email) continue;
+                  // Attempt to sign up
+                  const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+                    email: emp.email,
+                    password: "Creative@123",
+                    options: { data: { full_name: emp.name } }
+                  });
+                  if (!authError && authData?.user) {
+                    // Update employee ID to match the new auth user ID
+                    await supabase.from('employees').update({ id: authData.user.id }).eq('id', emp.id);
+                    count++;
+                  }
+                }
+                toast.success(`Generated ${count} new logins. Default Password: Creative@123`, { id: 'gen-logins' });
+                refreshEmployees();
+              }}
+            >
+              Fix Existing Logins
+            </Button>
             <div className="relative">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search by name, role…" className="pl-9 w-56" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -179,7 +230,7 @@ const Employees = () => {
                       />
                       {phoneError && <p className="text-[11px] text-red-500 mt-0.5">{phoneError}</p>}
                     </div>
-                    <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                    <div><Label>Email *</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Required for Login" /></div>
                   </div>
                   <div className="grid grid-cols-1 gap-3">
                     <div><Label>Lead Target</Label><Input type="number" value={form.target} onChange={(e) => setForm({ ...form, target: +e.target.value })} /></div>
