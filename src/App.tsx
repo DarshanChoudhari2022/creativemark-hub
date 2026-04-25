@@ -9,6 +9,7 @@ import Analytics from "./pages/Analytics";
 import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
 import Employees from "./pages/Employees";
+import LiveTracking from "./pages/LiveTracking";
 import Leads from "./pages/Leads";
 import Quotations from "./pages/Quotations";
 import Recovery from "./pages/Recovery";
@@ -50,6 +51,7 @@ const App = () => (
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/clients/:id" element={<ClientDetail />} />
                 <Route path="/employees" element={<Employees />} />
+                <Route path="/live-tracking" element={<LiveTracking />} />
                 <Route path="/leads" element={<Leads />} />
                 <Route path="/quotations" element={<Quotations />} />
                 <Route path="/recovery" element={<Recovery />} />

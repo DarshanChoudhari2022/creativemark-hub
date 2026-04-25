@@ -26,7 +26,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const Employees = () => {
-  const { data: employeesData, loading, insert: insertEmployee, refresh: refreshEmployees } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage)');
+  const { data: employeesData, loading, insert: insertEmployee, refresh: refreshEmployees } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage), society_data(*)');
   const { data: clients } = useSupabaseTable<any>('clients', 'id, name, whatsapp');
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -343,6 +343,29 @@ const Employees = () => {
                         )}
                       </div>
                     </div>
+                    
+                    {/* Field Visits Section */}
+                    {(emp.society_data && emp.society_data.length > 0) && (
+                      <div className="space-y-3 pt-5 mt-5 border-t border-border">
+                        <h4 className="font-bold text-sm flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Recent Society Visits</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {emp.society_data.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 6).map((visit: any, i: number) => (
+                            <div key={i} className="bg-card p-3 rounded-lg border border-border">
+                              <div className="flex justify-between items-start mb-1">
+                                <div className="font-bold text-sm truncate">{visit.name}</div>
+                                <Badge variant="outline" className="text-[10px]">{visit.status || "Pending"}</Badge>
+                              </div>
+                              <div className="text-xs text-muted-foreground mb-2 line-clamp-2">{visit.address}</div>
+                              <div className="text-xs space-y-1">
+                                {visit.contact_person && <div><span className="font-medium text-foreground">Contact:</span> {visit.contact_person} {visit.contact_phone && `(${visit.contact_phone})`}</div>}
+                                {visit.number_of_flats && <div><span className="font-medium text-foreground">Flats:</span> {visit.number_of_flats}</div>}
+                                <div className="text-[10px] text-muted-foreground mt-2">{new Date(visit.created_at).toLocaleDateString()} {new Date(visit.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CollapsibleContent>
               </Card>
