@@ -1,5 +1,5 @@
 {
   "imports": {
-    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.104.0"
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.104.0"
   }
 }
