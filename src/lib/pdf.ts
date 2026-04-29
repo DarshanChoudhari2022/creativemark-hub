@@ -132,9 +132,9 @@ function formatIndianNumber(num: number): string {
 
   // Indian grouping: last 3 digits, then groups of 2
   if (intPart.length > 3) {
-    let last3 = intPart.slice(-3);
+    const last3 = intPart.slice(-3);
     let remaining = intPart.slice(0, -3);
-    let groups: string[] = [];
+    const groups: string[] = [];
     while (remaining.length > 2) {
       groups.unshift(remaining.slice(-2));
       remaining = remaining.slice(0, -2);

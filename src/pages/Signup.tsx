@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
 import { useNavigate, Link } from "react-router-dom";
-import { Briefcase, Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -79,11 +79,15 @@ export default function Signup() {
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-primary" />
         
         <div className="flex flex-col items-center mb-6 gap-2 text-center">
-          <div className="h-14 w-14 bg-primary rounded-2xl flex items-center justify-center shadow-lg text-primary-foreground mb-4 rotate-3 hover:rotate-0 transition-transform duration-300">
-            <Briefcase className="h-7 w-7" />
+          <div className="h-24 w-24 mb-2 flex items-center justify-center">
+            <img 
+              src="/logo-brand.png" 
+              alt="Creative Mark" 
+              className="w-full h-full object-contain animate-in zoom-in-50 duration-700" 
+            />
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-foreground">Sign Up</h1>
-          <p className="text-sm text-muted-foreground font-medium">Create a new workspace account</p>
+          <h1 className="text-3xl font-black tracking-tight text-foreground uppercase">Create Account</h1>
+          <p className="text-xs text-muted-foreground font-bold tracking-widest uppercase opacity-70">Join the Enterprise Workspace</p>
         </div>
 
         {error && (

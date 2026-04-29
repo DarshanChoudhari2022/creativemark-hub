@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // ── Facebook Webhook Verification (GET) ──
   if (req.method === "GET") {
     const url = new URL(req.url);
@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
           }
 
           // ── Update global stats ──
-          await supabase.rpc("increment_webhook_leads", { p_platform: "Meta Ads" }).catch((e) => {
+          await supabase.rpc("increment_webhook_leads", { p_platform: "Meta Ads" }).catch((e: Error) => {
             console.error("RPC increment failed:", e);
           });
         }
