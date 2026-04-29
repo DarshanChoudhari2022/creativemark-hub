@@ -19,6 +19,7 @@ import { generateQuotationPDF } from "@/lib/pdf";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Masked } from "@/components/Masked";
+import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
 import type { QuotationBillStatus, LineItem } from "@/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -35,6 +36,7 @@ const emptyItem = (): LineItem => ({ id: crypto.randomUUID(), serviceName: "", d
 
 const Quotations = () => {
   const location = useLocation();
+  const { isShielded, withShield } = usePrivacyShield();
   const [quotations, setQuotations] = useState<any[]>([]);
   const [allClients, setAllClients] = useState<any[]>([]);
   const [allLeads, setAllLeads] = useState<any[]>([]);
@@ -42,12 +44,14 @@ const Quotations = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [addOpen, setAddOpen] = useState(false);
+  const [editingQ, setEditingQ] = useState<any | null>(null);
   const [previewQ, setPreviewQ] = useState<any | null>(null);
 
   // Builder state — GST defaults to OFF per user request
   const [type, setType] = useState<"Quotation" | "Bill">("Quotation");
   const [recipientId, setRecipientId] = useState("");
   const [recipientType, setRecipientType] = useState<"Client" | "Lead">("Client");
+  const [customRecipientName, setCustomRecipientName] = useState("");
   const [items, setItems] = useState<LineItem[]>([emptyItem()]);
   const [gstEnabled, setGstEnabled] = useState(false); // DEFAULT OFF
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -91,9 +95,10 @@ const Quotations = () => {
   // Handle incoming state from Leads page
   useEffect(() => {
     if (location.state && allRecipients.length > 0) {
-      const { leadId, services } = location.state;
+      const { leadId, services, leadName } = location.state;
       setRecipientId(leadId);
       setRecipientType("Lead");
+      setCustomRecipientName(leadName || "");
       setAddOpen(true);
       
       if (services && Array.isArray(services) && services.length > 0) {
@@ -111,6 +116,14 @@ const Quotations = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location.state, allRecipients]);
+
+  // Update custom name when recipient changes (but only if not in edit mode or explicitly changed)
+  useEffect(() => {
+    if (!editingQ && recipientId) {
+      const recipient = allRecipients.find(r => r.id === recipientId);
+      if (recipient) setCustomRecipientName(recipient.name);
+    }
+  }, [recipientId, allRecipients, editingQ]);
 
   const filtered = useMemo(() =>
     quotations.filter(q =>
@@ -140,20 +153,19 @@ const Quotations = () => {
 
     const prefix = type === "Quotation" ? "QT" : "BL";
     const status: QuotationBillStatus = type === "Quotation" ? "Draft" : "Sent";
-    const quoteNumber = `${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const quoteNumber = editingQ ? editingQ.quote_number : `${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
     const isClient = recipient.type === "Client";
 
-    // Insert quotation into Supabase
-    const { data: inserted, error } = await supabase.from("quotations").insert({
+    const payload = {
       quote_number: quoteNumber,
       type,
-      status,
-      date: new Date().toISOString().slice(0, 10),
-      valid_until: type === "Quotation" ? new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10) : null,
-      due_date: type === "Bill" ? new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10) : null,
+      status: editingQ ? editingQ.status : status,
+      date: editingQ ? editingQ.date : new Date().toISOString().slice(0, 10),
+      valid_until: type === "Quotation" ? (editingQ?.valid_until || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)) : null,
+      due_date: type === "Bill" ? (editingQ?.due_date || new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10)) : null,
       client_id: isClient ? recipientId : null,
       lead_id: !isClient ? recipientId : null,
-      client_name: recipient.name,
+      client_name: customRecipientName || recipient.name,
       client_phone: recipient.phone,
       subtotal,
       discount_percent: discountPercent,
@@ -169,16 +181,28 @@ const Quotations = () => {
       internal_notes: notes,
       bank_details: bankDetails,
       upi_id: upiId,
-    }).select().single();
+    };
 
-    if (error) { toast.error("Failed to create: " + error.message); return; }
+    let insertedId = editingQ?.id;
+
+    if (editingQ) {
+      const { error } = await supabase.from("quotations").update(payload).eq("id", editingQ.id);
+      if (error) { toast.error("Failed to update: " + error.message); return; }
+      
+      // Delete old items and insert new ones
+      await supabase.from("quotation_items").delete().eq("quotation_id", editingQ.id);
+    } else {
+      const { data: inserted, error } = await supabase.from("quotations").insert(payload).select().single();
+      if (error) { toast.error("Failed to create: " + error.message); return; }
+      insertedId = inserted.id;
+    }
 
     // Insert line items
     const validItems = items.filter(i => i.serviceName || i.description);
-    if (validItems.length > 0 && inserted) {
+    if (validItems.length > 0 && insertedId) {
       await supabase.from("quotation_items").insert(
         validItems.map(item => ({
-          quotation_id: inserted.id,
+          quotation_id: insertedId,
           service_name: item.serviceName || item.description || "",
           description: item.description || item.serviceName || "",
           quantity: item.quantity,
@@ -207,7 +231,7 @@ const Quotations = () => {
     setAddOpen(false);
     
     // Immediate share action
-    toast.success(`${type} created — ${quoteNumber}`, {
+    toast.success(`${type} ${editingQ ? 'updated' : 'created'} — ${quoteNumber}`, {
       action: {
         label: "Share via WhatsApp",
         onClick: () => {
@@ -223,7 +247,9 @@ const Quotations = () => {
   };
 
   const resetForm = () => {
+    setEditingQ(null);
     setRecipientId(""); 
+    setCustomRecipientName("");
     setItems([emptyItem()]); 
     setGstEnabled(false); 
     setDiscountPercent(0);
@@ -231,6 +257,31 @@ const Quotations = () => {
     setNotes("");
     setBankDetails("");
     setUpiId("");
+  };
+
+  const handleEdit = (q: any) => {
+    withShield(() => {
+    setEditingQ(q);
+    setType(q.type);
+    setRecipientId(q.client_id || q.lead_id || "");
+    setRecipientType(q.client_id ? "Client" : "Lead");
+    setCustomRecipientName(q.client_name || "");
+    setItems(q.quotation_items.map((i: any) => ({
+      id: i.id,
+      serviceName: i.service_name,
+      description: i.description,
+      quantity: i.quantity,
+      rate: i.rate,
+      amount: i.amount
+    })));
+    setGstEnabled(q.gst_applicable);
+    setDiscountPercent(q.discount_percent);
+    setTerms(q.terms || "");
+    setNotes(q.internal_notes || "");
+    setBankDetails(q.bank_details || "");
+    setUpiId(q.upi_id || "");
+    setAddOpen(true);
+    });
   };
 
   const shareViaWhatsApp = (q: any) => {
@@ -347,11 +398,13 @@ const Quotations = () => {
   };
 
   const deleteQuotation = async (q: any) => {
-    if (!confirm(`Are you sure you want to delete ${q.type} ${q.quote_number}?`)) return;
-    const { error } = await supabase.from("quotations").delete().eq("id", q.id);
-    if (error) { toast.error("Failed to delete: " + error.message); return; }
-    setQuotations(prev => prev.filter(x => x.id !== q.id));
-    toast.success(`${q.type} deleted`);
+    withShield(async () => {
+      if (!confirm(`Are you sure you want to delete ${q.type} ${q.quote_number}?`)) return;
+      const { error } = await supabase.from("quotations").delete().eq("id", q.id);
+      if (error) { toast.error("Failed to delete: " + error.message); return; }
+      setQuotations(prev => prev.filter(x => x.id !== q.id));
+      toast.success(`${q.type} deleted`);
+    });
   };
 
   if (loading) {
@@ -388,7 +441,7 @@ const Quotations = () => {
             <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) resetForm(); }}>
               <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover"><Plus className="h-4 w-4" />New Document</Button></DialogTrigger>
               <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Create Quotation or Bill</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>{editingQ ? `Edit ${editingQ.type}` : `Create Quotation or Bill`}</DialogTitle></DialogHeader>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -408,6 +461,16 @@ const Quotations = () => {
                         <SelectContent>{allRecipients.map(r => <SelectItem key={r.id} value={r.id}>{r.name} ({r.type})</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  <div>
+                    <Label>Recipient Name on Document</Label>
+                    <Input 
+                      value={customRecipientName} 
+                      onChange={(e) => setCustomRecipientName(e.target.value)} 
+                      placeholder="Enter name as it should appear on PDF"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">This allows you to customize the name without changing the client record.</p>
                   </div>
 
                   {/* Service Presets */}
@@ -529,7 +592,9 @@ const Quotations = () => {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => { setAddOpen(false); resetForm(); }}>Cancel</Button>
-                  <Button className="bg-primary hover:bg-primary-hover" onClick={createQuotation}>Create {type}</Button>
+                  <Button className="bg-primary hover:bg-primary-hover" onClick={createQuotation}>
+                    {editingQ ? `Update ${type}` : `Create ${type}`}
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -587,6 +652,7 @@ const Quotations = () => {
                         </Button>
                       )}
                       <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setPreviewQ(q)} title="Preview"><Eye className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => handleEdit(q)} title="Edit"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => downloadPDF(q)} title="Download"><Download className="h-4 w-4" /></Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600" onClick={() => shareViaWhatsApp(q)} title="WhatsApp"><Send className="h-4 w-4" /></Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2 text-red-600 hover:bg-red-50" onClick={() => deleteQuotation(q)} title="Delete"><Trash2 className="h-4 w-4" /></Button>

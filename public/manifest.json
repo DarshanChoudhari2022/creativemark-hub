@@ -1,0 +1,38 @@
+{
+  "name": "CreativeMark Hub",
+  "short_name": "CM Hub",
+  "description": "CreativeMark Advertising CRM - Manage clients, leads, quotations, and billing",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f0f",
+  "theme_color": "#c81020",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo-brand.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-brand.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en-IN"
+}

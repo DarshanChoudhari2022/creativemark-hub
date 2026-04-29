@@ -16,6 +16,7 @@ import { supabase } from "@/lib/supabase";
 import { formatINR, formatDateDDMMYYYY, waLink, isValidIndianPhone } from "@/lib/format";
 import { toast } from "sonner";
 import { Masked } from "@/components/Masked";
+import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { createClient } from "@supabase/supabase-js";
 import type { Employee, EmployeeRole, WorkLog } from "@/types";
@@ -34,12 +35,15 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const Employees = () => {
-  const { data: employeesData, loading, insert: insertEmployee, refresh: refreshEmployees } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage), society_data(*)');
+  const { isShielded, withShield } = usePrivacyShield();
+  const { data: employeesData, loading, insert: insertEmployee, update: updateEmployee, remove: removeEmployee, refresh: refreshEmployees } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage), society_data(*)');
   const { data: clients } = useSupabaseTable<any>('clients', 'id, name, whatsapp');
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [editingEmp, setEditingEmp] = useState<any | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState<any | null>(null);
+  const [editingLog, setEditingLog] = useState<any | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [form, setForm] = useState({ 
     name: "", 
@@ -118,10 +122,68 @@ const Employees = () => {
       toast.error("Failed to add employee: " + error.message);
     } else {
       setAddOpen(false);
-      setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0, amount: 0, target: 50 });
-      setPhoneError("");
+      resetForm();
       toast.success("Employee added successfully");
     }
+  };
+
+  const editEmployee = (emp: any) => {
+    withShield(() => {
+      setEditingEmp(emp);
+      setForm({
+        name: emp.name,
+        role: emp.role === "Employee" && emp.custom_role ? "Others" : emp.role,
+        customRole: emp.custom_role || "",
+        phone: emp.phone || "",
+        email: emp.email || "",
+        salary: emp.salary || 0,
+        amount: 0,
+        target: emp.lead_target || 50
+      });
+      setAddOpen(true);
+    });
+  };
+
+  const handleUpdateEmployee = async () => {
+    if (!editingEmp) return;
+    if (!form.name) { toast.error("Employee name is required"); return; }
+    
+    const { error } = await updateEmployee(editingEmp.id, {
+      name: form.name,
+      role: form.role === "Others" ? "Employee" : form.role,
+      custom_role: form.role === "Others" ? form.customRole : null,
+      phone: form.phone,
+      whatsapp: form.phone,
+      email: form.email,
+      salary: form.salary,
+      lead_target: form.target,
+    });
+
+    if (error) {
+      toast.error("Failed to update employee: " + error.message);
+    } else {
+      setAddOpen(false);
+      resetForm();
+      toast.success("Employee updated successfully");
+    }
+  };
+
+  const handleDeleteEmployee = async (emp: any) => {
+    withShield(async () => {
+      if (!confirm(`Are you sure you want to delete ${emp.name}? This will not delete their auth account but will remove them from the database.`)) return;
+      const { error } = await removeEmployee(emp.id);
+      if (error) {
+        toast.error("Failed to delete employee: " + error.message);
+      } else {
+        toast.success("Employee deleted");
+      }
+    });
+  };
+
+  const resetForm = () => {
+    setEditingEmp(null);
+    setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0, amount: 0, target: 50 });
+    setPhoneError("");
   };
 
   const addWorkLog = async () => {
@@ -143,11 +205,56 @@ const Employees = () => {
       toast.error("Failed to add work log: " + error.message);
     } else {
       setLogOpen(false);
+      setEditingLog(null);
       setLogForm({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, amount: 0, notes: "" });
-      toast.success("Work log added");
-      // Immediately refresh employee data to show the new log
+      toast.success(editingLog ? "Work log updated" : "Work log added");
       refreshEmployees();
     }
+  };
+
+  const updateWorkLog = async () => {
+    if (!editingLog) return;
+    
+    const { error } = await supabase
+      .from('work_logs')
+      .update({
+        date: logForm.date,
+        client_id: logForm.clientId,
+        work_type: logForm.workType,
+        location: logForm.location,
+        hours: logForm.hours,
+        amount: logForm.amount || 0,
+        notes: logForm.notes,
+      })
+      .eq('id', editingLog.id);
+
+    if (error) {
+      toast.error("Failed to update work log: " + error.message);
+    } else {
+      setLogOpen(false);
+      setEditingLog(null);
+      setLogForm({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, amount: 0, notes: "" });
+      toast.success("Work log updated");
+      refreshEmployees();
+    }
+  };
+
+  const deleteWorkLog = async (logId: string) => {
+    withShield(async () => {
+      if (!confirm("Are you sure you want to delete this work log?")) return;
+      
+      const { error } = await supabase
+        .from('work_logs')
+        .delete()
+        .eq('id', logId);
+
+      if (error) {
+        toast.error("Failed to delete work log: " + error.message);
+      } else {
+        toast.success("Work log deleted");
+        refreshEmployees();
+      }
+    });
   };
 
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").slice(0, 2);
@@ -196,10 +303,10 @@ const Employees = () => {
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search by name, role…" className="pl-9 w-56" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) resetForm(); }}>
               <DialogTrigger asChild><Button className="bg-primary hover:bg-primary-hover"><Plus className="h-4 w-4" />Add Employee</Button></DialogTrigger>
               <DialogContent className="max-w-md">
-                <DialogHeader><DialogTitle>Add New Employee</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>{editingEmp ? "Edit Employee" : "Add New Employee"}</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                   <div><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Vikram Joshi" /></div>
                   <div><Label>Role</Label>
@@ -237,8 +344,10 @@ const Employees = () => {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="bg-primary hover:bg-primary-hover" onClick={addEmployee}>Save Employee</Button>
+                  <Button variant="outline" onClick={() => { setAddOpen(false); resetForm(); }}>Cancel</Button>
+                  <Button className="bg-primary hover:bg-primary-hover" onClick={editingEmp ? handleUpdateEmployee : addEmployee}>
+                    {editingEmp ? "Update Employee" : "Save Employee"}
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -304,7 +413,15 @@ const Employees = () => {
                         <div className="font-semibold text-foreground"><Masked placeholder="₹•••••">{formatINR(totalEarned)}</Masked></div>
                       </div>
                     </div>
-                    <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    <div className="flex items-center gap-2 pr-4">
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); editEmployee(emp); }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-500 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); handleDeleteEmployee(emp); }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                      </Button>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    </div>
                   </div>
                 </CollapsibleTrigger>
 
@@ -368,18 +485,54 @@ const Employees = () => {
                         </div>
                         <div className="text-xs text-muted-foreground mb-1">{totalHours.toFixed(1)} hours logged · <Masked placeholder="₹•••••">{formatINR(totalEarned)}</Masked> earned</div>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                          {(emp.work_logs || []).slice(0, 5).map((log: any, i: number) => {
+                          {(emp.work_logs || []).slice(0, 8).map((log: any, i: number) => {
                             const duration = log.hours ?? (log.reportingTime && log.endTime ? ((new Date(`2000-01-01T${log.endTime}`).getTime() - new Date(`2000-01-01T${log.reportingTime}`).getTime()) / (1000 * 60 * 60)).toFixed(1) : null);
+                            const clientName = clients?.find((c: any) => c.id === log.client_id)?.name || "Unknown Client";
                             return (
-                              <div key={i} className="flex items-start justify-between p-2 rounded border border-border text-xs hover:bg-muted/30 transition-colors">
+                              <div key={i} className="group relative flex items-start justify-between p-2 rounded border border-border text-xs hover:bg-muted/30 transition-colors">
                                 <div className="min-w-0 flex-1">
                                   <div className="font-semibold truncate">{log.work_type}</div>
-                                  <div className="text-muted-foreground truncate">{log.client_name || ''} · {log.location}</div>
+                                  <div className="text-muted-foreground truncate">{clientName} · {log.location}</div>
                                 </div>
-                                <div className="text-right shrink-0 ml-2">
+                                <div className="text-right shrink-0 ml-2 flex flex-col items-end">
                                   <div className="font-mono">{formatDateDDMMYYYY(log.date)}</div>
                                   <div className="text-muted-foreground">{duration ?? "—"}h</div>
                                   {log.amount > 0 && <div className="font-semibold text-green-600"><Masked placeholder="₹•••">{formatINR(log.amount)}</Masked></div>}
+                                </div>
+                                
+                                {/* Edit/Delete Overlay on hover - only if unlocked */}
+                                <div className="absolute inset-y-0 right-0 items-center gap-1 pr-2 bg-gradient-to-l from-muted/80 via-muted/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex">
+                                  <Button 
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
+                                    onClick={() => {
+                                      withShield(() => {
+                                        setSelectedEmp(emp);
+                                        setEditingLog(log);
+                                        setLogForm({
+                                          date: log.date,
+                                          clientId: log.client_id,
+                                          workType: log.work_type,
+                                          location: log.location,
+                                          hours: log.hours || 0,
+                                          amount: log.amount || 0,
+                                          notes: log.notes || "",
+                                        });
+                                        setLogOpen(true);
+                                      });
+                                    }}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                  </Button>
+                                  <Button 
+                                    size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                                    onClick={() => {
+                                      withShield(() => {
+                                        deleteWorkLog(log.id);
+                                      });
+                                    }}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                  </Button>
                                 </div>
                               </div>
                             );
@@ -426,9 +579,9 @@ const Employees = () => {
       </div>
 
       {/* Log Work Dialog */}
-      <Dialog open={logOpen} onOpenChange={setLogOpen}>
+      <Dialog open={logOpen} onOpenChange={(open) => { setLogOpen(open); if (!open) setEditingLog(null); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Log Work — {selectedEmp?.name}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingLog ? "Edit Work Log" : "Log Work"} — {selectedEmp?.name}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Date</Label><Input type="date" value={logForm.date} onChange={(e) => setLogForm({ ...logForm, date: e.target.value })} /></div>
             <div><Label>Client *</Label>
@@ -446,8 +599,10 @@ const Employees = () => {
             <div><Label>Notes</Label><Textarea value={logForm.notes} onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })} rows={2} /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setLogOpen(false)}>Cancel</Button>
-            <Button className="bg-primary hover:bg-primary-hover" onClick={addWorkLog}>Save Log</Button>
+            <Button variant="outline" onClick={() => { setLogOpen(false); setEditingLog(null); }}>Cancel</Button>
+            <Button className="bg-primary hover:bg-primary-hover" onClick={editingLog ? updateWorkLog : addWorkLog}>
+              {editingLog ? "Update Log" : "Save Log"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

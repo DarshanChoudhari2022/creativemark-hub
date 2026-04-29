@@ -1,4 +1,4 @@
-import logo from "@/assets/logo.jpeg";
+const logo = "/logo-brand.png";
 import { cn } from "@/lib/utils";
 
 interface Props {

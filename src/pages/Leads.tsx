@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Masked } from "@/components/Masked";
 import { useNavigate } from "react-router-dom";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
+import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
 import type { Lead, LeadStage, LeadHeat, ClientCategory, LeadQuotationStatus, LeadPaymentStatus } from "@/types";
 
 const HEAT_ICONS: Record<LeadHeat, { icon: React.ElementType; color: string; label: string }> = {
@@ -51,6 +52,7 @@ const kanbanStages: LeadStage[] = ["New", "Contacted", "Quotation Sent", "Negoti
 
 const Leads = () => {
   const { user } = useAuth();
+  const { isShielded, withShield } = usePrivacyShield();
   const navigate = useNavigate();
   const { data: leadsData, loading: leadsLoading, refresh: refreshLeads, insert: insertLead, update: updateLead, remove: removeLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
   const { data: smartLeadsData, loading: smartLoading, refresh: refreshSmart } = useSupabaseTable<any>('smart_leads', '*, assigned_to(name)');
@@ -210,15 +212,17 @@ const Leads = () => {
   };
 
   const handleDeleteLead = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this lead? This action cannot be undone.")) {
-      const { error } = await removeLead(id);
-      if (error) {
-        toast.error("Failed to delete lead: " + error.message);
-      } else {
-        toast.success("Lead deleted successfully");
-        setDetailLead(null);
+    withShield(async () => {
+      if (window.confirm("Are you sure you want to delete this lead? This action cannot be undone.")) {
+        const { error } = await removeLead(id);
+        if (error) {
+          toast.error("Failed to delete lead: " + error.message);
+        } else {
+          toast.success("Lead deleted successfully");
+          setDetailLead(null);
+        }
       }
-    }
+    });
   };
 
   const moveLeadStage = async (leadId: string, newStage: LeadStage) => {
@@ -510,7 +514,53 @@ const Leads = () => {
                               </Badge>
                             )}
                           </div>
-                          <HeatIcon className={`h-4 w-4 shrink-0 ${heat.color}`} />
+                          <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mr-1">
+                              <button 
+                                onClick={(e) => { 
+                                   e.stopPropagation(); 
+                                   withShield(() => {
+                                     setEditLeadId(lead.id);
+                                     setForm({
+                                       name: lead.name,
+                                       company: lead.organization,
+                                       category: (["Politician", "Clothing", "Motors"].includes(lead.category) ? lead.category : "Other") as ClientCategory,
+                                       customCategory: !["Politician", "Clothing", "Motors"].includes(lead.category) ? lead.category : "",
+                                       phone: lead.phone || "",
+                                       whatsapp: lead.whatsapp || "",
+                                       email: lead.email || "",
+                                       estimatedValue: lead.estimatedValue || 0,
+                                       source: (["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner"].includes(lead.source) ? lead.source : "Other") as Lead["source"],
+                                       customSource: !["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner"].includes(lead.source) ? lead.source : "",
+                                       heat: lead.heat,
+                                       assignedTo: lead.assignedTo || "",
+                                       services: lead.servicesInterested?.join(", ") || "",
+                                       notes: lead.notes || "",
+                                       partnerRef: lead.partnerRef || "",
+                                       lastInteractionDate: lead.lastInteractionDate || "",
+                                       actionItem: lead.actionItem || "",
+                                       nextCallDate: lead.nextCallDate || "",
+                                       whatsappError: "",
+                                     });
+                                     setAddOpen(true);
+                                   });
+                                 }} 
+                                className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-primary"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </button>
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  handleDeleteLead(lead.id);
+                                }} 
+                                className="p-1 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <HeatIcon className={`h-4 w-4 shrink-0 ${heat.color}`} />
+                          </div>
                         </div>
                         <div className="text-xs text-muted-foreground truncate mb-2"><Masked>{lead.organization}</Masked></div>
                         <div className="flex items-center justify-between mb-2">
@@ -599,6 +649,48 @@ const Leads = () => {
                           "bg-amber-100 text-amber-700 border-amber-200"
                         }`}>{l.paymentStatus}</Badge>
                       ) : "—"}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => {
+                             withShield(() => {
+                               setEditLeadId(l.id);
+                               setForm({
+                                 name: l.name,
+                                 company: l.organization,
+                                 category: (["Politician", "Clothing", "Motors"].includes(l.category) ? l.category : "Other") as ClientCategory,
+                                 customCategory: !["Politician", "Clothing", "Motors"].includes(l.category) ? l.category : "",
+                                 phone: l.phone || "",
+                                 whatsapp: l.whatsapp || "",
+                                 email: l.email || "",
+                                 estimatedValue: l.estimatedValue || 0,
+                                 source: (["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner"].includes(l.source) ? l.source : "Other") as Lead["source"],
+                                 customSource: !["Referral", "Walk-in", "Social Media", "Website", "Cold Call", "Partner"].includes(l.source) ? l.source : "",
+                                 heat: l.heat,
+                                 assignedTo: l.assignedTo || "",
+                                 services: l.servicesInterested?.join(", ") || "",
+                                 notes: l.notes || "",
+                                 partnerRef: l.partnerRef || "",
+                                 lastInteractionDate: l.lastInteractionDate || "",
+                                 actionItem: l.actionItem || "",
+                                 nextCallDate: l.nextCallDate || "",
+                                 whatsappError: "",
+                               });
+                               setAddOpen(true);
+                             });
+                           }}
+                          className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-primary"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteLead(l.id)}
+                          className="p-1.5 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

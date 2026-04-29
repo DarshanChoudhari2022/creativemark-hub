@@ -15,7 +15,9 @@ import {
   Calendar,
   Receipt,
   Download,
-  AlertCircle
+  AlertCircle,
+  Pencil,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,6 +56,18 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV } from "@/lib/export";
 import { Masked, useMask } from "@/components/Masked";
+import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
+import { useSupabaseTable } from "@/hooks/useSupabase";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const Financials = () => {
   const { maskAmount } = useMask();
@@ -69,6 +83,10 @@ const Financials = () => {
     date: new Date().toISOString().split('T')[0],
     description: ""
   });
+  const [editingExpense, setEditingExpense] = useState<any>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<any>(null);
+  const { isShielded, withShield } = usePrivacyShield();
+  const { update: updateExpense, remove: removeExpense } = useSupabaseTable("expenses");
 
   // Fetch Data
   const { data: quotations } = useQuery({
@@ -175,7 +193,7 @@ const Financials = () => {
       toast({ title: "Expense logged", description: "The transaction has been recorded." });
     },
   });
-  const handleAddExpense = (e: React.FormEvent) => {
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newExpense.title || !newExpense.amount) {
       toast({ 
@@ -185,10 +203,52 @@ const Financials = () => {
       });
       return;
     }
-    createExpenseMutation.mutate({
-      ...newExpense,
-      amount: parseFloat(newExpense.amount),
+
+    try {
+      if (editingExpense) {
+        await updateExpense(editingExpense.id, {
+          ...newExpense,
+          amount: parseFloat(newExpense.amount),
+        });
+        toast({ title: "Expense updated", description: "The transaction has been updated." });
+      } else {
+        await createExpenseMutation.mutateAsync({
+          ...newExpense,
+          amount: parseFloat(newExpense.amount),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      setIsAddExpenseOpen(false);
+      setEditingExpense(null);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleEdit = (expense: any) => {
+    withShield(() => {
+    setEditingExpense(expense);
+    setNewExpense({
+      title: expense.title,
+      amount: expense.amount.toString(),
+      category: expense.category,
+      date: expense.date,
+      description: expense.description || ""
     });
+    setIsAddExpenseOpen(true);
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!expenseToDelete) return;
+    try {
+      await removeExpense(expenseToDelete.id);
+      toast({ title: "Expense deleted", description: "The transaction has been removed." });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      setExpenseToDelete(null);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   const handleExport = () => {
@@ -218,7 +278,19 @@ const Financials = () => {
             <Download className="h-4 w-4" />
             Export Report
           </Button>
-          <Dialog open={isAddExpenseOpen} onOpenChange={setIsAddExpenseOpen}>
+          <Dialog open={isAddExpenseOpen} onOpenChange={(open) => {
+            setIsAddExpenseOpen(open);
+            if (!open) {
+              setEditingExpense(null);
+              setNewExpense({
+                title: "",
+                amount: "",
+                category: "Other",
+                date: new Date().toISOString().split('T')[0],
+                description: ""
+              });
+            }
+          }}>
             <DialogTrigger asChild>
               <Button className="bg-primary hover:bg-primary/90 gap-2">
                 <Plus className="h-4 w-4" />
@@ -227,7 +299,7 @@ const Financials = () => {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Record New Expense</DialogTitle>
+                <DialogTitle>{editingExpense ? "Edit Expense" : "Record New Expense"}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleAddExpense} className="space-y-4 pt-4">
                 <div className="space-y-2">
@@ -272,7 +344,7 @@ const Financials = () => {
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={createExpenseMutation.isPending}>
-                  {createExpenseMutation.isPending ? "Recording..." : "Log Transaction"}
+                  {createExpenseMutation.isPending ? "Processing..." : editingExpense ? "Update Transaction" : "Log Transaction"}
                 </Button>
               </form>
             </DialogContent>
@@ -501,7 +573,7 @@ const Financials = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {expenses?.slice(0, 5).map((expense) => (
+            {expenses?.slice(0, 10).map((expense) => (
               <div key={expense.id} className="flex items-center justify-between p-3 rounded-lg bg-background/50 border border-border/30 hover:border-primary/30 transition-all group">
                 <div className="flex items-center gap-4">
                   <div className={`p-2 rounded-full ${expense.category === 'Salary' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -512,15 +584,57 @@ const Financials = () => {
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{expense.category} • {format(new Date(expense.date), "MMM d, yyyy")}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold text-red-500"><Masked placeholder="-₹•••••">-{formatINR(expense.amount)}</Masked></p>
-                  <p className="text-[10px] text-muted-foreground">Successful</p>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="font-bold text-red-500"><Masked placeholder="-₹•••••">-{formatINR(expense.amount)}</Masked></p>
+                    <p className="text-[10px] text-muted-foreground">Successful</p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      onClick={() => handleEdit(expense)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        withShield(() => {
+                          setExpenseToDelete(expense);
+                        });
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!expenseToDelete} onOpenChange={(open) => !open && setExpenseToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the expense entry for "{expenseToDelete?.title}".
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -2,6 +2,67 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Quotation, Partner } from "@/types";
 
+// ── Mobile-safe PDF Save ──────────────────────────────────────
+// jsPDF's doc.save() silently fails on many mobile browsers/PWAs.
+// This helper tries multiple strategies:
+//   1. File System Access API ("Save As" dialog — Chrome desktop/Android 86+)
+//   2. Blob URL opened in new tab (works on most mobile browsers)
+//   3. Classic anchor download fallback
+async function savePDFMobile(doc: jsPDF, filename: string) {
+  const blob = doc.output("blob");
+
+  // Strategy 1: File System Access API — gives user a native "Save As" dialog
+  if (typeof window !== "undefined" && "showSaveFilePicker" in window) {
+    try {
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: filename,
+        types: [
+          {
+            description: "PDF Document",
+            accept: { "application/pdf": [".pdf"] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return; // success
+    } catch (e: any) {
+      // User cancelled or API not supported — fall through
+      if (e?.name === "AbortError") return;
+    }
+  }
+
+  // Strategy 2: Create a blob URL and trigger download via anchor
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.style.display = "none";
+
+  // On mobile, anchor downloads can be blocked. We detect if it worked.
+  document.body.appendChild(link);
+  link.click();
+
+  // Give the browser a moment to start the download
+  await new Promise((r) => setTimeout(r, 500));
+
+  // Strategy 3: If on mobile and download likely failed, open in new tab
+  // so the user can manually save/share the PDF
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    // Open the PDF in a new tab — mobile browsers show a native PDF viewer
+    // with built-in save/share options
+    window.open(url, "_blank");
+  }
+
+  // Cleanup after a delay
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 10000);
+}
+
 // ── Brand Colors ──────────────────────────────────────────────
 const BRAND_RED = { r: 200, g: 16, b: 32 };
 const BRAND_BLACK = { r: 26, g: 26, b: 26 };
@@ -89,7 +150,7 @@ function formatIndianNumber(num: number): string {
 let cachedLogo: string | null = null;
 async function loadLogo(): Promise<string | null> {
   if (cachedLogo) return cachedLogo;
-  const logoPaths = ["/logo.jpeg", "logo.jpeg", "/logo-full.png", "logo-full.png"];
+  const logoPaths = ["/logo-brand.png", "/logo-full.png", "/logo.jpeg", "logo.jpeg"];
   
   for (const path of logoPaths) {
     try {
@@ -482,7 +543,7 @@ export async function generateQuotationPDF(q: any) {
   doc.text("Authorized Signatory", pageW - 42, y + 4, { align: "center" });
 
   addFooter(doc, doc.getNumberOfPages());
-  doc.save(`${q.quoteNumber || q.quote_number || q.number || "document"}.pdf`);
+  await savePDFMobile(doc, `${q.quoteNumber || q.quote_number || q.number || "document"}.pdf`);
 }
 
 export async function generatePartnerAgreementPDF(partner: Partner) {
@@ -673,7 +734,7 @@ export async function generatePartnerAgreementPDF(partner: Partner) {
   doc.text(`Digital ID: ${partner.id}`, margin, y);
 
   addFooter(doc, pageNum);
-  doc.save(`Agreement_${partner.name.replace(/\s+/g, "_")}.pdf`);
+  await savePDFMobile(doc, `Agreement_${partner.name.replace(/\s+/g, "_")}.pdf`);
 }
 
 
@@ -902,6 +963,6 @@ export async function generateReceiptPDF(receipt: {
   doc.text("This is a computer-generated receipt and does not require a physical signature.", margin, y + 16);
 
   addFooter(doc, 1);
-  doc.save(`Receipt_${receipt.clientName.replace(/\s+/g, "_")}_${formatDate(receipt.date || new Date()).replace(/\//g, '')}.pdf`);
+  await savePDFMobile(doc, `Receipt_${receipt.clientName.replace(/\s+/g, "_")}_${formatDate(receipt.date || new Date()).replace(/\//g, '')}.pdf`);
 }
 

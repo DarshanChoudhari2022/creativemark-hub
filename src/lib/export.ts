@@ -26,12 +26,23 @@ export const exportToCSV = (data: any[], filename: string) => {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
+  const fname = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
   
   link.setAttribute('href', url);
-  link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute('download', fname);
   link.style.visibility = 'hidden';
   
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
+
+  // On mobile, anchor downloads can be blocked — open in new tab as fallback
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    setTimeout(() => window.open(url, '_blank'), 300);
+  }
+
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 10000);
 };

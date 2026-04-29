@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Plus, LayoutGrid, List, Phone, Users, Search, Filter, MessageCircle, MessageSquare } from "lucide-react";
+import { Plus, LayoutGrid, List, Phone, Users, Search, Filter, MessageCircle, MessageSquare, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { Masked } from "@/components/Masked";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR, isValidIndianPhone, waLink, smsLink } from "@/lib/format";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
+import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
 import { toast } from "sonner";
 import type { ClientCategory, PaymentStatus, Client } from "@/types";
 
@@ -41,7 +42,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Clients = () => {
   const { user } = useAuth();
-  const { data: clientsData, loading, insert } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name))');
+  const { isShielded, withShield } = usePrivacyShield();
+  const { data: clientsData, loading, insert, update, remove } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name))');
   // Fetch bills separately to avoid FK join issues on the main query
   const { data: allBills } = useSupabaseTable<any>('quotations', 'client_id, grand_total, total_amount, amount_paid, type, status');
   const [view, setView] = useState<"cards" | "table">("cards");
@@ -49,6 +51,7 @@ const Clients = () => {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("all");
   const [payFilter, setPayFilter] = useState<string>("all");
+  const [editingClient, setEditingClient] = useState<any>(null);
   const [form, setForm] = useState({
     name: "", category: "Other" as ClientCategory, phone: "", email: "",
     area: "", whatsapp: "", serviceType: "", notes: "",
@@ -56,6 +59,13 @@ const Clients = () => {
   });
   const [phoneError, setPhoneError] = useState("");
   const [whatsappError, setWhatsappError] = useState("");
+
+  const resetForm = () => {
+    setForm({ name: "", category: "Other", phone: "", email: "", area: "", whatsapp: "", serviceType: "", notes: "", customCategory: "" });
+    setEditingClient(null);
+    setPhoneError("");
+    setWhatsappError("");
+  };
 
   const clients = useMemo(() => {
     return clientsData.map(c => {
@@ -107,7 +117,7 @@ const Clients = () => {
     return true;
   };
 
-  const addClient = async () => {
+  const saveClient = async () => {
     if (!form.name) { toast.error("Client name is required"); return; }
     
     // Validate phone numbers
@@ -115,28 +125,70 @@ const Clients = () => {
     const waValid = !form.whatsapp || validatePhone(form.whatsapp, "whatsapp");
     if (!phoneValid || !waValid) return;
     
-    const { error } = await insert({
+    const clientData = {
       name: form.name,
-      category: form.category === "Other" ? form.customCategory : form.category,
+      category: ["Politician", "Clothing", "Motors"].includes(form.category) ? form.category : form.customCategory || "Other",
       contact_person: form.name,
       phone: form.phone,
-      whatsapp: form.whatsapp || form.phone.replace(/[^0-9+]/g, ""),
+      whatsapp: form.whatsapp || (form.phone ? form.phone.replace(/[^0-9+]/g, "") : ""),
       email: form.email,
       service_type: form.serviceType,
       notes: form.notes,
       area: form.area,
       status: "Active",
-    });
+    };
 
-    if (error) {
-      toast.error("Failed to add client: " + error.message);
+    if (editingClient) {
+      const { error } = await update(editingClient.id, clientData);
+      if (error) {
+        toast.error("Failed to update client: " + error.message);
+      } else {
+        toast.success("Client updated successfully");
+        setOpen(false);
+        resetForm();
+      }
     } else {
-      setOpen(false);
-      setForm({ name: "", category: "Other", phone: "", email: "", area: "", whatsapp: "", serviceType: "", notes: "", customCategory: "" });
-      setPhoneError("");
-      setWhatsappError("");
-      toast.success("Client added successfully");
+      const { error } = await insert(clientData);
+      if (error) {
+        toast.error("Failed to add client: " + error.message);
+      } else {
+        toast.success("Client added successfully");
+        setOpen(false);
+        resetForm();
+      }
     }
+  };
+
+  const handleEdit = (client: any) => {
+    withShield(() => {
+      setEditingClient(client);
+      const isStandardCategory = ["Politician", "Clothing", "Motors"].includes(client.category);
+      setForm({
+        name: client.name || "",
+        category: isStandardCategory ? client.category : "Other",
+        customCategory: isStandardCategory ? "" : client.category,
+        phone: client.phone || "",
+        whatsapp: client.whatsapp || "",
+        email: client.email || "",
+        area: client.area || "",
+        serviceType: client.service_type || "",
+        notes: client.notes || "",
+      });
+      setOpen(true);
+    });
+  };
+
+  const handleDelete = async (id: string) => {
+    withShield(async () => {
+      if (!confirm("Are you sure you want to delete this client? This action cannot be undone.")) return;
+      
+      const { error } = await remove(id);
+      if (error) {
+        toast.error("Failed to delete client: " + error.message);
+      } else {
+        toast.success("Client deleted successfully");
+      }
+    });
   };
 
   const openWhatsApp = (phone: string, name: string) => {
@@ -165,12 +217,12 @@ const Clients = () => {
                 <List className="h-4 w-4" />
               </Button>
             </div>
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(v) => { if(!v) resetForm(); setOpen(v); }}>
               <DialogTrigger asChild>
                 <Button className="bg-primary hover:bg-primary-hover"><Plus className="h-4 w-4" />Add Client</Button>
               </DialogTrigger>
               <DialogContent className="max-w-lg">
-                <DialogHeader><DialogTitle>Add New Client</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>{editingClient ? "Edit Client" : "Add New Client"}</DialogTitle></DialogHeader>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2"><Label>Client Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Adv. Rajesh Kumar" /></div>
                   <div><Label>Category</Label>
@@ -218,7 +270,7 @@ const Clients = () => {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                  <Button className="bg-primary hover:bg-primary-hover" onClick={addClient}>Save Client</Button>
+                  <Button className="bg-primary hover:bg-primary-hover" onClick={saveClient}>{editingClient ? "Update Client" : "Save Client"}</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -267,8 +319,18 @@ const Clients = () => {
             return (
               <Card key={c.id} className="p-5 hover:shadow-md transition-shadow group">
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <Link to={`/clients/${c.id}`} className="font-bold text-lg hover:text-primary transition-colors"><Masked>{c.name}</Masked></Link>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Link to={`/clients/${c.id}`} className="font-bold text-lg hover:text-primary transition-colors"><Masked>{c.name}</Masked></Link>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleEdit(c)} className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-primary">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete(c.id)} className="p-1 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
                     {c.area && <div className="text-xs text-muted-foreground mt-0.5">{c.area}</div>}
                   </div>
                   <Badge variant="outline" className={`font-semibold text-xs ${CATEGORY_COLORS[c.category as ClientCategory] || CATEGORY_COLORS.Other}`}>{c.category}</Badge>
@@ -369,7 +431,17 @@ const Clients = () => {
                   </TableCell>
                   <TableCell className={`text-right font-semibold ${c.outstanding > 0 ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{formatINR(c.outstanding)}</Masked></TableCell>
                   <TableCell><PaymentBadge status={c.paymentStatus} /></TableCell>
-                  <TableCell><Link to={`/clients/${c.id}`}><Button size="sm" variant="ghost" className="text-xs">View</Button></Link></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Link to={`/clients/${c.id}`}><Button size="sm" variant="ghost" className="text-xs">View</Button></Link>
+                      <button onClick={() => handleEdit(c)} className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-primary" title="Edit">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(c.id)} className="p-1.5 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600" title="Delete">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

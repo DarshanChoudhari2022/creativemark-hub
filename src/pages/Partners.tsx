@@ -17,9 +17,11 @@ import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { generatePartnerAgreementPDF, DEFAULT_PARTNER_TERMS } from "@/lib/pdf";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
 import type { CommissionType } from "@/types";
 
 const Partners = () => {
+  const { withShield } = usePrivacyShield();
   const [partners, setPartners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -341,26 +343,28 @@ const Partners = () => {
                   <Badge variant="outline" className={`${detailPartner.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100"}`}>{detailPartner.status}</Badge>
                 </div>
                 <Button size="sm" variant="ghost" className="h-7 px-2 text-primary hover:bg-primary/10" onClick={() => {
-                  setEditPartnerId(detailPartner.id);
-                  setForm({
-                    name: detailPartner.name || "",
-                    phone: detailPartner.phone || "",
-                    email: detailPartner.email || "",
-                    whatsapp: detailPartner.whatsapp || "",
-                    category: detailPartner.category || "",
-                    businessName: detailPartner.businessName || "",
-                    address: detailPartner.address || "",
-                    pan: detailPartner.pan || "",
-                    bankAccount: detailPartner.bankAccount || "",
-                    ifsc: detailPartner.ifsc || "",
-                    accountHolder: detailPartner.accountHolder || "",
-                    bankName: detailPartner.bankName || "",
-                    upi: detailPartner.upi || "",
-                    commissionType: detailPartner.commissionType || "Percentage",
-                    commissionRate: detailPartner.commissionRate || 10,
-                    agreementTerms: detailPartner.agreementTerms || DEFAULT_PARTNER_TERMS.join('\n'),
+                  withShield(() => {
+                    setEditPartnerId(detailPartner.id);
+                    setForm({
+                      name: detailPartner.name || "",
+                      phone: detailPartner.phone || "",
+                      email: detailPartner.email || "",
+                      whatsapp: detailPartner.whatsapp || "",
+                      category: detailPartner.category || "",
+                      businessName: detailPartner.businessName || "",
+                      address: detailPartner.address || "",
+                      pan: detailPartner.pan || "",
+                      bankAccount: detailPartner.bankAccount || "",
+                      ifsc: detailPartner.ifsc || "",
+                      accountHolder: detailPartner.accountHolder || "",
+                      bankName: detailPartner.bankName || "",
+                      upi: detailPartner.upi || "",
+                      commissionType: detailPartner.commissionType || "Percentage",
+                      commissionRate: detailPartner.commissionRate || 10,
+                      agreementTerms: detailPartner.agreementTerms || DEFAULT_PARTNER_TERMS.join('\n'),
+                    });
+                    setAddOpen(true);
                   });
-                  setAddOpen(true);
                 }}>
                   Edit
                 </Button>
