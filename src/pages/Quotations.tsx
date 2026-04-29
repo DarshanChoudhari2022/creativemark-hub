@@ -219,7 +219,7 @@ const Quotations = () => {
           await supabase.from("leads").update({ 
             lifecycle_stage: "Converted", 
             payment_status: "Pending",
-            payment_due_date: inserted.due_date
+            payment_due_date: payload.due_date
           }).eq("id", recipientId);
         }
       }
