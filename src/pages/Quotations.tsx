@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Plus, FileText, Download, Send, Eye, Search, Trash2, CheckCircle, XCircle, CreditCard } from "lucide-react";
+import { Plus, FileText, Download, Send, Eye, Search, Trash2, CheckCircle, XCircle, CreditCard, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,11 @@ const Quotations = () => {
   const [editingQ, setEditingQ] = useState<any | null>(null);
   const [previewQ, setPreviewQ] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+
+  // Payment recording from Bills tab
+  const [payBillOpen, setPayBillOpen] = useState(false);
+  const [payBillTarget, setPayBillTarget] = useState<any | null>(null);
+  const [billPayForm, setBillPayForm] = useState({ amount: 0, date: "", paymentMode: "UPI", chequeNo: "", transactionId: "", notes: "" });
 
   // Builder state — GST defaults to OFF per user request
   const [type, setType] = useState<"Quotation" | "Bill">("Quotation");
@@ -422,6 +427,71 @@ const Quotations = () => {
     setDeleteTarget(null);
   };
 
+  // ── Record payment against a bill ──
+  const openPayBill = (q: any) => {
+    setPayBillTarget(q);
+    setBillPayForm({ amount: 0, date: new Date().toISOString().slice(0, 10), paymentMode: "UPI", chequeNo: "", transactionId: "", notes: "" });
+    setPayBillOpen(true);
+  };
+
+  const handleRecordBillPayment = async () => {
+    if (!payBillTarget || !billPayForm.amount || !billPayForm.date) { toast.error("Amount and date required"); return; }
+
+    const billTotal = payBillTarget.grand_total || payBillTarget.total_amount || 0;
+    const currentPaid = payBillTarget.amount_paid || 0;
+    const newPaid = currentPaid + Number(billPayForm.amount);
+    const newStatus = newPaid >= billTotal ? "Paid" : "Partial";
+
+    // 1. Update quotation's amount_paid and status
+    const { error: qErr } = await supabase.from("quotations").update({
+      amount_paid: newPaid,
+      status: newStatus,
+    }).eq("id", payBillTarget.id);
+    if (qErr) { toast.error("Failed to update bill: " + qErr.message); return; }
+
+    // 2. Insert into payment_history so ClientDetail stays in sync
+    if (payBillTarget.client_id) {
+      await supabase.from("payment_history").insert({
+        client_id: payBillTarget.client_id,
+        invoice_no: payBillTarget.quote_number || "",
+        date: billPayForm.date,
+        amount: Number(billPayForm.amount),
+        status: "Paid",
+        payment_mode: billPayForm.paymentMode,
+        cheque_no: billPayForm.chequeNo || null,
+        transaction_id: billPayForm.transactionId || null,
+        notes: billPayForm.notes || `Payment against ${payBillTarget.quote_number}`,
+      });
+
+      // 3. Recalculate client outstanding from all bills
+      const { data: allClientBills } = await supabase
+        .from("quotations")
+        .select("grand_total, total_amount, is_bill, type, quotation_number, quote_number")
+        .eq("client_id", payBillTarget.client_id);
+      const { data: allClientPayments } = await supabase
+        .from("payment_history")
+        .select("amount")
+        .eq("client_id", payBillTarget.client_id);
+
+      const invoices = (allClientBills || []).filter((b: any) => b.is_bill || b.type === "Bill" || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
+      const totalBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
+      const totalPaid = (allClientPayments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+      const outstanding = Math.max(0, totalBilled - totalPaid);
+
+      await supabase.from("clients").update({
+        outstanding,
+        payment_status: outstanding <= 0 ? "Paid" : "Overdue",
+      }).eq("id", payBillTarget.client_id);
+    }
+
+    // 4. Refresh local quotation state
+    setQuotations(prev => prev.map(x => x.id === payBillTarget.id ? { ...x, amount_paid: newPaid, status: newStatus } : x));
+
+    toast.success(`₹${billPayForm.amount} recorded against ${payBillTarget.quote_number}`);
+    setPayBillOpen(false);
+    setPayBillTarget(null);
+  };
+
   if (loading) {
     return (
       <div>
@@ -652,6 +722,11 @@ const Quotations = () => {
                 </TableCell>
                 <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {q.type === "Bill" && q.status !== "Paid" && (
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-amber-600 hover:bg-amber-50" onClick={() => openPayBill(q)} title="Record Payment">
+                          <Wallet className="h-4 w-4" />
+                        </Button>
+                      )}
                       {q.type === "Quotation" && q.status === "Sent" && (
                         <>
                           <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:bg-green-50" onClick={() => updateStatus(q, "Approved")}>
@@ -764,6 +839,51 @@ const Quotations = () => {
               )}
               <Button variant="outline" onClick={() => downloadPDF(previewQ)}><Download className="h-4 w-4" /> Download PDF</Button>
               <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => shareViaWhatsApp(previewQ)}><Send className="h-4 w-4" /> Share via WhatsApp</Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={payBillOpen} onOpenChange={(open) => { if (!open) { setPayBillOpen(false); setPayBillTarget(null); } }}>
+        {payBillTarget && (
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-amber-600" />
+                Record Payment — {payBillTarget.quote_number}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="p-3 bg-muted/30 rounded-lg text-sm space-y-1">
+                <div className="flex justify-between"><span className="text-muted-foreground">Bill Total:</span><span className="font-bold">{formatINR(payBillTarget.grand_total || 0)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Already Paid:</span><span className="text-green-600 font-semibold">{formatINR(payBillTarget.amount_paid || 0)}</span></div>
+                <div className="flex justify-between border-t pt-1"><span className="text-muted-foreground">Balance Due:</span><span className="font-bold text-primary">{formatINR((payBillTarget.grand_total || 0) - (payBillTarget.amount_paid || 0))}</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Amount (₹) *</Label><Input type="number" value={billPayForm.amount || ""} onChange={e => setBillPayForm(f => ({ ...f, amount: Number(e.target.value) }))} placeholder="Enter amount" /></div>
+                <div><Label>Date *</Label><Input type="date" value={billPayForm.date} onChange={e => setBillPayForm(f => ({ ...f, date: e.target.value }))} /></div>
+              </div>
+              <div>
+                <Label>Payment Mode</Label>
+                <Select value={billPayForm.paymentMode} onValueChange={v => setBillPayForm(f => ({ ...f, paymentMode: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["UPI", "Cash", "Bank Transfer", "Cheque", "Other"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {billPayForm.paymentMode === "Cheque" && (
+                <div><Label>Cheque Number</Label><Input value={billPayForm.chequeNo} onChange={e => setBillPayForm(f => ({ ...f, chequeNo: e.target.value }))} /></div>
+              )}
+              {billPayForm.paymentMode !== "Cash" && billPayForm.paymentMode !== "Cheque" && (
+                <div><Label>Transaction ID / Ref</Label><Input value={billPayForm.transactionId} onChange={e => setBillPayForm(f => ({ ...f, transactionId: e.target.value }))} placeholder="UTR / Ref number" /></div>
+              )}
+              <div><Label>Notes</Label><Input value={billPayForm.notes} onChange={e => setBillPayForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPayBillOpen(false)}>Cancel</Button>
+              <Button className="bg-primary hover:bg-primary-hover" onClick={handleRecordBillPayment}>Record Payment</Button>
             </DialogFooter>
           </DialogContent>
         )}
