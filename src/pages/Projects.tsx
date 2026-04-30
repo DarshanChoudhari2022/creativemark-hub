@@ -44,11 +44,13 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import ConfirmDeleteDialog from "@/components/ConfirmDeleteDialog";
 
 const Projects = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -184,10 +186,15 @@ const Projects = () => {
     },
   });
 
-  const handleDeleteProject = (e: React.MouseEvent, id: string) => {
+  const confirmDeleteProject = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-      deleteProjectMutation.mutate(id);
+    setProjectToDelete(id);
+  };
+
+  const executeDeleteProject = () => {
+    if (projectToDelete) {
+      deleteProjectMutation.mutate(projectToDelete);
+      setProjectToDelete(null);
     }
   };
 
@@ -516,7 +523,7 @@ const Projects = () => {
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         className="text-red-600" 
-                        onClick={(e) => handleDeleteProject(e, project.id)}
+                        onClick={(e) => confirmDeleteProject(e, project.id)}
                       >
                         Delete Project
                       </DropdownMenuItem>
@@ -590,6 +597,13 @@ const Projects = () => {
           ))}
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        isOpen={!!projectToDelete}
+        onClose={() => setProjectToDelete(null)}
+        onConfirm={executeDeleteProject}
+        entityName="project"
+      />
     </div>
   );
 };

@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import ConfirmDeleteDialog from "@/components/ConfirmDeleteDialog";
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -67,6 +68,8 @@ const ProjectDetail = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
+  const [deleteTaskInfo, setDeleteTaskInfo] = useState<string | null>(null);
+  const [deleteCustomerInfo, setDeleteCustomerInfo] = useState<string | null>(null);
 
   // New Task State
   const [newTask, setNewTask] = useState({
@@ -291,11 +294,16 @@ const ProjectDetail = () => {
     toast({ title: "Commission updated", description: `Set to ${newPct}%` });
   };
 
-  const handleDeleteCustomer = async (custId: string) => {
-    if (!confirm("Delete this customer?")) return;
-    await supabase.from("project_customers").delete().eq("id", custId);
+  const handleDeleteCustomer = (custId: string) => {
+    setDeleteCustomerInfo(custId);
+  };
+
+  const executeDeleteCustomer = async () => {
+    if (!deleteCustomerInfo) return;
+    await supabase.from("project_customers").delete().eq("id", deleteCustomerInfo);
     queryClient.invalidateQueries({ queryKey: ["project_customers", id] });
     toast({ title: "Customer removed" });
+    setDeleteCustomerInfo(null);
   };
 
   const kanbanColumns = ["Todo", "In Progress", "In Review", "Approved", "Completed"];
@@ -590,7 +598,7 @@ const ProjectDetail = () => {
                                   Move to {c}
                                 </DropdownMenuItem>
                               ))}
-                              <DropdownMenuItem className="text-red-600" onClick={() => deleteTaskMutation.mutate(task.id)}>
+                              <DropdownMenuItem className="text-red-600" onClick={() => setDeleteTaskInfo(task.id)}>
                                 Delete Task
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -691,7 +699,7 @@ const ProjectDetail = () => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem>Edit</DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">Delete</DropdownMenuItem>
+                            <DropdownMenuItem className="text-red-600" onClick={() => setDeleteTaskInfo(task.id)}>Delete</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -1000,9 +1008,26 @@ const ProjectDetail = () => {
                 </div>
               </CardContent>
             </Card>
-          </div>
         </TabsContent>
       </Tabs>
+
+      <ConfirmDeleteDialog
+        isOpen={!!deleteTaskInfo}
+        onClose={() => setDeleteTaskInfo(null)}
+        onConfirm={() => {
+          if (deleteTaskInfo) {
+            deleteTaskMutation.mutate(deleteTaskInfo);
+            setDeleteTaskInfo(null);
+          }
+        }}
+        entityName="task"
+      />
+      <ConfirmDeleteDialog
+        isOpen={!!deleteCustomerInfo}
+        onClose={() => setDeleteCustomerInfo(null)}
+        onConfirm={executeDeleteCustomer}
+        entityName="customer"
+      />
     </div>
   );
 };
