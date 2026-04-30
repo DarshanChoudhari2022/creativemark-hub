@@ -1,5 +1,6 @@
 /**
  * Export data to CSV
+ * Mobile-safe: uses multiple download strategies for WebView/PWA compatibility.
  * @param data Array of objects to export
  * @param filename Name of the file
  */
@@ -25,24 +26,31 @@ export const exportToCSV = (data: any[], filename: string) => {
   const csvContent = csvRows.join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
   const fname = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-  
-  link.setAttribute('href', url);
-  link.setAttribute('download', fname);
-  link.style.visibility = 'hidden';
-  
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // Try anchor download first
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fname;
+  link.target = '_blank';
+  link.style.display = 'none';
   document.body.appendChild(link);
   link.click();
+  document.body.removeChild(link);
 
-  // On mobile, anchor downloads can be blocked — open in new tab as fallback
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // On mobile, anchor downloads are often blocked in WebView —
+  // open the blob URL in a new tab so the user can view/save it
   if (isMobile) {
-    setTimeout(() => window.open(url, '_blank'), 300);
+    setTimeout(() => {
+      const win = window.open(url, '_blank');
+      if (!win) {
+        // Last resort: navigate directly
+        window.location.href = url;
+      }
+    }, 500);
   }
 
-  setTimeout(() => {
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, 10000);
+  // Cleanup blob URL after a generous delay
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 };

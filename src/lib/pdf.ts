@@ -3,16 +3,19 @@ import autoTable from "jspdf-autotable";
 import type { Quotation, Partner } from "@/types";
 
 // ── Mobile-safe PDF Save ──────────────────────────────────────
-// jsPDF's doc.save() silently fails on many mobile browsers/PWAs.
-// This helper tries multiple strategies:
+// jsPDF's doc.save() silently fails on many mobile browsers/PWAs/WebViews.
+// This helper tries multiple strategies in order:
 //   1. File System Access API ("Save As" dialog — Chrome desktop/Android 86+)
-//   2. Blob URL opened in new tab (works on most mobile browsers)
-//   3. Classic anchor download fallback
+//   2. Anchor download with blob URL (works on most browsers)
+//   3. Open blob URL in new tab (mobile fallback for WebView)
+//   4. Data URI direct navigation (last resort)
 async function savePDFMobile(doc: jsPDF, filename: string) {
   const blob = doc.output("blob");
+  const isCapacitor = !!(window as any).Capacitor;
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   // Strategy 1: File System Access API — gives user a native "Save As" dialog
-  if (typeof window !== "undefined" && "showSaveFilePicker" in window) {
+  if (typeof window !== "undefined" && "showSaveFilePicker" in window && !isCapacitor) {
     try {
       const handle = await (window as any).showSaveFilePicker({
         suggestedName: filename,
@@ -33,35 +36,52 @@ async function savePDFMobile(doc: jsPDF, filename: string) {
     }
   }
 
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // Strategy 2: Anchor download — works on desktop and many mobile browsers
+  const url = URL.createObjectURL(blob);
 
-  if (isMobile) {
-    // On mobile, anchor downloads often fail silently in PWA/WebView.
-    // Convert to data URI and open directly — this launches the native PDF
-    // viewer (Chrome PDF viewer, Adobe Reader, etc.) with save/share options.
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(
-          `<html><head><title>${filename}</title></head>` +
-          `<body style="margin:0;padding:0;overflow:hidden">` +
-          `<iframe src="${dataUrl}" style="width:100%;height:100vh;border:none"></iframe>` +
-          `</body></html>`
-        );
-        win.document.close();
-      } else {
-        // Fallback: direct navigation
-        window.location.href = dataUrl;
+  if (isCapacitor || isMobile) {
+    // In Capacitor WebView / mobile browsers, anchor download is unreliable.
+    // Use a combination approach:
+
+    // 2a: Try anchor download with target="_blank" (works on some Android WebViews)
+    try {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Give the download a moment to start, then try opening in new tab
+      // as a fallback — this ensures at least viewing works
+      await new Promise(r => setTimeout(r, 800));
+
+      // 2b: Also open blob URL in new tab so user can view/share
+      // On Android Chrome-based WebView this opens the PDF viewer
+      const win = window.open(url, "_blank");
+      if (!win) {
+        // 2c: Last resort — navigate directly to blob URL
+        window.location.href = url;
       }
-    };
-    reader.readAsDataURL(blob);
+    } catch {
+      // 2d: Data URI fallback — convert blob to base64 and navigate
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        window.location.href = dataUrl;
+      };
+      reader.readAsDataURL(blob);
+    }
+
+    // Cleanup blob URL after delay
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
     return;
   }
 
   // Desktop: standard anchor download
-  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
