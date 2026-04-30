@@ -46,7 +46,8 @@ const Clients = () => {
   const { isShielded, withShield } = usePrivacyShield();
   const { data: clientsData, loading, insert, update, remove } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name))');
   // Fetch bills separately to avoid FK join issues on the main query
-  const { data: allBills } = useSupabaseTable<any>('quotations', 'client_id, grand_total, total_amount, amount_paid, type, status');
+  const { data: allBills } = useSupabaseTable<any>('quotations', 'client_id, grand_total, total_amount, amount_paid, type, status, is_bill, quotation_number, quote_number');
+  const { data: allPayments } = useSupabaseTable<any>('payment_history', 'client_id, amount');
   const [view, setView] = useState<"cards" | "table">("cards");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -73,9 +74,13 @@ const Clients = () => {
     return clientsData.map(c => {
       // Get this client's bills from the separate query
       const clientBills = allBills.filter((b: any) => b.client_id === c.id);
-      const invoices = clientBills.filter((b: any) => b.type === "Bill");
+      const invoices = clientBills.filter((b: any) => b.is_bill || b.type === "Bill" || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
       const totalBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
-      const totalPaid = invoices.reduce((s: number, b: any) => s + (b.amount_paid || 0), 0);
+      
+      // Calculate total paid from payment history for accurate dynamic sync
+      const clientPayments = allPayments.filter((p: any) => p.client_id === c.id);
+      const totalPaid = clientPayments.reduce((s: number, p: any) => s + (p.amount || 0), 0);
+      
       const outstanding = totalBilled > 0 ? Math.max(0, totalBilled - totalPaid) : (c.outstanding || 0);
 
       return {
@@ -88,7 +93,7 @@ const Clients = () => {
         totalBilled,
       };
     });
-  }, [clientsData, allBills]);
+  }, [clientsData, allBills, allPayments]);
 
   const filtered = useMemo(() => {
     return clients.filter(c => {

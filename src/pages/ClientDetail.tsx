@@ -215,12 +215,13 @@ const ClientDetail = () => {
     // Distribute the payment across outstanding bills (oldest first)
     // so Clients list, Quotations, Recovery & Dashboard all stay in sync.
     try {
-      const { data: clientBills } = await supabase
+      const { data: allClientBills } = await supabase
         .from("quotations")
-        .select("id, grand_total, total_amount, amount_paid, type, status")
+        .select("id, grand_total, total_amount, amount_paid, type, status, is_bill, quotation_number, quote_number")
         .eq("client_id", id)
-        .eq("type", "Bill")
         .order("created_at", { ascending: true });
+
+      const clientBills = (allClientBills || []).filter((b: any) => b.is_bill || b.type === "Bill" || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
 
       if (clientBills && clientBills.length > 0) {
         let remaining = Number(payForm.amount);
