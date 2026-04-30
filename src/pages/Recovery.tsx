@@ -293,6 +293,7 @@ const Recovery = () => {
 
       {/* Recovery Table */}
       <Card>
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -387,6 +388,7 @@ const Recovery = () => {
             {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{filter === "received" ? "No received payments" : "No pending invoices — all clear! 🎉"}</TableCell></TableRow>}
           </TableBody>
         </Table>
+        </div>
       </Card>
 
       {/* Detail Dialog */}

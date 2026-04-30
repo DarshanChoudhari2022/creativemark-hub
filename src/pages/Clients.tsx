@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Plus, LayoutGrid, List, Phone, Users, Search, Filter, MessageCircle, MessageSquare, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader, PaymentBadge } from "@/components/shared";
 import { Masked } from "@/components/Masked";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { formatINR, isValidIndianPhone, waLink, smsLink } from "@/lib/format";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
@@ -50,6 +51,7 @@ const Clients = () => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [payFilter, setPayFilter] = useState<string>("all");
   const [editingClient, setEditingClient] = useState<any>(null);
   const [form, setForm] = useState({
@@ -178,18 +180,22 @@ const Clients = () => {
     });
   };
 
-  const handleDelete = async (id: string) => {
-    withShield(async () => {
-      if (!confirm("Are you sure you want to delete this client? This action cannot be undone.")) return;
-      
-      const { error } = await remove(id);
-      if (error) {
-        toast.error("Failed to delete client: " + error.message);
-      } else {
-        toast.success("Client deleted successfully");
-      }
+  const handleDeleteClick = (client: any) => {
+    withShield(() => {
+      setDeleteTarget({ id: client.id, name: client.name });
     });
   };
+
+  const executeDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const { error } = await remove(deleteTarget.id);
+    if (error) {
+      toast.error("Failed to delete client: " + error.message);
+    } else {
+      toast.success("Client deleted successfully");
+    }
+    setDeleteTarget(null);
+  }, [deleteTarget, remove]);
 
   const openWhatsApp = (phone: string, name: string) => {
     window.open(waLink(phone, WHATSAPP_TEMPLATES.LEAD_GENERAL(name)), "_blank");
@@ -326,7 +332,7 @@ const Clients = () => {
                         <button onClick={() => handleEdit(c)} className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-primary">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => handleDelete(c.id)} className="p-1 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600">
+                        <button onClick={() => handleDeleteClick(c)} className="p-1 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -437,7 +443,7 @@ const Clients = () => {
                       <button onClick={() => handleEdit(c)} className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-primary" title="Edit">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button onClick={() => handleDelete(c.id)} className="p-1.5 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600" title="Delete">
+                      <button onClick={() => handleDeleteClick(c)} className="p-1.5 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600" title="Delete">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -448,6 +454,14 @@ const Clients = () => {
           </Table>
         </Card>
       )}
+
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+        onConfirm={executeDelete}
+        title="Delete Client"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? All associated data will be permanently removed.`}
+      />
     </div>
   );
 };

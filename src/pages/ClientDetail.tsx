@@ -205,14 +205,52 @@ const ClientDetail = () => {
     if (error) return toast.error(error.message);
     
     // Always update outstanding when recording a received payment
+    const newOutstanding = Math.max(0, (client.outstanding || 0) - Number(payForm.amount));
     await supabase.from('clients').update({
-      outstanding: Math.max(0, (client.outstanding || 0) - Number(payForm.amount))
+      outstanding: newOutstanding,
+      payment_status: newOutstanding <= 0 ? "Paid" : "Overdue",
     }).eq('id', id);
+
+    // ── Sync quotations table ──────────────────────────────────────
+    // Distribute the payment across outstanding bills (oldest first)
+    // so Clients list, Quotations, Recovery & Dashboard all stay in sync.
+    try {
+      const { data: clientBills } = await supabase
+        .from("quotations")
+        .select("id, grand_total, total_amount, amount_paid, type, status")
+        .eq("client_id", id)
+        .eq("type", "Bill")
+        .order("created_at", { ascending: true });
+
+      if (clientBills && clientBills.length > 0) {
+        let remaining = Number(payForm.amount);
+        for (const bill of clientBills) {
+          if (remaining <= 0) break;
+          const billTotal = bill.grand_total || bill.total_amount || 0;
+          const currentPaid = bill.amount_paid || 0;
+          const billBalance = billTotal - currentPaid;
+          if (billBalance <= 0) continue;
+
+          const applyAmount = Math.min(remaining, billBalance);
+          const newPaid = currentPaid + applyAmount;
+          const newStatus = newPaid >= billTotal ? "Paid" : "Partial";
+
+          await supabase.from("quotations").update({
+            amount_paid: newPaid,
+            status: newStatus,
+          }).eq("id", bill.id);
+
+          remaining -= applyAmount;
+        }
+      }
+    } catch (syncErr) {
+      console.warn("Quotation sync warning:", syncErr);
+    }
     
     const savedForm = { ...payForm };
     const effectiveBilled = (client.totalBilled && client.totalBilled > 0)
       ? client.totalBilled
-      : totalReceived + Number(payForm.amount) + (Math.max(0, (client.outstanding || 0) - Number(payForm.amount)));
+      : totalReceived + Number(payForm.amount) + newOutstanding;
 
     toast.success("Payment recorded! ✅", {
       action: {
@@ -459,7 +497,7 @@ const ClientDetail = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="services" className="space-y-4">
-        <TabsList className="w-full justify-start border-b rounded-none bg-transparent p-0">
+        <TabsList className="w-full justify-start border-b rounded-none bg-transparent p-0 flex-nowrap overflow-x-auto hide-scrollbar">
           {[
             { value: "services", label: "Services & Team" },
             { value: "social", label: "Social Calendar" },
@@ -470,7 +508,7 @@ const ClientDetail = () => {
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2 text-sm"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2 text-sm whitespace-nowrap"
             >
               {tab.label}
             </TabsTrigger>

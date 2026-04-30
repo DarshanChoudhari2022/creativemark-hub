@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { SERVICE_PRESETS, DEFAULT_TERMS_QUOTATION, DEFAULT_TERMS_BILL } from "@/data/quotations";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
@@ -46,6 +47,7 @@ const Quotations = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [editingQ, setEditingQ] = useState<any | null>(null);
   const [previewQ, setPreviewQ] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
   // Builder state — GST defaults to OFF per user request
   const [type, setType] = useState<"Quotation" | "Bill">("Quotation");
@@ -407,12 +409,17 @@ const Quotations = () => {
 
   const deleteQuotation = async (q: any) => {
     withShield(async () => {
-      if (!confirm(`Are you sure you want to delete ${q.type} ${q.quote_number}?`)) return;
-      const { error } = await supabase.from("quotations").delete().eq("id", q.id);
-      if (error) { toast.error("Failed to delete: " + error.message); return; }
-      setQuotations(prev => prev.filter(x => x.id !== q.id));
-      toast.success(`${q.type} deleted`);
+      setDeleteTarget(q);
     });
+  };
+
+  const executeDeleteQuotation = async () => {
+    if (!deleteTarget) return;
+    const { error } = await supabase.from("quotations").delete().eq("id", deleteTarget.id);
+    if (error) { toast.error("Failed to delete: " + error.message); return; }
+    setQuotations(prev => prev.filter(x => x.id !== deleteTarget.id));
+    toast.success(`${deleteTarget.type} deleted`);
+    setDeleteTarget(null);
   };
 
   if (loading) {
@@ -612,6 +619,7 @@ const Quotations = () => {
 
       {/* List */}
       <Card>
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -673,6 +681,7 @@ const Quotations = () => {
             )}
           </TableBody>
         </Table>
+        </div>
       </Card>
 
       {/* Preview Dialog */}
@@ -693,6 +702,7 @@ const Quotations = () => {
                 <div><span className="text-muted-foreground">{previewQ.type === "Bill" ? "Due Date:" : "Valid Until:"}</span> <span className="font-mono">{(previewQ.due_date || previewQ.valid_until) ? formatDateDDMMYYYY(new Date(previewQ.due_date || previewQ.valid_until)) : "—"}</span></div>
               </div>
 
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -711,6 +721,7 @@ const Quotations = () => {
                   ))}
                 </TableBody>
               </Table>
+              </div>
 
               <div className="flex justify-end">
                 <div className="w-64 space-y-1 text-sm">
@@ -757,6 +768,14 @@ const Quotations = () => {
           </DialogContent>
         )}
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+        onConfirm={executeDeleteQuotation}
+        title={`Delete ${deleteTarget?.type || "Document"}`}
+        description={`Are you sure you want to delete ${deleteTarget?.type} "${deleteTarget?.quote_number}"? This action cannot be undone.`}
+      />
     </div>
   );
 };

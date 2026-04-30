@@ -33,28 +33,41 @@ async function savePDFMobile(doc: jsPDF, filename: string) {
     }
   }
 
-  // Strategy 2: Create a blob URL and trigger download via anchor
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // On mobile, anchor downloads often fail silently in PWA/WebView.
+    // Convert to data URI and open directly — this launches the native PDF
+    // viewer (Chrome PDF viewer, Adobe Reader, etc.) with save/share options.
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(
+          `<html><head><title>${filename}</title></head>` +
+          `<body style="margin:0;padding:0;overflow:hidden">` +
+          `<iframe src="${dataUrl}" style="width:100%;height:100vh;border:none"></iframe>` +
+          `</body></html>`
+        );
+        win.document.close();
+      } else {
+        // Fallback: direct navigation
+        window.location.href = dataUrl;
+      }
+    };
+    reader.readAsDataURL(blob);
+    return;
+  }
+
+  // Desktop: standard anchor download
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   link.style.display = "none";
-
-  // On mobile, anchor downloads can be blocked. We detect if it worked.
   document.body.appendChild(link);
   link.click();
-
-  // Give the browser a moment to start the download
-  await new Promise((r) => setTimeout(r, 500));
-
-  // Strategy 3: If on mobile and download likely failed, open in new tab
-  // so the user can manually save/share the PDF
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobile) {
-    // Open the PDF in a new tab — mobile browsers show a native PDF viewer
-    // with built-in save/share options
-    window.open(url, "_blank");
-  }
 
   // Cleanup after a delay
   setTimeout(() => {

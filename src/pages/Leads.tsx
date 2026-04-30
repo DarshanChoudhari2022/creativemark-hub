@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Flame, Thermometer, Snowflake, Phone, Mail, Calendar, Search, LayoutGrid, List, MessageSquare, MessageCircle, Briefcase, Bell, BellRing, FileText, CreditCard, CheckCircle, XCircle, Edit, Trash2 } from "lucide-react";
+import { Plus, Flame, Thermometer, Snowflake, Phone, Mail, Calendar, Search, LayoutGrid, List, MessageSquare, MessageCircle, Briefcase, Bell, BellRing, FileText, CreditCard, CheckCircle, XCircle, Edit, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { formatINR, formatDateDDMMYYYY, waLink, smsLink, isValidIndianPhone } from "@/lib/format";
 import { toast } from "sonner";
 import { Masked } from "@/components/Masked";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { useNavigate } from "react-router-dom";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { usePrivacyShield } from "@/contexts/PrivacyShieldContext";
@@ -63,6 +64,7 @@ const Leads = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null);
   const [callLogOpen, setCallLogOpen] = useState(false);
   const [phoneError, setPhoneError] = useState("");
   const [callForm, setCallForm] = useState({ summary: "", outcome: "", nextAction: "", duration: 0 });
@@ -211,18 +213,24 @@ const Leads = () => {
     }
   };
 
-  const handleDeleteLead = async (id: string) => {
+  const handleDeleteLead = async (lead: Lead) => {
     withShield(async () => {
-      if (window.confirm("Are you sure you want to delete this lead? This action cannot be undone.")) {
-        const { error } = await removeLead(id);
-        if (error) {
-          toast.error("Failed to delete lead: " + error.message);
-        } else {
-          toast.success("Lead deleted successfully");
-          setDetailLead(null);
-        }
-      }
+      setDeleteTarget(lead);
     });
+  };
+
+  const executeDeleteLead = async () => {
+    if (!deleteTarget) return;
+    const { error } = await removeLead(deleteTarget.id);
+    if (error) {
+      toast.error("Failed to delete lead: " + error.message);
+    } else {
+      toast.success("Lead deleted successfully");
+      if (detailLead?.id === deleteTarget.id) {
+        setDetailLead(null);
+      }
+    }
+    setDeleteTarget(null);
   };
 
   const moveLeadStage = async (leadId: string, newStage: LeadStage) => {
@@ -550,10 +558,7 @@ const Leads = () => {
                                 <Edit className="h-3 w-3" />
                               </button>
                               <button 
-                                onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  handleDeleteLead(lead.id);
-                                }} 
+                                onClick={(e) => { e.stopPropagation(); handleDeleteLead(lead); }}
                                 className="p-1 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600"
                               >
                                 <Trash2 className="h-3 w-3" />
@@ -597,6 +602,7 @@ const Leads = () => {
         </div>
       ) : (
         <Card>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -685,7 +691,7 @@ const Leads = () => {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button 
-                          onClick={() => handleDeleteLead(l.id)}
+                          onClick={() => handleDeleteLead(l)}
                           className="p-1.5 hover:bg-red-50 rounded text-muted-foreground hover:text-red-600"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -702,6 +708,7 @@ const Leads = () => {
               )}
             </TableBody>
           </Table>
+          </div>
         </Card>
       )}
 
@@ -1095,6 +1102,14 @@ const Leads = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+        onConfirm={executeDeleteLead}
+        title="Delete Lead"
+        description={`Are you sure you want to delete lead "${deleteTarget?.name}"? All associated data will be permanently removed.`}
+      />
     </div>
   );
 };
