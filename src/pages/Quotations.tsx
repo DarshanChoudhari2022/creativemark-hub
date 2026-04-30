@@ -284,18 +284,26 @@ const Quotations = () => {
     });
   };
 
-  const shareViaWhatsApp = (q: any) => {
+  const shareViaWhatsApp = async (q: any) => {
     const phone = q.client_phone || "";
+    if (!phone) { toast.error("No phone number found for this recipient"); return; }
+
+    // First download the PDF so user has it ready to attach
+    toast.info("Downloading PDF first…");
+    await downloadPDF(q);
+
+    // Then open WhatsApp with the message
     let msg = "";
-    
     if (q.type === "Bill") {
       msg = WHATSAPP_TEMPLATES.BILL_SENT(q.client_name, q.quote_number, formatINR(q.grand_total || 0));
     } else {
       msg = WHATSAPP_TEMPLATES.LEAD_QUOTE_SENT(q.client_name, formatINR(q.grand_total || 0));
     }
 
-    if (phone) window.open(waLink(phone, msg), "_blank");
-    else toast.error("No phone number found for this recipient");
+    // Small delay to let PDF download complete
+    setTimeout(() => {
+      window.open(waLink(phone, msg), "_blank");
+    }, 800);
   };
 
   const downloadPDF = async (q: any) => {

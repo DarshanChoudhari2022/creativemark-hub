@@ -10,6 +10,7 @@ import {
   CheckCircle2, 
   MoreVertical, 
   User,
+  Users,
   MessageSquare,
   Paperclip,
   Trash2,
@@ -21,7 +22,11 @@ import {
   TrendingUp,
   Receipt,
   DollarSign,
-  ArrowUpRight
+  ArrowUpRight,
+  Percent,
+  IndianRupee,
+  UserCheck,
+  ShoppingCart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -138,6 +144,41 @@ const ProjectDetail = () => {
     },
   });
 
+  // Fetch Project Customers
+  const { data: projectCustomers } = useQuery({
+    queryKey: ["project_customers", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_customers")
+        .select("*")
+        .eq("project_id", id)
+        .order("joined_date", { ascending: false });
+      if (error) { console.warn("project_customers not ready:", error.message); return []; }
+      return data;
+    },
+  });
+
+  // Fetch Project Sales
+  const { data: projectSales } = useQuery({
+    queryKey: ["project_sales", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_sales")
+        .select("*, salesperson:employees!salesperson_id(name), customer:project_customers!customer_id(customer_name)")
+        .eq("project_id", id)
+        .order("sale_date", { ascending: false });
+      if (error) { console.warn("project_sales not ready:", error.message); return []; }
+      return data;
+    },
+  });
+
+  // Sales & Commission State
+  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
+  const [isAddSaleOpen, setIsAddSaleOpen] = useState(false);
+  const [commissionPct, setCommissionPct] = useState(10);
+  const [newCustomer, setNewCustomer] = useState({ customer_name: "", customer_email: "", customer_phone: "", company_name: "", plan_name: "", monthly_value: "0", subscription_status: "Active" });
+  const [newSale, setNewSale] = useState({ customer_id: "", salesperson_id: "", amount: "0", sale_type: "New", sale_date: new Date().toISOString().slice(0, 10), notes: "" });
+
   // Mutations
   const createTaskMutation = useMutation({
     mutationFn: async (task: any) => {
@@ -207,10 +248,54 @@ const ProjectDetail = () => {
   if (isProjectLoading) return <div className="p-8 text-center">Loading project...</div>;
   if (!project) return <div className="p-8 text-center text-red-500">Project not found</div>;
 
+  // Commission calculations
+  const liveCustomers = projectCustomers?.filter(c => c.subscription_status === "Active") || [];
+  const totalEarnings = projectSales?.reduce((s, sale) => s + Number(sale.amount || 0), 0) || 0;
+  const totalCommission = projectSales?.reduce((s, sale) => s + Number(sale.commission_amount || 0), 0) || 0;
+  const effectiveCommPct = project.commission_percentage || commissionPct;
+
   const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title) return;
     createTaskMutation.mutate(newTask);
+  };
+
+  const handleAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomer.customer_name) { toast({ title: "Name required", variant: "destructive" }); return; }
+    const { error } = await supabase.from("project_customers").insert([{ ...newCustomer, monthly_value: parseFloat(newCustomer.monthly_value) || 0, project_id: id }]);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    queryClient.invalidateQueries({ queryKey: ["project_customers", id] });
+    setIsAddCustomerOpen(false);
+    setNewCustomer({ customer_name: "", customer_email: "", customer_phone: "", company_name: "", plan_name: "", monthly_value: "0", subscription_status: "Active" });
+    toast({ title: "Customer added" });
+  };
+
+  const handleAddSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(newSale.amount) || 0;
+    const commAmt = (amount * effectiveCommPct) / 100;
+    const payload = { ...newSale, amount, commission_percentage: effectiveCommPct, commission_amount: commAmt, project_id: id, customer_id: newSale.customer_id || null, salesperson_id: newSale.salesperson_id || null };
+    const { error } = await supabase.from("project_sales").insert([payload]);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    queryClient.invalidateQueries({ queryKey: ["project_sales", id] });
+    setIsAddSaleOpen(false);
+    setNewSale({ customer_id: "", salesperson_id: "", amount: "0", sale_type: "New", sale_date: new Date().toISOString().slice(0, 10), notes: "" });
+    toast({ title: "Sale recorded" });
+  };
+
+  const handleUpdateCommission = async (newPct: number) => {
+    setCommissionPct(newPct);
+    await supabase.from("projects").update({ commission_percentage: newPct }).eq("id", id);
+    queryClient.invalidateQueries({ queryKey: ["project", id] });
+    toast({ title: "Commission updated", description: `Set to ${newPct}%` });
+  };
+
+  const handleDeleteCustomer = async (custId: string) => {
+    if (!confirm("Delete this customer?")) return;
+    await supabase.from("project_customers").delete().eq("id", custId);
+    queryClient.invalidateQueries({ queryKey: ["project_customers", id] });
+    toast({ title: "Customer removed" });
   };
 
   const kanbanColumns = ["Todo", "In Progress", "In Review", "Approved", "Completed"];
@@ -464,6 +549,10 @@ const ProjectDetail = () => {
             <TabsTrigger value="financials" className="gap-2">
               <DollarSign className="h-4 w-4" />
               Financials
+            </TabsTrigger>
+            <TabsTrigger value="sales" className="gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              Sales & Commission
             </TabsTrigger>
           </TabsList>
         </div>
@@ -728,6 +817,186 @@ const ProjectDetail = () => {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Sales & Commission Tab */}
+        <TabsContent value="sales">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-500/20 flex items-center justify-center"><Users className="h-5 w-5 text-blue-500" /></div>
+                  <div><div className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Live Customers</div><div className="text-2xl font-extrabold">{liveCustomers.length}</div></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-green-500/20 flex items-center justify-center"><IndianRupee className="h-5 w-5 text-green-500" /></div>
+                  <div><div className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Earnings</div><div className="text-2xl font-extrabold text-green-600">₹{totalEarnings.toLocaleString()}</div></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-purple-500/20 flex items-center justify-center"><Percent className="h-5 w-5 text-purple-500" /></div>
+                  <div><div className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Commission Rate</div>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} className="h-8 w-20 text-lg font-extrabold" value={effectiveCommPct} onChange={(e) => handleUpdateCommission(parseFloat(e.target.value) || 0)} />
+                      <span className="text-lg font-bold">%</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-amber-500/20 flex items-center justify-center"><UserCheck className="h-5 w-5 text-amber-500" /></div>
+                  <div><div className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Commission</div><div className="text-2xl font-extrabold text-amber-600">₹{totalCommission.toLocaleString()}</div></div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Live Customers */}
+            <Card className="bg-card/40 backdrop-blur-md border-border/50">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2"><Users className="h-5 w-5 text-primary" />Live Customers ({liveCustomers.length})</CardTitle>
+                <Dialog open={isAddCustomerOpen} onOpenChange={setIsAddCustomerOpen}>
+                  <DialogTrigger asChild><Button size="sm" className="gap-1"><Plus className="h-3 w-3" />Add</Button></DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Add Customer</DialogTitle></DialogHeader>
+                    <form onSubmit={handleAddCustomer} className="space-y-3 pt-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label>Name *</Label><Input value={newCustomer.customer_name} onChange={e => setNewCustomer({...newCustomer, customer_name: e.target.value})} placeholder="Customer name" /></div>
+                        <div><Label>Company</Label><Input value={newCustomer.company_name} onChange={e => setNewCustomer({...newCustomer, company_name: e.target.value})} placeholder="Company" /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label>Email</Label><Input value={newCustomer.customer_email} onChange={e => setNewCustomer({...newCustomer, customer_email: e.target.value})} /></div>
+                        <div><Label>Phone</Label><Input value={newCustomer.customer_phone} onChange={e => setNewCustomer({...newCustomer, customer_phone: e.target.value})} /></div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div><Label>Plan</Label><Input value={newCustomer.plan_name} onChange={e => setNewCustomer({...newCustomer, plan_name: e.target.value})} placeholder="e.g. Pro" /></div>
+                        <div><Label>Monthly ₹</Label><Input type="number" value={newCustomer.monthly_value} onChange={e => setNewCustomer({...newCustomer, monthly_value: e.target.value})} /></div>
+                        <div><Label>Status</Label>
+                          <Select value={newCustomer.subscription_status} onValueChange={v => setNewCustomer({...newCustomer, subscription_status: v})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Trial">Trial</SelectItem><SelectItem value="Paused">Paused</SelectItem><SelectItem value="Churned">Churned</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Button type="submit" className="w-full">Add Customer</Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-[400px] overflow-y-auto">
+                  <Table>
+                    <TableHeader><TableRow className="text-[10px] uppercase"><TableHead>Customer</TableHead><TableHead>Plan</TableHead><TableHead>Monthly</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(projectCustomers || []).length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No customers yet. Add your first customer above.</TableCell></TableRow>
+                      ) : (projectCustomers || []).map(cust => (
+                        <TableRow key={cust.id} className="hover:bg-primary/5">
+                          <TableCell>
+                            <div className="font-semibold">{cust.customer_name}</div>
+                            {cust.company_name && <div className="text-[10px] text-muted-foreground">{cust.company_name}</div>}
+                            {cust.customer_phone && <div className="text-[10px] text-muted-foreground">{cust.customer_phone}</div>}
+                          </TableCell>
+                          <TableCell className="text-sm">{cust.plan_name || "—"}</TableCell>
+                          <TableCell className="font-semibold">₹{Number(cust.monthly_value || 0).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cust.subscription_status === "Active" ? "bg-green-50 text-green-700 border-green-200" : cust.subscription_status === "Trial" ? "bg-blue-50 text-blue-700 border-blue-200" : cust.subscription_status === "Churned" ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-50 text-gray-600 border-gray-200"}>{cust.subscription_status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50" onClick={() => handleDeleteCustomer(cust.id)}><Trash2 className="h-3 w-3" /></Button></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Sales & Commission Records */}
+            <Card className="bg-card/40 backdrop-blur-md border-border/50">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" />Sales Records</CardTitle>
+                <Dialog open={isAddSaleOpen} onOpenChange={setIsAddSaleOpen}>
+                  <DialogTrigger asChild><Button size="sm" className="gap-1"><Plus className="h-3 w-3" />Record Sale</Button></DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Record New Sale</DialogTitle></DialogHeader>
+                    <form onSubmit={handleAddSale} className="space-y-3 pt-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label>Customer</Label>
+                          <Select value={newSale.customer_id} onValueChange={v => setNewSale({...newSale, customer_id: v})}>
+                            <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                            <SelectContent>{(projectCustomers || []).map(c => <SelectItem key={c.id} value={c.id}>{c.customer_name}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div><Label>Salesperson</Label>
+                          <Select value={newSale.salesperson_id} onValueChange={v => setNewSale({...newSale, salesperson_id: v})}>
+                            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>{(employees || []).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div><Label>Amount (₹) *</Label><Input type="number" value={newSale.amount} onChange={e => setNewSale({...newSale, amount: e.target.value})} /></div>
+                        <div><Label>Sale Type</Label>
+                          <Select value={newSale.sale_type} onValueChange={v => setNewSale({...newSale, sale_type: v})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="New">New</SelectItem><SelectItem value="Renewal">Renewal</SelectItem><SelectItem value="Upgrade">Upgrade</SelectItem><SelectItem value="One-time">One-time</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                        <div><Label>Date</Label><Input type="date" value={newSale.sale_date} onChange={e => setNewSale({...newSale, sale_date: e.target.value})} /></div>
+                      </div>
+                      <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                        <div className="text-xs text-amber-700 dark:text-amber-400 font-bold uppercase">Auto Commission Calculator</div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-sm">₹{(parseFloat(newSale.amount) || 0).toLocaleString()} × {effectiveCommPct}%</span>
+                          <span className="text-lg font-extrabold text-amber-600">= ₹{((parseFloat(newSale.amount) || 0) * effectiveCommPct / 100).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div><Label>Notes</Label><Textarea value={newSale.notes} onChange={e => setNewSale({...newSale, notes: e.target.value})} rows={2} /></div>
+                      <Button type="submit" className="w-full">Record Sale</Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-[400px] overflow-y-auto">
+                  <Table>
+                    <TableHeader><TableRow className="text-[10px] uppercase"><TableHead>Date</TableHead><TableHead>Customer</TableHead><TableHead>Salesperson</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="text-right">Commission</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(projectSales || []).length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No sales recorded yet.</TableCell></TableRow>
+                      ) : (projectSales || []).map(sale => (
+                        <TableRow key={sale.id} className="hover:bg-primary/5">
+                          <TableCell className="text-muted-foreground text-sm">{sale.sale_date ? format(new Date(sale.sale_date), "MMM d, yyyy") : "—"}</TableCell>
+                          <TableCell>
+                            <div className="font-semibold text-sm">{sale.customer?.customer_name || "—"}</div>
+                            <Badge variant="secondary" className="text-[9px] px-1.5 mt-0.5">{sale.sale_type}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">{sale.salesperson?.name || "—"}</TableCell>
+                          <TableCell className="text-right font-bold text-green-600">₹{Number(sale.amount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="font-bold text-amber-600">₹{Number(sale.commission_amount || 0).toLocaleString()}</div>
+                            <div className="text-[10px] text-muted-foreground">{sale.commission_percentage}%</div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>

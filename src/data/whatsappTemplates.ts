@@ -11,11 +11,11 @@ export const WHATSAPP_TEMPLATES = {
     `*Hi ${name}*,\n\nFollowing up on our discussion regarding *${requirement}*. \n\nDo you have any updates for us? We're excited to get started on this project! 🚀\n\nBest regards,\nTeam CreativeMark`,
   
   LEAD_QUOTE_SENT: (name: string, amount: string) => 
-    `*Hi ${name}*,\n\nWe have shared the formal quotation for your requirement (Estimated: *${amount}*). \n\nPlease review the attached document and let us know if you'd like to proceed or if any adjustments are needed. 📄\n\nBest regards,\nTeam CreativeMark`,
+    `*Hi ${name}*,\n\nWe have prepared the formal quotation for your requirement (Estimated: *${amount}*). \n\nPlease check the attached document and let us know if you'd like to proceed or if any adjustments are needed. 📄\n\nFor any queries, WhatsApp us at +91 9309393216\n\nBest regards,\nTeam CreativeMark`,
 
   // Billing & Quotations
   BILL_SENT: (name: string, invoice: string, amount: string) =>
-    `*Hi ${name}*,\n\nYour invoice *${invoice}* for *${amount}* has been generated. \n\nYou can view and download it using the link below:\n[Link]\n\nPlease let us know once the payment is processed. Thank you! 🙏\n\nBest regards,\nTeam CreativeMark`,
+    `*Hi ${name}*,\n\nYour invoice *${invoice}* for *${amount}* has been generated. \n\nPlease see the attached invoice document. Kindly process the payment at your earliest convenience. 🙏\n\nFor any queries, WhatsApp us at +91 9309393216\n\nBest regards,\nTeam CreativeMark`,
 
   PAYMENT_RECEIVED: (name: string, invoice: string, amount: string) =>
     `*Hi ${name}*!\n\nWe have successfully received your payment of *${amount}* for invoice *${invoice}*. 🧾\n\nThank you for choosing CreativeMark. We value our partnership! \n\nBest regards,\nTeam CreativeMark`,

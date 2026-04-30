@@ -562,12 +562,28 @@ const Projects = () => {
                     <span className="truncate">{project.assignee?.name || "Unassigned"}</span>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-2 mt-2">
-                  <AlertCircle className={`h-3 w-3 ${getPriorityColor(project.priority)}`} />
-                  <span className={`text-[10px] font-bold uppercase tracking-widest ${getPriorityColor(project.priority)}`}>
-                    {project.priority} Priority
-                  </span>
+
+                {/* Live Customers & Earnings Row */}
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/30">
+                  <div className="flex items-center gap-1.5">
+                    {project.live_customers > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600">
+                        <CheckCircle2 className="h-2.5 w-2.5" />
+                        {project.live_customers} customers
+                      </span>
+                    )}
+                    {project.total_earnings > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-600">
+                        ₹{Number(project.total_earnings).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <AlertCircle className={`h-3 w-3 ${getPriorityColor(project.priority)}`} />
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${getPriorityColor(project.priority)}`}>
+                      {project.priority}
+                    </span>
+                  </div>
                 </div>
               </CardContent>
             </Card>

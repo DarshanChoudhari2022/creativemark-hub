@@ -77,6 +77,7 @@ const COMPANY = {
   email: "creativemarkadvertising@gmail.com",
   website: "https://creativemarkadvertising.com/",
   address: "Pune, Maharashtra, India",
+  whatsapp: "+91 9309393216",
 };
 
 // ── Default Partner Agreement Terms ───────────────────────────
@@ -222,8 +223,8 @@ function addLetterhead(doc: jsPDF, logoBase64: string | null) {
   doc.text(COMPANY.tagline, rX, 16.5, { align: "right" });
   
   doc.setTextColor(BRAND_BLACK.r, BRAND_BLACK.g, BRAND_BLACK.b);
-  doc.setFontSize(8);
-  doc.text(`${COMPANY.phone1}  |  ${COMPANY.email}`, rX, 21, { align: "right" });
+  doc.setFontSize(7.5);
+  doc.text(`${COMPANY.phone1}  |  ${COMPANY.phone2}  |  ${COMPANY.email}`, rX, 21, { align: "right" });
   
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.setFont("helvetica", "bold");
@@ -241,7 +242,7 @@ function addLetterhead(doc: jsPDF, logoBase64: string | null) {
 function addFooter(doc: jsPDF, pageNum: number) {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const footerY = pageH - 28;
+  const footerY = pageH - 32;
   
   doc.setDrawColor(220, 220, 220);
   doc.setLineWidth(0.2);
@@ -251,24 +252,35 @@ function addFooter(doc: jsPDF, pageNum: number) {
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.text("CREATIVEMARK ADVERTISING", centerX, footerY + 7, { align: "center" });
+  doc.text("CREATIVEMARK ADVERTISING", centerX, footerY + 6, { align: "center" });
 
   doc.setTextColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.setFontSize(9);
   const footerUrl = COMPANY.website.replace("https://", "").replace(/\/$/, "");
-  doc.text(footerUrl, centerX, footerY + 12.5, { align: "center" });
-  doc.link(centerX - (doc.getTextWidth(footerUrl) / 2), footerY + 9, doc.getTextWidth(footerUrl), 5, { url: COMPANY.website });
+  doc.text(footerUrl, centerX, footerY + 11, { align: "center" });
+  doc.link(centerX - (doc.getTextWidth(footerUrl) / 2), footerY + 8, doc.getTextWidth(footerUrl), 5, { url: COMPANY.website });
 
   doc.setFont("helvetica", "normal");
   doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
-  doc.setFontSize(7.5);
-  doc.text(`${COMPANY.address}  •  ${COMPANY.phone1}  •  ${COMPANY.email}`, centerX, footerY + 17.5, { align: "center" });
+  doc.setFontSize(7);
+  doc.text(`${COMPANY.address}  •  ${COMPANY.phone1}  •  ${COMPANY.phone2}  •  ${COMPANY.email}`, centerX, footerY + 16, { align: "center" });
+
+  // WhatsApp Customer Support line
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(37, 211, 102); // WhatsApp green
+  const waText = `WhatsApp Support: ${COMPANY.whatsapp}`;
+  doc.text(waText, centerX, footerY + 21, { align: "center" });
+  const waUrl = `https://wa.me/919309393216`;
+  const waTextW = doc.getTextWidth(waText);
+  doc.link(centerX - waTextW / 2, footerY + 18, waTextW, 5, { url: waUrl });
 
   doc.setFillColor(BRAND_RED.r, BRAND_RED.g, BRAND_RED.b);
   doc.rect(centerX - 20, pageH - 5, 40, 0.5, "F");
 
   doc.setFontSize(8);
-  doc.text(`Page ${pageNum}`, pageW - 15, footerY + 12.5, { align: "right" });
+  doc.setTextColor(BRAND_GRAY.r, BRAND_GRAY.g, BRAND_GRAY.b);
+  doc.text(`Page ${pageNum}`, pageW - 15, footerY + 11, { align: "right" });
 }
 
 // ── Quotation / Bill PDF ──────────────────────────────────────
