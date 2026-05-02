@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Plus, FileText, Download, Send, Eye, Search, Trash2, CheckCircle, XCircle, CreditCard, Wallet } from "lucide-react";
+import { Plus, FileText, Download, Send, Eye, Search, Trash2, CheckCircle, XCircle, CreditCard, Wallet, Briefcase, UserCheck } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
+import { ConfirmEditDialog } from "@/components/ConfirmEditDialog";
 import { SERVICE_PRESETS, DEFAULT_TERMS_QUOTATION, DEFAULT_TERMS_BILL } from "@/data/quotations";
 import { WHATSAPP_TEMPLATES } from "@/data/whatsappTemplates";
 import { formatINR, formatDateDDMMYYYY, waLink } from "@/lib/format";
@@ -38,9 +40,12 @@ const emptyItem = (): LineItem => ({ id: crypto.randomUUID(), serviceName: "", d
 const Quotations = () => {
   const location = useLocation();
   const { isShielded, withShield } = usePrivacyShield();
+  const { user } = useAuth();
   const [quotations, setQuotations] = useState<any[]>([]);
   const [allClients, setAllClients] = useState<any[]>([]);
   const [allLeads, setAllLeads] = useState<any[]>([]);
+  const [allProjects, setAllProjects] = useState<any[]>([]);
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -48,17 +53,19 @@ const Quotations = () => {
   const [editingQ, setEditingQ] = useState<any | null>(null);
   const [previewQ, setPreviewQ] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [editGateTarget, setEditGateTarget] = useState<any | null>(null);
 
   // Payment recording from Bills tab
   const [payBillOpen, setPayBillOpen] = useState(false);
   const [payBillTarget, setPayBillTarget] = useState<any | null>(null);
-  const [billPayForm, setBillPayForm] = useState({ amount: 0, date: "", paymentMode: "UPI", chequeNo: "", transactionId: "", notes: "" });
+  const [billPayForm, setBillPayForm] = useState({ amount: 0, date: "", paymentMode: "UPI", chequeNo: "", transactionId: "", notes: "", receivedByName: "" });
 
   // Builder state — GST defaults to OFF per user request
   const [type, setType] = useState<"Quotation" | "Bill">("Quotation");
   const [recipientId, setRecipientId] = useState("");
   const [recipientType, setRecipientType] = useState<"Client" | "Lead">("Client");
   const [customRecipientName, setCustomRecipientName] = useState("");
+  const [projectId, setProjectId] = useState<string>("");
   const [items, setItems] = useState<LineItem[]>([emptyItem()]);
   const [gstEnabled, setGstEnabled] = useState(false); // DEFAULT OFF
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -80,14 +87,20 @@ const Quotations = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [qRes, cRes, lRes] = await Promise.all([
+      const [qRes, cRes, lRes, pRes, eRes] = await Promise.all([
         supabase.from("quotations").select("*, quotation_items(*)").order("created_at", { ascending: false }),
         supabase.from("clients").select("id, name, phone, whatsapp, email"),
         supabase.from("leads").select("id, name, organization, phone, whatsapp, email"),
+        supabase.from("projects").select("id, title, status, client_id").order("created_at", { ascending: false }),
+        supabase.from("employees").select("id, name").order("name"),
       ]);
       setQuotations(qRes.data || []);
       setAllClients(cRes.data || []);
       setAllLeads(lRes.data || []);
+      setAllProjects(pRes.data || []);
+      setAllEmployees(eRes.data || []);
+      if (pRes.error) console.warn("[Quotations] projects fetch error:", pRes.error.message);
+      if (eRes.error) console.warn("[Quotations] employees fetch error:", eRes.error.message);
       setLoading(false);
     };
     fetchData();
@@ -163,7 +176,7 @@ const Quotations = () => {
     const quoteNumber = editingQ ? editingQ.quote_number : `${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
     const isClient = recipient.type === "Client";
 
-    const payload = {
+    const payload: any = {
       quote_number: quoteNumber,
       type,
       status: editingQ ? editingQ.status : status,
@@ -174,6 +187,7 @@ const Quotations = () => {
       lead_id: !isClient ? recipientId : null,
       client_name: customRecipientName || recipient.name,
       client_phone: recipient.phone,
+      project_id: projectId || null,
       subtotal,
       discount_percent: discountPercent,
       discount_amount: discountAmount,
@@ -257,6 +271,7 @@ const Quotations = () => {
     setEditingQ(null);
     setRecipientId(""); 
     setCustomRecipientName("");
+    setProjectId("");
     setItems([emptyItem()]); 
     setGstEnabled(false); 
     setDiscountPercent(0);
@@ -266,13 +281,20 @@ const Quotations = () => {
     setUpiId("");
   };
 
+  // Request an edit — shows confirmation gate first
   const handleEdit = (q: any) => {
+    setEditGateTarget(q);
+  };
+
+  // Only called after user types EDIT in the gate dialog
+  const openEditForm = (q: any) => {
     withShield(() => {
     setEditingQ(q);
     setType(q.type);
     setRecipientId(q.client_id || q.lead_id || "");
     setRecipientType(q.client_id ? "Client" : "Lead");
     setCustomRecipientName(q.client_name || "");
+    setProjectId(q.project_id || "");
     setItems(q.quotation_items.map((i: any) => ({
       id: i.id,
       serviceName: i.service_name,
@@ -434,22 +456,34 @@ const Quotations = () => {
   // ── Record payment against a bill ──
   const openPayBill = (q: any) => {
     setPayBillTarget(q);
-    setBillPayForm({ amount: 0, date: new Date().toISOString().slice(0, 10), paymentMode: "UPI", chequeNo: "", transactionId: "", notes: "" });
+    setBillPayForm({
+      amount: 0,
+      date: new Date().toISOString().slice(0, 10),
+      paymentMode: "UPI",
+      chequeNo: "",
+      transactionId: "",
+      notes: "",
+      receivedByName: user?.name || "",
+    });
     setPayBillOpen(true);
   };
 
   const handleRecordBillPayment = async () => {
     if (!payBillTarget || !billPayForm.amount || !billPayForm.date) { toast.error("Amount and date required"); return; }
+    if (!billPayForm.receivedByName.trim()) { toast.error("Please enter who received the payment"); return; }
 
     const billTotal = payBillTarget.grand_total || payBillTarget.total_amount || 0;
     const currentPaid = payBillTarget.amount_paid || 0;
     const newPaid = currentPaid + Number(billPayForm.amount);
     const newStatus = newPaid >= billTotal ? "Paid" : "Partial";
 
-    // 1. Update quotation's amount_paid and status
+    // 1. Update quotation's amount_paid, status, and received-by tracking
     const { error: qErr } = await supabase.from("quotations").update({
       amount_paid: newPaid,
       status: newStatus,
+      received_by_id: user?.id || null,
+      received_by_name: billPayForm.receivedByName.trim(),
+      received_at: new Date().toISOString(),
     }).eq("id", payBillTarget.id);
     if (qErr) { toast.error("Failed to update bill: " + qErr.message); return; }
 
@@ -465,6 +499,8 @@ const Quotations = () => {
         cheque_no: billPayForm.chequeNo || null,
         transaction_id: billPayForm.transactionId || null,
         notes: billPayForm.notes || `Payment against ${payBillTarget.quote_number}`,
+        received_by_id: user?.id || null,
+        received_by_name: billPayForm.receivedByName.trim(),
       });
 
       // 3. Recalculate client outstanding from all bills
@@ -489,9 +525,16 @@ const Quotations = () => {
     }
 
     // 4. Refresh local quotation state
-    setQuotations(prev => prev.map(x => x.id === payBillTarget.id ? { ...x, amount_paid: newPaid, status: newStatus } : x));
+    setQuotations(prev => prev.map(x => x.id === payBillTarget.id ? {
+      ...x,
+      amount_paid: newPaid,
+      status: newStatus,
+      received_by_id: user?.id || null,
+      received_by_name: billPayForm.receivedByName.trim(),
+      received_at: new Date().toISOString(),
+    } : x));
 
-    toast.success(`₹${billPayForm.amount} recorded against ${payBillTarget.quote_number}`);
+    toast.success(`₹${billPayForm.amount} recorded against ${payBillTarget.quote_number} by ${billPayForm.receivedByName}`);
     setPayBillOpen(false);
     setPayBillTarget(null);
   };
@@ -560,6 +603,51 @@ const Quotations = () => {
                       placeholder="Enter name as it should appear on PDF"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">This allows you to customize the name without changing the client record.</p>
+                  </div>
+
+                  {/* Project link — makes the bill reflect inside the Project's Sales tab */}
+                  <div>
+                    <Label className="flex items-center gap-1.5">
+                      <Briefcase className="h-3.5 w-3.5 text-primary" />
+                      Link to Project {type === "Bill" && <span className="text-[10px] text-muted-foreground">(recommended for bills)</span>}
+                    </Label>
+                    {(() => {
+                      const filteredProjects = recipientId && recipientType === "Client"
+                        ? allProjects.filter(p => p.client_id === recipientId)
+                        : allProjects;
+                      if (allProjects.length === 0) {
+                        return <p className="text-[11px] text-amber-700 mt-1">No projects found in your CRM yet — create one in the Projects section first.</p>;
+                      }
+                      return (
+                        <div className="flex items-center gap-2">
+                          <Select value={projectId || "none"} onValueChange={(v) => setProjectId(v === "none" ? "" : v)}>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="No project (standalone)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No project (standalone)</SelectItem>
+                              {filteredProjects.map(p => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.title} {p.status ? <span className="text-[10px] text-muted-foreground ml-1">· {p.status}</span> : null}
+                                </SelectItem>
+                              ))}
+                              {filteredProjects.length === 0 && allProjects.length > 0 && (
+                                <SelectItem value="__all__" disabled>No projects for this client — pick from all:</SelectItem>
+                              )}
+                              {filteredProjects.length === 0 && allProjects.map(p => (
+                                <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {projectId && (
+                            <Button variant="ghost" size="sm" className="h-9" onClick={() => setProjectId("")} title="Clear project link">
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    <p className="text-[10px] text-muted-foreground mt-1">Linked bills appear inside the Project &gt; Sales tab and count toward project sales totals.</p>
                   </div>
 
                   {/* Service Presets */}
@@ -700,7 +788,7 @@ const Quotations = () => {
               <TableHead>Type</TableHead><TableHead>Number</TableHead><TableHead>Recipient</TableHead><TableHead>Date</TableHead>
               <TableHead>Due / Valid</TableHead><TableHead className="text-right">Total</TableHead>
               <TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Balance</TableHead>
-              <TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
+              <TableHead>Received By</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -714,6 +802,16 @@ const Quotations = () => {
                 <TableCell className="text-right font-bold"><Masked placeholder="₹•••••">{formatINR(q.grand_total || 0)}</Masked></TableCell>
                 <TableCell className="text-right text-green-600 font-semibold text-sm"><Masked placeholder="₹•••••">{q.type === "Bill" && (q.amount_paid || 0) > 0 ? formatINR(q.amount_paid) : "—"}</Masked></TableCell>
                 <TableCell className={`text-right font-bold text-sm ${q.type === "Bill" && (q.grand_total || 0) - (q.amount_paid || 0) > 0 ? "text-primary" : ""}`}><Masked placeholder="₹•••••">{q.type === "Bill" ? formatINR((q.grand_total || 0) - (q.amount_paid || 0)) : "—"}</Masked></TableCell>
+                <TableCell className="text-sm">
+                  {q.received_by_name ? (
+                    <div className="flex items-center gap-1.5">
+                      <UserCheck className="h-3.5 w-3.5 text-green-600" />
+                      <span className="font-medium">{q.received_by_name}</span>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">—</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Select value={q.status} onValueChange={(v) => updateStatus(q, v)}>
                     <SelectTrigger className="h-7 w-auto border-0 p-0">
@@ -756,7 +854,7 @@ const Quotations = () => {
               </TableRow>
             ))}
             {filtered.length === 0 && (
-               <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No documents found — create your first quotation</TableCell></TableRow>
+               <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No documents found — create your first quotation</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -884,6 +982,36 @@ const Quotations = () => {
                 <div><Label>Transaction ID / Ref</Label><Input value={billPayForm.transactionId} onChange={e => setBillPayForm(f => ({ ...f, transactionId: e.target.value }))} placeholder="UTR / Ref number" /></div>
               )}
               <div><Label>Notes</Label><Input value={billPayForm.notes} onChange={e => setBillPayForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></div>
+
+              {/* Received By — captures who actually received the cash / cheque / UPI transfer */}
+              <div className="border-t pt-3 space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <UserCheck className="h-3.5 w-3.5 text-green-600" />
+                  Received By Name *
+                </Label>
+                <Input
+                  value={billPayForm.receivedByName}
+                  onChange={e => setBillPayForm(f => ({ ...f, receivedByName: e.target.value }))}
+                  placeholder="e.g. Darshan, Ramesh, Cashier"
+                  className="font-semibold"
+                />
+                {allEmployees.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-[10px] text-muted-foreground self-center mr-1">Quick pick:</span>
+                    {user?.name && (
+                      <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                        onClick={() => setBillPayForm(f => ({ ...f, receivedByName: user.name }))}
+                      >Me ({user.name})</Button>
+                    )}
+                    {allEmployees.slice(0, 6).map(emp => (
+                      <Button key={emp.id} type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                        onClick={() => setBillPayForm(f => ({ ...f, receivedByName: emp.name }))}
+                      >{emp.name}</Button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground">This name will appear in the Bills list and the project's payment log.</p>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setPayBillOpen(false)}>Cancel</Button>
@@ -899,6 +1027,14 @@ const Quotations = () => {
         onConfirm={executeDeleteQuotation}
         title={`Delete ${deleteTarget?.type || "Document"}`}
         description={`Are you sure you want to delete ${deleteTarget?.type} "${deleteTarget?.quote_number}"? This action cannot be undone.`}
+      />
+
+      <ConfirmEditDialog
+        open={!!editGateTarget}
+        onOpenChange={(v) => { if (!v) setEditGateTarget(null); }}
+        onConfirm={() => { if (editGateTarget) { openEditForm(editGateTarget); setEditGateTarget(null); } }}
+        title={`Edit ${editGateTarget?.type || "Document"}?`}
+        description={`You're about to edit ${editGateTarget?.type} "${editGateTarget?.quote_number}". Changes to totals, recipient or line items will be saved once you submit. Please type EDIT to confirm.`}
       />
     </div>
   );

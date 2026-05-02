@@ -26,7 +26,11 @@ import {
   Percent,
   IndianRupee,
   UserCheck,
-  ShoppingCart
+  ShoppingCart,
+  FileText,
+  Briefcase,
+  Coins,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +65,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ConfirmDeleteDialog from "@/components/ConfirmDeleteDialog";
+import { ConfirmEditDialog } from "@/components/ConfirmEditDialog";
 import { Wallet, Pencil, PiggyBank } from "lucide-react";
+import { formatINR } from "@/lib/format";
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -176,6 +182,34 @@ const ProjectDetail = () => {
     },
   });
 
+  // ── Fetch Bills (quotations of type 'Bill') linked to this project ──
+  const { data: linkedBills } = useQuery({
+    queryKey: ["project_bills", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("quotations")
+        .select("id, quote_number, type, status, client_name, client_id, lead_id, date, due_date, grand_total, amount_paid, received_by_name, received_at, project_id")
+        .eq("project_id", id)
+        .order("date", { ascending: false });
+      if (error) { console.warn("linked bills fetch error:", error.message); return []; }
+      return data;
+    },
+  });
+
+  // ── Fetch Distributions for this project (money + job distribution per sale) ──
+  const { data: distributions } = useQuery({
+    queryKey: ["project_distributions", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_sale_distributions")
+        .select("*, employee:employees(name), bill:quotations(quote_number, grand_total, client_name), sale:project_sales(amount, sale_date, customer:project_customers(customer_name))")
+        .eq("project_id", id)
+        .order("created_at", { ascending: false });
+      if (error) { console.warn("distributions not ready:", error.message); return []; }
+      return data;
+    },
+  });
+
   // Sales & Commission State
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isAddSaleOpen, setIsAddSaleOpen] = useState(false);
@@ -184,7 +218,26 @@ const ProjectDetail = () => {
   const [newSale, setNewSale] = useState({ customer_id: "", salesperson_id: "", amount: "0", sale_type: "New", sale_date: new Date().toISOString().slice(0, 10), notes: "", extra_charges: "0", sale_expenses: "0", expense_notes: "" });
   // Edit-sale + delete-sale state (per-product-sale log)
   const [editSale, setEditSale] = useState<any | null>(null);
+  const [editSaleGate, setEditSaleGate] = useState<any | null>(null); // confirmation gate before edit
   const [deleteSaleTarget, setDeleteSaleTarget] = useState<any | null>(null);
+
+  // ── Distribution dialog state ──
+  const [isAddDistOpen, setIsAddDistOpen] = useState(false);
+  const [editDist, setEditDist] = useState<any | null>(null);
+  const [editDistGate, setEditDistGate] = useState<any | null>(null); // confirmation gate before edit
+  const [deleteDistTarget, setDeleteDistTarget] = useState<any | null>(null);
+  const [newDist, setNewDist] = useState({
+    linkType: "bill" as "bill" | "sale",
+    bill_id: "",
+    sale_id: "",
+    employee_id: "",
+    employee_name: "",
+    job_role: "Salesperson",
+    allotted_amount: "0",
+    status: "Pending" as "Pending" | "Paid",
+    paid_date: "",
+    notes: "",
+  });
 
   // Mutations
   const createTaskMutation = useMutation({
@@ -361,6 +414,74 @@ const ProjectDetail = () => {
     toast({ title: "Customer removed" });
     setDeleteCustomerInfo(null);
   };
+
+  // ── Money / Job Distribution handlers ──
+  const resetDistForm = () => setNewDist({
+    linkType: "bill", bill_id: "", sale_id: "", employee_id: "", employee_name: "",
+    job_role: "Salesperson", allotted_amount: "0", status: "Pending", paid_date: "", notes: "",
+  });
+
+  const handleAddDist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDist.employee_name.trim()) { toast({ title: "Employee name required", variant: "destructive" }); return; }
+    if (!newDist.job_role.trim()) { toast({ title: "Job role required", variant: "destructive" }); return; }
+    if (newDist.linkType === "bill" && !newDist.bill_id) { toast({ title: "Select a bill", variant: "destructive" }); return; }
+    if (newDist.linkType === "sale" && !newDist.sale_id) { toast({ title: "Select a sale", variant: "destructive" }); return; }
+    const payload = {
+      project_id: id,
+      bill_id: newDist.linkType === "bill" ? newDist.bill_id : null,
+      sale_id: newDist.linkType === "sale" ? newDist.sale_id : null,
+      employee_id: newDist.employee_id || null,
+      employee_name: newDist.employee_name.trim(),
+      job_role: newDist.job_role.trim(),
+      allotted_amount: parseFloat(newDist.allotted_amount) || 0,
+      status: newDist.status,
+      paid_date: newDist.status === "Paid" ? (newDist.paid_date || new Date().toISOString().slice(0, 10)) : null,
+      notes: newDist.notes || null,
+    };
+    const { error } = await supabase.from("project_sale_distributions").insert([payload]);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    queryClient.invalidateQueries({ queryKey: ["project_distributions", id] });
+    setIsAddDistOpen(false);
+    resetDistForm();
+    toast({ title: "Distribution added" });
+  };
+
+  const handleUpdateDist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editDist?.id) return;
+    const { error } = await supabase.from("project_sale_distributions").update({
+      employee_name: editDist.employee_name,
+      job_role: editDist.job_role,
+      allotted_amount: parseFloat(String(editDist.allotted_amount)) || 0,
+      status: editDist.status,
+      paid_date: editDist.status === "Paid" ? (editDist.paid_date || new Date().toISOString().slice(0, 10)) : null,
+      notes: editDist.notes || null,
+    }).eq("id", editDist.id);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    queryClient.invalidateQueries({ queryKey: ["project_distributions", id] });
+    setEditDist(null);
+    toast({ title: "Distribution updated" });
+  };
+
+  const executeDeleteDist = async () => {
+    if (!deleteDistTarget?.id) return;
+    const { error } = await supabase.from("project_sale_distributions").delete().eq("id", deleteDistTarget.id);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    queryClient.invalidateQueries({ queryKey: ["project_distributions", id] });
+    setDeleteDistTarget(null);
+    toast({ title: "Distribution deleted" });
+  };
+
+  // Distribution aggregates
+  const totalDistributed = (distributions || []).reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
+  const totalDistPending = (distributions || []).filter((d: any) => d.status === "Pending").reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
+  const totalDistPaid = (distributions || []).filter((d: any) => d.status === "Paid").reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
+
+  // Linked-bills aggregates (project sync)
+  const linkedBillsCount = (linkedBills || []).length;
+  const linkedBillsTotal = (linkedBills || []).reduce((s: number, b: any) => s + Number(b.grand_total || 0), 0);
+  const linkedBillsPaid = (linkedBills || []).reduce((s: number, b: any) => s + Number(b.amount_paid || 0), 0);
 
   const kanbanColumns = ["Todo", "In Progress", "In Review", "Approved", "Completed"];
 
@@ -617,6 +738,13 @@ const ProjectDetail = () => {
             <TabsTrigger value="sales" className="gap-2">
               <ShoppingCart className="h-4 w-4" />
               Sales & Commission
+            </TabsTrigger>
+            <TabsTrigger value="distribution" className="gap-2">
+              <Coins className="h-4 w-4" />
+              Money Distribution
+              {distributions && distributions.length > 0 && (
+                <Badge variant="secondary" className="h-4 px-1 text-[9px]">{distributions.length}</Badge>
+              )}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1037,6 +1165,71 @@ const ProjectDetail = () => {
               </CardContent>
             </Card>
 
+            {/* Linked Bills — bills created in Quotations & linked to this project */}
+            <Card className="bg-card/40 backdrop-blur-md border-border/50">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Linked Bills</CardTitle>
+                  {linkedBillsCount > 0 && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {linkedBillsCount} · ₹{linkedBillsTotal.toLocaleString()} total · ₹{linkedBillsPaid.toLocaleString()} paid
+                    </Badge>
+                  )}
+                </div>
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => navigate("/quotations")}>
+                  <Plus className="h-3 w-3" /> Create Bill
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="text-[10px] uppercase">
+                        <TableHead>Bill #</TableHead>
+                        <TableHead>Recipient</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Paid</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
+                        <TableHead>Received By</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(linkedBills || []).length === 0 ? (
+                        <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No bills linked to this project yet. Go to <span className="font-semibold">Quotations & Bills</span> and pick this project when creating a bill.
+                        </TableCell></TableRow>
+                      ) : (linkedBills || []).map((b: any) => {
+                        const balance = Number(b.grand_total || 0) - Number(b.amount_paid || 0);
+                        return (
+                          <TableRow key={b.id} className="hover:bg-primary/5">
+                            <TableCell className="font-mono font-semibold text-xs">{b.quote_number}</TableCell>
+                            <TableCell className="text-sm">{b.client_name}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{b.date ? format(new Date(b.date), "MMM d, yyyy") : "—"}</TableCell>
+                            <TableCell className="text-right font-bold whitespace-nowrap">{formatINR(b.grand_total || 0)}</TableCell>
+                            <TableCell className="text-right text-green-600 font-semibold whitespace-nowrap">{formatINR(b.amount_paid || 0)}</TableCell>
+                            <TableCell className={`text-right font-bold whitespace-nowrap ${balance > 0 ? "text-primary" : "text-muted-foreground"}`}>{formatINR(balance)}</TableCell>
+                            <TableCell className="text-sm">
+                              {b.received_by_name ? (
+                                <div className="flex items-center gap-1">
+                                  <UserCheck className="h-3 w-3 text-green-600" />
+                                  <span className="text-xs">{b.received_by_name}</span>
+                                </div>
+                              ) : <span className="text-muted-foreground text-xs">—</span>}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={`text-[10px] ${b.status === "Paid" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : b.status === "Overdue" ? "bg-red-50 text-red-700 border-red-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>{b.status}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Sales & Commission Records */}
             <Card className="bg-card/40 backdrop-blur-md border-border/50">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -1144,7 +1337,7 @@ const ProjectDetail = () => {
                             <TableCell className={`text-right font-extrabold whitespace-nowrap ${net >= 0 ? "text-emerald-600" : "text-red-600"}`}>₹{net.toLocaleString()}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditSale({ ...sale })} title="Edit / add expenses">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditSaleGate({ ...sale })} title="Edit / add expenses">
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50" onClick={() => setDeleteSaleTarget(sale)} title="Delete sale">
@@ -1197,6 +1390,262 @@ const ProjectDetail = () => {
             </DialogContent>
           </Dialog>
         </TabsContent>
+
+        {/* ═══ Money / Job Distribution Tab ═══════════════════════════ */}
+        <TabsContent value="distribution">
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <Card className="bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 border-indigo-500/20">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0"><Coins className="h-4 w-4 text-indigo-500" /></div>
+                  <div className="min-w-0"><div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Distributed</div><div className="text-xl font-extrabold text-indigo-700 truncate">₹{totalDistributed.toLocaleString()}</div></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0"><Clock className="h-4 w-4 text-amber-500" /></div>
+                  <div className="min-w-0"><div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Pending Payout</div><div className="text-xl font-extrabold text-amber-600 truncate">₹{totalDistPending.toLocaleString()}</div></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0"><CheckCircle2 className="h-4 w-4 text-emerald-500" /></div>
+                  <div className="min-w-0"><div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Already Paid Out</div><div className="text-xl font-extrabold text-emerald-600 truncate">₹{totalDistPaid.toLocaleString()}</div></div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-card/40 backdrop-blur-md border-border/50">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  Money & Job Distribution
+                </CardTitle>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Break down each sale / bill into per-person allocations — who did what job, how much they get, and whether they've been paid.
+                </p>
+              </div>
+              <Dialog open={isAddDistOpen} onOpenChange={(v) => { setIsAddDistOpen(v); if (!v) resetDistForm(); }}>
+                <DialogTrigger asChild><Button size="sm" className="gap-1"><Plus className="h-3 w-3" />Add Distribution</Button></DialogTrigger>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader><DialogTitle>Allocate Payout for a Sale</DialogTitle></DialogHeader>
+                  <form onSubmit={handleAddDist} className="space-y-3 pt-2">
+                    <div>
+                      <Label>Link to *</Label>
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <Button type="button" variant={newDist.linkType === "bill" ? "default" : "outline"} size="sm" onClick={() => setNewDist({ ...newDist, linkType: "bill", sale_id: "" })}>
+                          <FileText className="h-3 w-3 mr-1" /> Bill ({(linkedBills || []).length})
+                        </Button>
+                        <Button type="button" variant={newDist.linkType === "sale" ? "default" : "outline"} size="sm" onClick={() => setNewDist({ ...newDist, linkType: "sale", bill_id: "" })}>
+                          <ShoppingCart className="h-3 w-3 mr-1" /> Project Sale ({(projectSales || []).length})
+                        </Button>
+                      </div>
+                    </div>
+                    {newDist.linkType === "bill" ? (
+                      <div>
+                        <Label>Select Bill *</Label>
+                        <Select value={newDist.bill_id} onValueChange={v => setNewDist({ ...newDist, bill_id: v })}>
+                          <SelectTrigger><SelectValue placeholder="Pick a linked bill" /></SelectTrigger>
+                          <SelectContent>
+                            {(linkedBills || []).length === 0 ? (
+                              <SelectItem value="__none__" disabled>No bills linked to this project</SelectItem>
+                            ) : (linkedBills || []).map((b: any) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.quote_number} · {b.client_name} · ₹{Number(b.grand_total || 0).toLocaleString()}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label>Select Sale *</Label>
+                        <Select value={newDist.sale_id} onValueChange={v => setNewDist({ ...newDist, sale_id: v })}>
+                          <SelectTrigger><SelectValue placeholder="Pick a sale" /></SelectTrigger>
+                          <SelectContent>
+                            {(projectSales || []).length === 0 ? (
+                              <SelectItem value="__none__" disabled>No project sales yet</SelectItem>
+                            ) : (projectSales || []).map((s: any) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.sale_date ? format(new Date(s.sale_date), "MMM d") : "—"} · {s.customer?.customer_name || "—"} · ₹{Number(s.amount || 0).toLocaleString()}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Employee *</Label>
+                        <Select
+                          value={newDist.employee_id || "custom"}
+                          onValueChange={v => {
+                            if (v === "custom") { setNewDist({ ...newDist, employee_id: "", employee_name: "" }); return; }
+                            const emp = employees?.find(e => e.id === v);
+                            setNewDist({ ...newDist, employee_id: v, employee_name: emp?.name || "" });
+                          }}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="custom">Custom name…</SelectItem>
+                            {(employees || []).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          className="mt-1"
+                          placeholder="Name"
+                          value={newDist.employee_name}
+                          onChange={e => setNewDist({ ...newDist, employee_name: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Job Role *</Label>
+                        <Select value={newDist.job_role} onValueChange={v => setNewDist({ ...newDist, job_role: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {["Salesperson", "Designer", "Developer", "Account Manager", "Project Manager", "Lead Generator", "Content Writer", "Video Editor", "Photographer", "Partner", "Referrer", "Other"].map(r => (
+                              <SelectItem key={r} value={r}>{r}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label>Allotted ₹ *</Label>
+                        <Input type="number" min={0} value={newDist.allotted_amount} onChange={e => setNewDist({ ...newDist, allotted_amount: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Status</Label>
+                        <Select value={newDist.status} onValueChange={(v: "Pending" | "Paid") => setNewDist({ ...newDist, status: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="Paid">Paid</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Paid Date</Label>
+                        <Input type="date" value={newDist.paid_date} onChange={e => setNewDist({ ...newDist, paid_date: e.target.value })} disabled={newDist.status !== "Paid"} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Notes</Label>
+                      <Textarea rows={2} value={newDist.notes} onChange={e => setNewDist({ ...newDist, notes: e.target.value })} placeholder="Optional — scope, deliverable, etc." />
+                    </div>
+
+                    <Button type="submit" className="w-full">Add Distribution</Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-[10px] uppercase">
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Job Role</TableHead>
+                      <TableHead>For</TableHead>
+                      <TableHead className="text-right">Allotted</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Paid Date</TableHead>
+                      <TableHead className="text-right w-24">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(distributions || []).length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                        <Coins className="h-10 w-10 mx-auto mb-2 text-muted-foreground/40" />
+                        <div className="font-semibold mb-1">No distributions yet</div>
+                        <div className="text-xs">Click <span className="font-semibold">Add Distribution</span> to split a sale or bill between the team.</div>
+                      </TableCell></TableRow>
+                    ) : (distributions || []).map((d: any) => (
+                      <TableRow key={d.id} className="hover:bg-primary/5">
+                        <TableCell>
+                          <div className="font-semibold text-sm flex items-center gap-1.5">
+                            <UserCheck className="h-3.5 w-3.5 text-primary" />
+                            {d.employee?.name || d.employee_name}
+                          </div>
+                        </TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px]">{d.job_role}</Badge></TableCell>
+                        <TableCell className="text-xs">
+                          {d.bill_id && d.bill ? (
+                            <div><span className="font-mono font-semibold">{d.bill.quote_number}</span><div className="text-[10px] text-muted-foreground">{d.bill.client_name}</div></div>
+                          ) : d.sale_id && d.sale ? (
+                            <div><span className="font-semibold">{d.sale.customer?.customer_name || "Sale"}</span><div className="text-[10px] text-muted-foreground">{d.sale.sale_date ? format(new Date(d.sale.sale_date), "MMM d, yyyy") : ""} · ₹{Number(d.sale.amount || 0).toLocaleString()}</div></div>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-indigo-700 whitespace-nowrap">₹{Number(d.allotted_amount || 0).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`text-[10px] ${d.status === "Paid" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{d.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{d.paid_date ? format(new Date(d.paid_date), "MMM d, yyyy") : "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditDistGate({ ...d })} title="Edit">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50" onClick={() => setDeleteDistTarget(d)} title="Delete">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Edit Distribution Dialog */}
+          <Dialog open={!!editDist} onOpenChange={(v) => { if (!v) setEditDist(null); }}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Edit Distribution</DialogTitle></DialogHeader>
+              {editDist && (
+                <form onSubmit={handleUpdateDist} className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Employee</Label><Input value={editDist.employee_name || ""} onChange={e => setEditDist({ ...editDist, employee_name: e.target.value })} /></div>
+                    <div><Label>Job Role</Label>
+                      <Select value={editDist.job_role} onValueChange={v => setEditDist({ ...editDist, job_role: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["Salesperson", "Designer", "Developer", "Account Manager", "Project Manager", "Lead Generator", "Content Writer", "Video Editor", "Photographer", "Partner", "Referrer", "Other"].map(r => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label>Allotted ₹</Label><Input type="number" min={0} value={editDist.allotted_amount ?? 0} onChange={e => setEditDist({ ...editDist, allotted_amount: e.target.value })} /></div>
+                    <div><Label>Status</Label>
+                      <Select value={editDist.status} onValueChange={(v: "Pending" | "Paid") => setEditDist({ ...editDist, status: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="Pending">Pending</SelectItem><SelectItem value="Paid">Paid</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div><Label>Paid Date</Label><Input type="date" value={editDist.paid_date || ""} onChange={e => setEditDist({ ...editDist, paid_date: e.target.value })} disabled={editDist.status !== "Paid"} /></div>
+                  </div>
+                  <div><Label>Notes</Label><Textarea rows={2} value={editDist.notes || ""} onChange={e => setEditDist({ ...editDist, notes: e.target.value })} /></div>
+                  <Button type="submit" className="w-full">Save Changes</Button>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
       </Tabs>
 
       <ConfirmDeleteDialog
@@ -1222,6 +1671,29 @@ const ProjectDetail = () => {
         onConfirm={executeDeleteSale}
         title="Delete Sale Entry?"
         description={`This will permanently delete the sale of ₹${Number(deleteSaleTarget?.amount || 0).toLocaleString()}${deleteSaleTarget?.customer?.customer_name ? ` to ${deleteSaleTarget.customer.customer_name}` : ""}. The product totals (revenue, commission, expenses, profit) will be recomputed. This action cannot be undone. Please type DELETE to confirm.`}
+      />
+      <ConfirmDeleteDialog
+        isOpen={!!deleteDistTarget}
+        onClose={() => setDeleteDistTarget(null)}
+        onConfirm={executeDeleteDist}
+        title="Delete Distribution?"
+        description={`This will permanently delete the ₹${Number(deleteDistTarget?.allotted_amount || 0).toLocaleString()} allocation to ${deleteDistTarget?.employee_name || "this employee"}. This action cannot be undone. Please type DELETE to confirm.`}
+      />
+
+      {/* ── Edit-confirmation gates (require typing EDIT) ── */}
+      <ConfirmEditDialog
+        open={!!editSaleGate}
+        onOpenChange={(v) => { if (!v) setEditSaleGate(null); }}
+        onConfirm={() => { if (editSaleGate) { setEditSale(editSaleGate); setEditSaleGate(null); } }}
+        title="Edit Sale Entry?"
+        description={`You're about to edit the sale of ₹${Number(editSaleGate?.amount || 0).toLocaleString()}${editSaleGate?.customer?.customer_name ? ` to ${editSaleGate.customer.customer_name}` : ""}. Changes will recompute commission, profit and project totals. Please type EDIT to confirm.`}
+      />
+      <ConfirmEditDialog
+        open={!!editDistGate}
+        onOpenChange={(v) => { if (!v) setEditDistGate(null); }}
+        onConfirm={() => { if (editDistGate) { setEditDist(editDistGate); setEditDistGate(null); } }}
+        title="Edit Distribution?"
+        description={`You're about to edit the ₹${Number(editDistGate?.allotted_amount || 0).toLocaleString()} allocation to ${editDistGate?.employee_name || "this employee"}. Please type EDIT to confirm.`}
       />
     </div>
   );
