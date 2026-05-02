@@ -29,14 +29,17 @@ BEGIN
 END $$;
 
 -- ── 4. Money / Job distribution per sale (Bill or project_sale) ─────
+-- Note: sale_id / employee_id FKs are added conditionally below (only if the
+-- referenced tables actually exist in this Supabase project). The core table
+-- only hard-depends on projects + quotations, which always exist.
 CREATE TABLE IF NOT EXISTS public.project_sale_distributions (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id      UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   -- Distribution can be linked to either a Bill (quotation) or a project_sale.
-  bill_id         UUID REFERENCES public.quotations(id)    ON DELETE CASCADE,
-  sale_id         UUID REFERENCES public.project_sales(id) ON DELETE CASCADE,
+  bill_id         UUID REFERENCES public.quotations(id) ON DELETE CASCADE,
+  sale_id         UUID,
   -- Who is being paid (can pick from employees or just type a name)
-  employee_id     UUID REFERENCES public.employees(id) ON DELETE SET NULL,
+  employee_id     UUID,
   employee_name   TEXT NOT NULL,
   -- What job they did for this sale (Designer, Salesperson, Account Manager, etc.)
   job_role        TEXT NOT NULL,
@@ -52,6 +55,28 @@ CREATE TABLE IF NOT EXISTS public.project_sale_distributions (
   -- Must link to either a bill or a sale, not neither
   CONSTRAINT chk_sale_or_bill CHECK (bill_id IS NOT NULL OR sale_id IS NOT NULL)
 );
+
+-- Add sale_id FK only if project_sales exists (older Supabase projects may not have it yet).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'project_sales')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_schema = 'public' AND constraint_name = 'project_sale_distributions_sale_id_fkey') THEN
+    EXECUTE 'ALTER TABLE public.project_sale_distributions
+             ADD CONSTRAINT project_sale_distributions_sale_id_fkey
+             FOREIGN KEY (sale_id) REFERENCES public.project_sales(id) ON DELETE CASCADE';
+  END IF;
+END $$;
+
+-- Add employee_id FK only if employees exists.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'employees')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_schema = 'public' AND constraint_name = 'project_sale_distributions_employee_id_fkey') THEN
+    EXECUTE 'ALTER TABLE public.project_sale_distributions
+             ADD CONSTRAINT project_sale_distributions_employee_id_fkey
+             FOREIGN KEY (employee_id) REFERENCES public.employees(id) ON DELETE SET NULL';
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_psd_project_id ON public.project_sale_distributions (project_id);
 CREATE INDEX IF NOT EXISTS idx_psd_bill_id    ON public.project_sale_distributions (bill_id);
