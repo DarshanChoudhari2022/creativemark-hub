@@ -32,4 +32,21 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Read device contacts for Broadcast Hub import (@capacitor-community/contacts) -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Android 11+ package visibility: declare the intents we query so
+         ACTION_VIEW for PDFs actually finds installed PDF viewers (Drive,
+         Adobe, Files, WPS, etc). Without this, FileOpener.openFile will
+         appear to do nothing on Android 11+ even if a PDF app is installed. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/pdf" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
 </manifest>

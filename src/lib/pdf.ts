@@ -3,19 +3,113 @@ import autoTable from "jspdf-autotable";
 import type { Quotation, Partner } from "@/types";
 
 // ── Mobile-safe PDF Save ──────────────────────────────────────
-// jsPDF's doc.save() silently fails on many mobile browsers/PWAs/WebViews.
-// This helper tries multiple strategies in order:
-//   1. File System Access API ("Save As" dialog — Chrome desktop/Android 86+)
-//   2. Anchor download with blob URL (works on most browsers)
-//   3. Open blob URL in new tab (mobile fallback for WebView)
-//   4. Data URI direct navigation (last resort)
+// jsPDF's doc.save() silently fails inside Capacitor WebViews because
+// Android WebView blocks anchor[download], blob:, and data: navigation
+// from triggering the system Download Manager.
+//
+// Strategy:
+//   - Capacitor native (APK / iOS): write the PDF via @capacitor/filesystem
+//     and OPEN it directly in the OS default PDF viewer via
+//     @capacitor-community/file-opener (ACTION_VIEW intent). The user can
+//     then print / save / share from inside the PDF viewer. If no PDF app
+//     is installed, fall back to the system Share sheet.
+//   - Desktop: File System Access API "Save As" dialog when available,
+//     otherwise a standard anchor[download].
+//   - Mobile web browser: anchor[download] + open blob in a new tab fallback.
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function savePDFMobile(doc: jsPDF, filename: string) {
   const blob = doc.output("blob");
-  const isCapacitor = !!(window as any).Capacitor;
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // Strategy 1: File System Access API — gives user a native "Save As" dialog
-  if (typeof window !== "undefined" && "showSaveFilePicker" in window && !isCapacitor) {
+  // Detect Capacitor native runtime (Android APK / iOS app)
+  let isNative = false;
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    isNative = Capacitor.isNativePlatform();
+  } catch {
+    isNative = false;
+  }
+
+  // ── Native (APK): Filesystem + FileOpener (→ opens in default PDF viewer) ──
+  if (isNative) {
+    let writtenUri: string | null = null;
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const base64 = await blobToBase64(blob);
+
+      // Write to Cache dir — no runtime permissions required, and the
+      // resulting file:// URI is shareable to other apps via FileProvider.
+      const written = await Filesystem.writeFile({
+        path: filename,
+        data: base64,
+        directory: Directory.Cache,
+        recursive: true,
+      });
+      writtenUri = written.uri;
+
+      // Best-effort copy to Documents so the file stays after cache purge
+      // and is visible from any file manager.
+      try {
+        await Filesystem.writeFile({
+          path: filename,
+          data: base64,
+          directory: Directory.Documents,
+          recursive: true,
+        });
+      } catch {
+        // Some devices/Android versions disallow Documents writes — ignore.
+      }
+    } catch (err: any) {
+      throw new Error(`Failed to save PDF on device: ${err?.message || err}`);
+    }
+
+    // 1) Try to OPEN the PDF directly in the user's default PDF viewer.
+    //    This is what the user actually wants — the file pops up full-screen
+    //    and they can tap Save / Print / Share from the viewer itself.
+    try {
+      const { FileOpener } = await import("@capacitor-community/file-opener");
+      await FileOpener.open({
+        filePath: writtenUri!,
+        contentType: "application/pdf",
+        openWithDefault: true,
+      });
+      return;
+    } catch (openErr: any) {
+      // Could be: no PDF viewer installed, or plugin not yet synced into APK.
+      // Fall through to Share sheet so the flow doesn't dead-end.
+      console.warn("[pdf] FileOpener failed, falling back to Share:", openErr?.message || openErr);
+    }
+
+    // 2) Fallback: system Share/Save sheet.
+    try {
+      const { Share } = await import("@capacitor/share");
+      await Share.share({
+        title: filename,
+        text: filename,
+        url: writtenUri!,
+        dialogTitle: "Open or save PDF",
+      });
+      return;
+    } catch (shareErr: any) {
+      throw new Error(
+        `PDF saved to device but could not be opened automatically. Please open a file manager and look for "${filename}" in Documents. (${shareErr?.message || shareErr})`
+      );
+    }
+  }
+
+  // ── Desktop: File System Access API (Chrome/Edge) ───────────
+  if (typeof window !== "undefined" && "showSaveFilePicker" in window) {
     try {
       const handle = await (window as any).showSaveFilePicker({
         suggestedName: filename,
@@ -29,71 +123,37 @@ async function savePDFMobile(doc: jsPDF, filename: string) {
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
-      return; // success
+      return;
     } catch (e: any) {
-      // User cancelled or API not supported — fall through
-      if (e?.name === "AbortError") return;
+      if (e?.name === "AbortError") return; // user cancelled
+      // fall through to anchor download
     }
   }
 
-  // Strategy 2: Anchor download — works on desktop and many mobile browsers
+  // ── Web fallback: anchor[download] (+ new-tab fallback for mobile web) ──
   const url = URL.createObjectURL(blob);
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  if (isCapacitor || isMobile) {
-    // In Capacitor WebView / mobile browsers, anchor download is unreliable.
-    // Use a combination approach:
-
-    // 2a: Try anchor download with target="_blank" (works on some Android WebViews)
-    try {
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // Give the download a moment to start, then try opening in new tab
-      // as a fallback — this ensures at least viewing works
-      await new Promise(r => setTimeout(r, 800));
-
-      // 2b: Also open blob URL in new tab so user can view/share
-      // On Android Chrome-based WebView this opens the PDF viewer
-      const win = window.open(url, "_blank");
-      if (!win) {
-        // 2c: Last resort — navigate directly to blob URL
-        window.location.href = url;
-      }
-    } catch {
-      // 2d: Data URI fallback — convert blob to base64 and navigate
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        window.location.href = dataUrl;
-      };
-      reader.readAsDataURL(blob);
-    }
-
-    // Cleanup blob URL after delay
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    return;
-  }
-
-  // Desktop: standard anchor download
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.rel = "noopener";
+  if (isMobile) link.target = "_blank";
   link.style.display = "none";
   document.body.appendChild(link);
   link.click();
+  document.body.removeChild(link);
 
-  // Cleanup after a delay
-  setTimeout(() => {
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, 10000);
+  if (isMobile) {
+    // Some mobile browsers ignore download — open in a new tab so the
+    // user can at least view/save the PDF from the viewer.
+    setTimeout(() => {
+      const win = window.open(url, "_blank");
+      if (!win) window.location.href = url;
+    }, 400);
+  }
+
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 // ── Brand Colors ──────────────────────────────────────────────

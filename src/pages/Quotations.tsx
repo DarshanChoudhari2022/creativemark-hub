@@ -339,8 +339,12 @@ const Quotations = () => {
       upiId: q.upi_id,
       amountPaid: q.amount_paid || 0,
     };
-    await generateQuotationPDF(pdfData as any);
-    toast.success("PDF downloaded");
+    try {
+      await generateQuotationPDF(pdfData as any);
+      toast.success("PDF ready");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not save PDF");
+    }
   };
 
   const updateStatus = async (q: any, newStatus: string) => {

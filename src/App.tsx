@@ -21,6 +21,7 @@ import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import Financials from "./pages/Financials";
 import Notifications from "./pages/Notifications";
+import BroadcastHub from "./pages/BroadcastHub";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -62,6 +63,7 @@ const App = () => (
                 <Route path="/projects/:id" element={<ProjectDetail />} />
                 <Route path="/financials" element={<Financials />} />
                 <Route path="/notifications" element={<Notifications />} />
+                <Route path="/broadcast" element={<BroadcastHub />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>

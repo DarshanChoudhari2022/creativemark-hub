@@ -316,8 +316,12 @@ const Partners = () => {
                 <TableCell><Badge variant="outline" className={`text-[11px] ${p.status === "Active" ? "bg-green-100 text-green-700 border-green-200" : "bg-gray-100 text-gray-500"}`}>{p.status}</Badge></TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={async () => {
-                    await generatePartnerAgreementPDF(p);
-                    toast.success("Agreement PDF downloaded");
+                    try {
+                      await generatePartnerAgreementPDF(p);
+                      toast.success("Agreement PDF ready");
+                    } catch (err: any) {
+                      toast.error(err?.message || "Could not save PDF");
+                    }
                   }}>
                     <FileText className="h-3.5 w-3.5" /> Agreement
                   </Button>
@@ -457,8 +461,12 @@ const Partners = () => {
 
             <DialogFooter className="mt-4">
               <Button variant="outline" onClick={async () => {
-                await generatePartnerAgreementPDF(detailPartner);
-                toast.success("Agreement PDF downloaded");
+                try {
+                  await generatePartnerAgreementPDF(detailPartner);
+                  toast.success("Agreement PDF ready");
+                } catch (err: any) {
+                  toast.error(err?.message || "Could not save PDF");
+                }
               }}>
                 <Download className="h-4 w-4" /> Download Agreement
               </Button>

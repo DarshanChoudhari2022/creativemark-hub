@@ -91,3 +91,39 @@ export function ConfirmDeleteDialog({
     </Dialog>
   );
 }
+
+// ── Legacy default-export adapter ─────────────────────────────
+// Some pages still use the older API: { isOpen, onClose, entityName }.
+// Forward those to the canonical named-export component.
+interface LegacyConfirmDeleteDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+  entityName?: string;
+  title?: string;
+  description?: string;
+}
+
+export default function ConfirmDeleteDialogDefault({
+  isOpen,
+  onClose,
+  onConfirm,
+  entityName,
+  title,
+  description,
+}: LegacyConfirmDeleteDialogProps) {
+  return (
+    <ConfirmDeleteDialog
+      open={isOpen}
+      onOpenChange={(v) => { if (!v) onClose(); }}
+      onConfirm={onConfirm}
+      title={title ?? (entityName ? `Delete ${entityName}?` : undefined)}
+      description={
+        description ??
+        (entityName
+          ? `This will permanently delete this ${entityName}. This action cannot be undone. Please type DELETE to confirm.`
+          : undefined)
+      }
+    />
+  );
+}

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader, PaymentBadge } from "@/components/shared";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { supabase } from "@/lib/supabase";
 import type { Client } from "@/types";
 import { formatINR, formatDateDDMMYYYY, waLink, smsLink } from "@/lib/format";
@@ -58,6 +59,7 @@ const ClientDetail = () => {
   const [editPayOpen, setEditPayOpen] = useState(false);
   const [editPayId, setEditPayId] = useState<string | null>(null);
   const [editPayForm, setEditPayForm] = useState({ invoiceNo: "", date: "", amount: 0, status: "Paid", notes: "", paymentMode: "UPI" as string, chequeNo: "", transactionId: "" });
+  const [deletePayTarget, setDeletePayTarget] = useState<any | null>(null);
 
   const fetchClient = useCallback(async () => {
     if (!id) return;
@@ -391,6 +393,30 @@ const ClientDetail = () => {
     toast.success("Payment updated");
     setEditPayOpen(false);
     setEditPayId(null);
+    fetchClient();
+  };
+
+  const handleDeletePayment = async (): Promise<void> => {
+    if (!deletePayTarget?.id) return;
+    const { error } = await supabase.from("payment_history").delete().eq("id", deletePayTarget.id);
+    if (error) {
+      toast.error("Delete failed: " + error.message);
+      return;
+    }
+
+    // Recompute outstanding from remaining payments and keep clients table in sync.
+    const remainingPaid = (client?.paymentHistory || [])
+      .filter((p: any) => p.id !== deletePayTarget.id)
+      .reduce((s: number, p: any) => s + (p.amount || 0), 0);
+    const billed = client?.totalBilled || 0;
+    const newOutstanding = billed > 0 ? Math.max(0, billed - remainingPaid) : (client?.outstanding || 0) + Number(deletePayTarget.amount || 0);
+    await supabase.from("clients").update({
+      outstanding: newOutstanding,
+      payment_status: newOutstanding > 0 ? "Overdue" : "Paid",
+    }).eq("id", id);
+
+    toast.success("Payment deleted");
+    setDeletePayTarget(null);
     fetchClient();
   };
 
@@ -917,6 +943,7 @@ const ClientDetail = () => {
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openEditPayment(entry)}><Edit2 className="h-3 w-3" /></Button>
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleGenerateReceipt(entry)}><Download className="h-3 w-3 mr-1" />Receipt</Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => setDeletePayTarget(entry)} title="Delete payment"><Trash2 className="h-3.5 w-3.5" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -928,6 +955,14 @@ const ClientDetail = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ConfirmDeleteDialog
+        open={!!deletePayTarget}
+        onOpenChange={(v) => { if (!v) setDeletePayTarget(null); }}
+        onConfirm={handleDeletePayment}
+        title="Delete Payment Entry?"
+        description={`This will permanently delete the payment ${deletePayTarget?.invoice_no ? `(Invoice ${deletePayTarget.invoice_no})` : ""} of ${deletePayTarget ? formatINR(deletePayTarget.amount || 0) : ""}. The client's outstanding balance will be recomputed. This action cannot be undone. Please type DELETE to confirm.`}
+      />
     </div>
   );
 };

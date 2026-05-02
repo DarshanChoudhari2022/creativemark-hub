@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Card } from "@/components/ui/card";
-import { Users, Target, Wallet, UserCog, Handshake, TrendingUp, Calendar, AlertTriangle, Clock, ArrowUpRight, MessageSquare, Zap, Bell } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, CartesianGrid } from "recharts";
+import { Users, Target, Wallet, UserCog, Handshake, TrendingUp, Calendar, AlertTriangle, Clock, ArrowUpRight, MessageSquare, Zap, Bell, PiggyBank, Package, ShoppingCart } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, CartesianGrid, AreaChart, Area } from "recharts";
 import { WA_TEMPLATES } from "@/data/recoveries";
 import { formatINR, formatINRCompact, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { PageHeader } from "@/components/shared";
@@ -48,12 +48,14 @@ const Dashboard = () => {
   const [tasks, setTasks] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [productSales, setProductSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
-      const [cRes, lRes, eRes, qRes, pRes, evRes, tRes, payRes, expRes] = await Promise.all([
+      const [cRes, lRes, eRes, qRes, pRes, evRes, tRes, payRes, expRes, projRes, salesRes] = await Promise.all([
         supabase.from("clients").select("*"),
         supabase.from("leads").select("*, employees!leads_assigned_to_fkey(name)"),
         supabase.from("employees").select("*"),
@@ -63,6 +65,8 @@ const Dashboard = () => {
         supabase.from("lead_tasks").select("*, leads(name, organization)"),
         supabase.from("payment_history").select("*"),
         supabase.from("expenses").select("*"),
+        supabase.from("projects").select("id, title, project_type, status").then(r => r, () => ({ data: [] as any[], error: null as any })),
+        supabase.from("project_sales").select("project_id, amount, extra_charges, sale_expenses, commission_amount, sale_date").then(r => r, () => ({ data: [] as any[], error: null as any })),
       ]);
       setClients(cRes.data || []);
       setLeads(lRes.data || []);
@@ -73,6 +77,8 @@ const Dashboard = () => {
       setTasks(tRes.data || []);
       setPayments(payRes.data || []);
       setExpenses(expRes.data || []);
+      setProjects(projRes.data || []);
+      setProductSales(salesRes.data || []);
       setLoading(false);
     };
     fetchAll();
@@ -124,6 +130,76 @@ const Dashboard = () => {
     });
     return Object.entries(months).map(([month, data]) => ({ month, ...data }));
   }, [allBills]);
+
+  // ── Product (Project) sales aggregations ────────────────────────
+  const productPerformance = useMemo(() => {
+    const map: Record<string, { id: string; name: string; type: string; salesCount: number; revenue: number; extra: number; commission: number; expenses: number; netProfit: number }> = {};
+    (projects || []).forEach((p: any) => {
+      map[p.id] = { id: p.id, name: p.title || "Untitled", type: p.project_type || "Project", salesCount: 0, revenue: 0, extra: 0, commission: 0, expenses: 0, netProfit: 0 };
+    });
+    (productSales || []).forEach((s: any) => {
+      const pid = s.project_id;
+      if (!pid || !map[pid]) return;
+      const amt = Number(s.amount || 0);
+      const ex = Number(s.extra_charges || 0);
+      const cm = Number(s.commission_amount || 0);
+      const xp = Number(s.sale_expenses || 0);
+      map[pid].salesCount += 1;
+      map[pid].revenue += amt;
+      map[pid].extra += ex;
+      map[pid].commission += cm;
+      map[pid].expenses += xp;
+      map[pid].netProfit += amt + ex - cm - xp;
+    });
+    return Object.values(map)
+      .filter(p => p.salesCount > 0 || p.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [projects, productSales]);
+
+  const totalProductRevenue = productPerformance.reduce((s, p) => s + p.revenue, 0);
+  const totalProductProfit = productPerformance.reduce((s, p) => s + p.netProfit, 0);
+
+  // ── Monthly Profit chart (last 6 months) ────────────────────────
+  // Profit = product-sale revenue + extras − commission − sale-expenses − general expenses
+  const monthlyProfitData = useMemo(() => {
+    const months: Record<string, { key: string; label: string; revenue: number; expenses: number; profit: number }> = {};
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleString("default", { month: "short" });
+      months[key] = { key, label, revenue: 0, expenses: 0, profit: 0 };
+    }
+    (productSales || []).forEach((s: any) => {
+      if (!s.sale_date) return;
+      const d = new Date(s.sale_date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!months[key]) return;
+      const amt = Number(s.amount || 0);
+      const ex = Number(s.extra_charges || 0);
+      const cm = Number(s.commission_amount || 0);
+      const xp = Number(s.sale_expenses || 0);
+      months[key].revenue += amt + ex;
+      months[key].expenses += cm + xp;
+      months[key].profit += amt + ex - cm - xp;
+    });
+    (expenses || []).forEach((e: any) => {
+      if (!e.date) return;
+      const d = new Date(e.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!months[key]) return;
+      const amt = Number(e.amount || 0);
+      months[key].expenses += amt;
+      months[key].profit -= amt;
+    });
+    return Object.values(months);
+  }, [productSales, expenses]);
+
+  const netProfitThisMonth = monthlyProfitData[monthlyProfitData.length - 1]?.profit || 0;
+  const netProfitPrevMonth = monthlyProfitData[monthlyProfitData.length - 2]?.profit || 0;
+  const profitTrendPct = netProfitPrevMonth !== 0
+    ? ((netProfitThisMonth - netProfitPrevMonth) / Math.abs(netProfitPrevMonth)) * 100
+    : (netProfitThisMonth > 0 ? 100 : 0);
 
   // ── Lead pipeline ──
   const leadsByStage = useMemo(() => {
@@ -350,6 +426,134 @@ const Dashboard = () => {
               No leads yet — add your first lead
             </div>
           )}
+        </Card>
+      </div>
+
+      {/* ── Profit & Product Performance ──────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        {/* Monthly Profit chart (modern area chart) */}
+        <Card className="lg:col-span-2 p-5 relative overflow-hidden bg-gradient-to-br from-emerald-50 via-card to-card dark:from-emerald-950/20 dark:via-card dark:to-card border-emerald-500/20">
+          <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+          <div className="flex items-start justify-between mb-4 relative">
+            <div className="flex items-center gap-3">
+              <div className={`h-11 w-11 rounded-xl flex items-center justify-center ${netProfitThisMonth >= 0 ? "bg-emerald-500/15 text-emerald-600" : "bg-red-500/15 text-red-600"}`}>
+                <PiggyBank className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">Monthly Profit</h3>
+                <p className="text-xs text-muted-foreground">Last 6 months · revenue − commission − expenses</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">This month</div>
+              <div className={`text-2xl font-extrabold ${netProfitThisMonth >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                <Masked placeholder="₹•••••">{formatINRCompact(netProfitThisMonth)}</Masked>
+              </div>
+              {netProfitPrevMonth !== 0 && (
+                <div className={`inline-flex items-center gap-0.5 text-[11px] font-bold ${profitTrendPct >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                  <ArrowUpRight className={`h-3 w-3 ${profitTrendPct < 0 ? "rotate-90" : ""}`} />
+                  {profitTrendPct >= 0 ? "+" : ""}{profitTrendPct.toFixed(1)}% vs prev
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="h-64 relative">
+            {monthlyProfitData.some(m => m.revenue > 0 || m.expenses > 0 || m.profit !== 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={monthlyProfitData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10B981" stopOpacity={0.45} />
+                      <stop offset="100%" stopColor="#10B981" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.25} />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                  <Tooltip
+                    cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}
+                    formatter={(v: number, name: string) => [formatINR(v), name === "profit" ? "Net Profit" : name === "revenue" ? "Revenue" : "Expenses"]}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} fill="url(#revGrad)" />
+                  <Area type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2.5} fill="url(#profitGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm">
+                <PiggyBank className="h-10 w-10 mb-2 opacity-30" />
+                <span>No product sales recorded yet — record sales from any project to see profit trends</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 flex items-center gap-4 text-[11px]">
+            <div className="flex items-center gap-1.5"><span className="h-2.5 w-6 rounded-sm bg-emerald-500" /> Net Profit</div>
+            <div className="flex items-center gap-1.5"><span className="h-2.5 w-6 rounded-sm bg-blue-500" /> Revenue</div>
+          </div>
+        </Card>
+
+        {/* Product Performance Leaderboard */}
+        <Card className="p-5 relative overflow-hidden bg-gradient-to-br from-indigo-50 via-card to-card dark:from-indigo-950/20 dark:via-card dark:to-card border-indigo-500/20">
+          <div className="absolute -bottom-16 -right-16 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+          <div className="flex items-center justify-between mb-3 relative">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-lg bg-indigo-500/15 text-indigo-600 flex items-center justify-center"><Package className="h-4 w-4" /></div>
+              <div>
+                <h3 className="font-bold text-base">Product Performance</h3>
+                <p className="text-[11px] text-muted-foreground">By revenue · all-time</p>
+              </div>
+            </div>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => navigate("/projects")}>View all</Button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-3 relative">
+            <div className="rounded-lg bg-card/50 border border-border/40 p-2.5">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Total Revenue</div>
+              <div className="text-base font-extrabold text-blue-600 mt-0.5"><Masked placeholder="₹•••••">{formatINRCompact(totalProductRevenue)}</Masked></div>
+            </div>
+            <div className="rounded-lg bg-card/50 border border-border/40 p-2.5">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Total Profit</div>
+              <div className={`text-base font-extrabold mt-0.5 ${totalProductProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}><Masked placeholder="₹•••••">{formatINRCompact(totalProductProfit)}</Masked></div>
+            </div>
+          </div>
+          <div className="space-y-2 relative max-h-72 overflow-y-auto">
+            {productPerformance.length === 0 ? (
+              <div className="h-32 flex flex-col items-center justify-center text-muted-foreground text-xs">
+                <ShoppingCart className="h-8 w-8 mb-2 opacity-30" />
+                <span>No sales yet</span>
+              </div>
+            ) : (
+              productPerformance.slice(0, 6).map((p, idx) => {
+                const maxRev = productPerformance[0].revenue || 1;
+                const pct = (p.revenue / maxRev) * 100;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => navigate(`/projects/${p.id}`)}
+                    className="group p-2.5 rounded-lg border border-border/40 hover:border-indigo-500/40 hover:bg-indigo-500/5 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold w-5 h-5 rounded bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0">{idx + 1}</span>
+                        <span className="text-sm font-semibold truncate group-hover:text-indigo-600 transition-colors">{p.name}</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">{p.salesCount} sales</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-1.5">
+                      <div className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-muted-foreground">Revenue: <span className="font-bold text-foreground"><Masked placeholder="₹•••">{formatINRCompact(p.revenue)}</Masked></span></span>
+                      <span className={`font-bold ${p.netProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>Profit: <Masked placeholder="₹•••">{formatINRCompact(p.netProfit)}</Masked></span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </Card>
       </div>
 
