@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3, Zap, Briefcase, Banknote, Bell, MapPin, Megaphone, Sparkles } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3, Zap, Briefcase, Banknote, Bell, MapPin, Megaphone, Sparkles, ShieldCheck, Clock } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar,
@@ -12,6 +12,8 @@ const items = [
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Employees", url: "/employees", icon: UserCog },
   { title: "Live Tracking", url: "/live-tracking", icon: MapPin },
+  { title: "Verification", url: "/verification", icon: ShieldCheck },
+  { title: "Shifts", url: "/shifts", icon: Clock },
   { title: "Leads", url: "/leads", icon: Target },
   { title: "Projects", url: "/projects", icon: Briefcase },
   { title: "Quotations & Bills", url: "/quotations", icon: FileText },

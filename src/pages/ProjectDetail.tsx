@@ -265,6 +265,17 @@ const ProjectDetail = () => {
     notes: "",
   });
 
+  // ── Expense dialog state ──
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [newExpense, setNewExpense] = useState({
+    title: "",
+    amount: "",
+    category: "Other" as "Salary" | "Rent" | "Software" | "Marketing" | "Hardware" | "Travel" | "Other",
+    date: new Date().toISOString().slice(0, 10),
+    description: "",
+  });
+  const [expenseToDelete, setExpenseToDelete] = useState<any | null>(null);
+
   // Mutations
   const createTaskMutation = useMutation({
     mutationFn: async (task: any) => {
@@ -331,8 +342,8 @@ const ProjectDetail = () => {
     },
   });
 
-  if (isProjectLoading) return <div className="p-8 text-center">Loading project...</div>;
-  if (!project) return <div className="p-8 text-center text-red-500">Project not found</div>;
+  if (isProjectLoading) return <div className="p-4 md:p-8 text-center">Loading project...</div>;
+  if (!project) return <div className="p-4 md:p-8 text-center text-red-500">Project not found</div>;
 
   // Commission calculations + per-product profitability
   const liveCustomers = projectCustomers?.filter(c => c.subscription_status === "Active") || [];
@@ -499,6 +510,37 @@ const ProjectDetail = () => {
     toast({ title: "Distribution deleted" });
   };
 
+  // ── Expense handlers ──
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newExpense.title || !newExpense.amount) {
+      toast({ title: "Missing Fields", description: "Please fill in all required fields.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("expenses").insert([{
+      title: newExpense.title,
+      amount: parseFloat(newExpense.amount) || 0,
+      category: newExpense.category,
+      date: newExpense.date,
+      description: newExpense.description || null,
+      project_id: id,
+    }]);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    queryClient.invalidateQueries({ queryKey: ["project_expenses", id] });
+    setIsAddExpenseOpen(false);
+    setNewExpense({ title: "", amount: "", category: "Other", date: new Date().toISOString().slice(0, 10), description: "" });
+    toast({ title: "Expense added" });
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!expenseToDelete?.id) return;
+    const { error } = await supabase.from("expenses").delete().eq("id", expenseToDelete.id);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    queryClient.invalidateQueries({ queryKey: ["project_expenses", id] });
+    setExpenseToDelete(null);
+    toast({ title: "Expense deleted" });
+  };
+
   // Distribution aggregates
   const totalDistributed = (distributions || []).reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
   const totalDistPending = (distributions || []).filter((d: any) => d.status === "Pending").reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
@@ -608,7 +650,7 @@ const ProjectDetail = () => {
   };
 
   return (
-    <div className="p-8 space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 animate-in fade-in duration-500">
       {/* Breadcrumbs & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -791,8 +833,8 @@ const ProjectDetail = () => {
 
       {/* Kanban Board */}
       <Tabs defaultValue="kanban" className="space-y-6">
-        <div className="flex items-center justify-between">
-          <TabsList className="bg-background/50 border border-border/50">
+        <div className="flex items-center justify-between overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="bg-background/50 border border-border/50 flex-nowrap min-w-full md:min-w-0">
             <TabsTrigger value="kanban" className="gap-2">
               <Trello className="h-4 w-4" />
               Kanban
@@ -807,11 +849,18 @@ const ProjectDetail = () => {
             </TabsTrigger>
             <TabsTrigger value="sales" className="gap-2">
               <ShoppingCart className="h-4 w-4" />
-              Sales & Commission
+              Sales
+            </TabsTrigger>
+            <TabsTrigger value="expenses" className="gap-2">
+              <Receipt className="h-4 w-4" />
+              Expenses
+              {projectExpenses && projectExpenses.length > 0 && (
+                <Badge variant="secondary" className="h-4 px-1 text-[9px]">{projectExpenses.length}</Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="distribution" className="gap-2">
               <Coins className="h-4 w-4" />
-              Money Distribution
+              Distribution
               {distributions && distributions.length > 0 && (
                 <Badge variant="secondary" className="h-4 px-1 text-[9px]">{distributions.length}</Badge>
               )}
@@ -820,7 +869,7 @@ const ProjectDetail = () => {
         </div>
 
         <TabsContent value="kanban">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 h-[calc(100vh-400px)] min-h-[500px]">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[300px] md:h-[calc(100vh-400px)] md:min-h-[500px]">
             {kanbanColumns.map((column) => (
               <div key={column} className="flex flex-col h-full bg-card/20 rounded-xl border border-border/50 overflow-hidden">
                 <div className={`p-3 border-b flex items-center justify-between ${getColumnColor(column)}`}>
@@ -905,8 +954,8 @@ const ProjectDetail = () => {
         </TabsContent>
 
         <TabsContent value="list">
-          <Card className="bg-card/40 backdrop-blur-md border-border/50">
-            <CardContent className="p-0">
+          <Card className="bg-card/40 backdrop-blur-md border-border/50 overflow-x-auto">
+            <CardContent className="p-0 min-w-[600px]">
               <table className="w-full text-sm text-left">
                 <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-widest border-b border-border/50">
                   <tr>
@@ -1785,6 +1834,106 @@ const ProjectDetail = () => {
             </DialogContent>
           </Dialog>
         </TabsContent>
+
+        {/* ═══ Expenses Tab ═══════════════════════════ */}
+        <TabsContent value="expenses">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Project Expenses</h3>
+                <p className="text-sm text-muted-foreground">Track costs tied to this project.</p>
+              </div>
+              <Dialog open={isAddExpenseOpen} onOpenChange={setIsAddExpenseOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-1">
+                    <Plus className="h-3 w-3" /> Log Expense
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Log Project Expense</DialogTitle></DialogHeader>
+                  <form onSubmit={handleAddExpense} className="space-y-3 pt-2">
+                    <div className="space-y-2">
+                      <Label>Title *</Label>
+                      <Input value={newExpense.title} onChange={e => setNewExpense({ ...newExpense, title: e.target.value })} placeholder="e.g. Printing cost, vendor payment" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Amount (₹) *</Label>
+                        <Input type="number" value={newExpense.amount} onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} placeholder="0" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Category</Label>
+                        <Select value={newExpense.category} onValueChange={v => setNewExpense({ ...newExpense, category: v as any })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Salary">Salary</SelectItem>
+                            <SelectItem value="Rent">Rent</SelectItem>
+                            <SelectItem value="Software">Software</SelectItem>
+                            <SelectItem value="Marketing">Marketing</SelectItem>
+                            <SelectItem value="Hardware">Hardware</SelectItem>
+                            <SelectItem value="Travel">Travel</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Date</Label>
+                      <Input type="date" value={newExpense.date} onChange={e => setNewExpense({ ...newExpense, date: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea rows={2} value={newExpense.description} onChange={e => setNewExpense({ ...newExpense, description: e.target.value })} placeholder="Optional note..." />
+                    </div>
+                    <Button type="submit" className="w-full">Save Expense</Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <Card className="bg-card/40 backdrop-blur-md border-border/50">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="text-[10px] uppercase">
+                        <TableHead>Expense</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-right w-20">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(projectExpenses || []).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No expenses yet. Click <span className="font-semibold">Log Expense</span> to record costs.
+                          </TableCell>
+                        </TableRow>
+                      ) : (projectExpenses || []).map((exp: any) => (
+                        <TableRow key={exp.id} className="hover:bg-primary/5">
+                          <TableCell>
+                            <div className="font-medium text-sm">{exp.title}</div>
+                            {exp.description && <div className="text-[10px] text-muted-foreground max-w-[200px] truncate">{exp.description}</div>}
+                          </TableCell>
+                          <TableCell><Badge variant="outline" className="text-[10px]">{exp.category}</Badge></TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{exp.date ? format(new Date(exp.date), "MMM d, yyyy") : "—"}</TableCell>
+                          <TableCell className="text-right font-bold text-red-500 whitespace-nowrap">₹{Number(exp.amount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50" onClick={() => setExpenseToDelete(exp)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
 
       <ConfirmDeleteDialog
@@ -1817,6 +1966,14 @@ const ProjectDetail = () => {
         onConfirm={executeDeleteDist}
         title="Delete Distribution?"
         description={`This will permanently delete the ₹${Number(deleteDistTarget?.allotted_amount || 0).toLocaleString()} allocation to ${deleteDistTarget?.employee_name || "this employee"}. This action cannot be undone. Please type DELETE to confirm.`}
+      />
+      <ConfirmDeleteDialog
+        isOpen={!!expenseToDelete}
+        onClose={() => setExpenseToDelete(null)}
+        onConfirm={handleDeleteExpense}
+        entityName="expense"
+        title="Delete Expense?"
+        description={`This will permanently delete the expense "${expenseToDelete?.title || ""}" of ₹${Number(expenseToDelete?.amount || 0).toLocaleString()}. This action cannot be undone. Please type DELETE to confirm.`}
       />
 
       {/* ── Edit-confirmation gates (require typing EDIT) ── */}

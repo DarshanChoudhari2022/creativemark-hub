@@ -6,6 +6,7 @@ import { WA_TEMPLATES } from "@/data/recoveries";
 import { formatINR, formatINRCompact, formatDateDDMMYYYY, waLink } from "@/lib/format";
 import { PageHeader } from "@/components/shared";
 import { Masked, useMask } from "@/components/Masked";
+import { FieldTeamWidget } from "@/components/FieldTeamWidget";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -355,6 +356,11 @@ const Dashboard = () => {
             onClick={() => navigate(k.nav)}
           />
         ))}
+      </div>
+
+      {/* Field Team overview — live tracking + verification + fraud watch */}
+      <div className="mb-6">
+        <FieldTeamWidget />
       </div>
 
       {/* Charts Row */}

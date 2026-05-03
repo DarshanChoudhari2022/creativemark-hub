@@ -181,14 +181,39 @@ const LeadHunter = () => {
     setScraping(true);
     try {
       toast.info(`Looking up "${city}"…`);
-      const geo = await geocodeCity(city.trim());
+      let geo;
+      try {
+        geo = await geocodeCity(city.trim());
+      } catch (geoErr: any) {
+        console.error("[lead-hunter] geocode error:", geoErr);
+        toast.error(
+          geoErr?.message?.includes("Failed to fetch")
+            ? "Map lookup failed: check your internet connection and retry."
+            : `Map lookup failed: ${geoErr?.message || "unknown error"}`
+        );
+        return;
+      }
       if (!geo) { toast.error(`Could not find "${city}" on the map.`); return; }
 
       toast.info(`Scanning ${category.label.toLowerCase()} within ${RADIUS_OPTIONS.find(r => r.value === radius)?.label} of ${geo.display_name.split(",")[0]}…`);
 
-      const scraped = await scrapeLeads({
-        category, lat: geo.lat, lon: geo.lon, radiusMeters: radius, limit: 200,
-      });
+      let scraped;
+      try {
+        scraped = await scrapeLeads({
+          category, lat: geo.lat, lon: geo.lon, radiusMeters: radius, limit: 200,
+        });
+      } catch (scrapeErr: any) {
+        console.error("[lead-hunter] scrape error:", scrapeErr);
+        const m = scrapeErr?.message || "";
+        if (m.includes("429") || m.includes("busy") || m.includes("504")) {
+          toast.error("Lead server is busy. Please wait 30 seconds and retry.");
+        } else if (m.includes("Failed to fetch")) {
+          toast.error("Scan failed: check your internet connection and retry.");
+        } else {
+          toast.error(`Scan failed: ${m || "unknown error"}`);
+        }
+        return;
+      }
 
       if (scraped.length === 0) {
         toast.warning("No businesses found. Try a wider radius or a different category.");

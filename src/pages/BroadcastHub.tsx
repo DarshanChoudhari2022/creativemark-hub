@@ -590,16 +590,36 @@ function UploadPanel({ onImported, userId }: { onImported: () => void; userId?: 
       // row aborts the whole batch and saves zero rows. Use upsert with
       // ignoreDuplicates so existing contacts are skipped silently and the rest
       // are saved. The unique index is (created_by, phone) WHERE phone IS NOT NULL.
-      const { data: saved, error } = await supabase
-        .from("broadcast_contacts")
-        .upsert(rows, { onConflict: "created_by,phone", ignoreDuplicates: true })
-        .select("id");
+      // Because the index is partial (excludes NULL phones), we must upsert
+      // phone-rows and insert no-phone rows separately.
+      const rowsWithPhone = rows.filter(r => r.phone != null);
+      const rowsWithoutPhone = rows.filter(r => r.phone == null);
+
+      const saved: any[] = [];
+      let error: any = null;
+
+      if (rowsWithPhone.length > 0) {
+        const { data: s, error: e } = await supabase
+          .from("broadcast_contacts")
+          .upsert(rowsWithPhone, { onConflict: "created_by,phone", ignoreDuplicates: true })
+          .select("id");
+        if (e) error = e;
+        else saved.push(...(s || []));
+      }
+      if (!error && rowsWithoutPhone.length > 0) {
+        const { data: s, error: e } = await supabase
+          .from("broadcast_contacts")
+          .insert(rowsWithoutPhone)
+          .select("id");
+        if (e) error = e;
+        else saved.push(...(s || []));
+      }
 
       if (error) {
         console.error("[broadcast] CSV upload error:", error);
         toast.error(`Upload failed: ${error.message}`);
       } else {
-        const savedCount = saved?.length || 0;
+        const savedCount = saved.length;
         const dupCount = parsed.length - savedCount;
         if (savedCount === 0) {
           toast.info(`No new contacts — all ${parsed.length} already exist.`);
@@ -693,16 +713,36 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
       // (re-imports, numbers shared across contacts). A vanilla .insert() would
       // see one conflict and abort the whole transaction, saving zero rows
       // while showing a misleading 'duplicate' success toast.
-      const { data: saved, error } = await supabase
-        .from("broadcast_contacts")
-        .upsert(rows, { onConflict: "created_by,phone", ignoreDuplicates: true })
-        .select("id");
+      // Split null-phone rows because the partial unique index (WHERE phone IS NOT NULL)
+      // cannot serve as an ON CONFLICT target for NULL values.
+      const rowsWithPhone = rows.filter(r => r.phone != null);
+      const rowsWithoutPhone = rows.filter(r => r.phone == null);
+
+      const saved: any[] = [];
+      let error: any = null;
+
+      if (rowsWithPhone.length > 0) {
+        const { data: s, error: e } = await supabase
+          .from("broadcast_contacts")
+          .upsert(rowsWithPhone, { onConflict: "created_by,phone", ignoreDuplicates: true })
+          .select("id");
+        if (e) error = e;
+        else saved.push(...(s || []));
+      }
+      if (!error && rowsWithoutPhone.length > 0) {
+        const { data: s, error: e } = await supabase
+          .from("broadcast_contacts")
+          .insert(rowsWithoutPhone)
+          .select("id");
+        if (e) error = e;
+        else saved.push(...(s || []));
+      }
 
       if (error) {
         console.error("[broadcast] Phone import save error:", error);
         toast.error(`Save failed: ${error.message}`);
       } else {
-        const savedCount = saved?.length || 0;
+        const savedCount = saved.length;
         const dupCount = contacts.length - savedCount;
         if (savedCount === 0) {
           toast.info(`No new contacts — all ${contacts.length} already imported.`);
