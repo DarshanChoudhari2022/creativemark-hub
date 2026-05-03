@@ -22,12 +22,13 @@ const items = [
   { title: "Partners", url: "/partners", icon: Handshake },
   { title: "Smart Lead Hub", url: "/smart-leads", icon: Zap },
   { title: "Broadcast", url: "/broadcast", icon: Megaphone },
+  { title: "Cash Custody", url: "/cash-custody", icon: Wallet },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 import { useAuth } from "@/contexts/AuthContext";
 
-const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners", "/financials", "/live-tracking"];
+const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners", "/financials", "/live-tracking", "/cash-custody"];
 
 export function AppSidebar() {
   const { state, setOpenMobile, isMobile } = useSidebar();

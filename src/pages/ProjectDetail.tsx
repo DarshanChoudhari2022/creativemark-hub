@@ -91,10 +91,14 @@ const ProjectDetail = () => {
   });
 
   // Fetch Project Details
+  // We fetch with embedded joins for client + assignee, but if any embed fails
+  // (missing FK relationship in user's DB schema, deleted client row, etc.) we
+  // FALL BACK to a plain select so the page still renders. Without this fallback
+  // the whole page shows "Project not found" even when the project exists.
   const { data: project, isLoading: isProjectLoading } = useQuery({
     queryKey: ["project", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const withEmbed = await supabase
         .from("projects")
         .select(`
           *,
@@ -102,10 +106,26 @@ const ProjectDetail = () => {
           assignee:employees(name)
         `)
         .eq("id", id)
-        .single();
-      
-      if (error) throw error;
-      return data;
+        .maybeSingle();
+
+      if (!withEmbed.error && withEmbed.data) return withEmbed.data;
+
+      if (withEmbed.error) {
+        console.warn("[project] embedded select failed, retrying without joins:", withEmbed.error.message);
+      }
+
+      // Fallback: plain row, no joins
+      const plain = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (plain.error) {
+        console.error("[project] plain fetch also failed:", plain.error.message);
+        throw plain.error;
+      }
+      return plain.data;
     },
   });
 
@@ -200,9 +220,15 @@ const ProjectDetail = () => {
   const { data: distributions } = useQuery({
     queryKey: ["project_distributions", id],
     queryFn: async () => {
+      // IMPORTANT: do NOT embed project_sales / project_customers here. Those
+      // tables are part of an older migration that may not exist in every
+      // deployment, and a missing relationship causes PostgREST to return 400
+      // for the whole query. We only embed `quotations` (always present) and
+      // `employees`, then enrich with sales/customers in a separate query
+      // below if those tables exist.
       const { data, error } = await supabase
         .from("project_sale_distributions")
-        .select("*, employee:employees(name), bill:quotations(quote_number, grand_total, client_name), sale:project_sales(amount, sale_date, customer:project_customers(customer_name))")
+        .select("*, employee:employees(name), bill:quotations(quote_number, grand_total, client_name)")
         .eq("project_id", id)
         .order("created_at", { ascending: false });
       if (error) { console.warn("distributions not ready:", error.message); return []; }
@@ -477,6 +503,50 @@ const ProjectDetail = () => {
   const totalDistributed = (distributions || []).reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
   const totalDistPending = (distributions || []).filter((d: any) => d.status === "Pending").reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
   const totalDistPaid = (distributions || []).filter((d: any) => d.status === "Paid").reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
+
+  // ── Cash in Hand (computed, no DB writes) ──
+  // For each linked bill that has amount_paid > 0 AND a received_by_name, figure
+  // out: how much did the receiver collect, how much have they already paid out
+  // as distributions (status = Paid), and what's still with them.
+  // When pending = 0, the row is hidden — the "work log" auto-clears itself.
+  const cashInHand: Array<{
+    key: string;
+    receiver: string;
+    billId: string;
+    billNumber: string;
+    billClient: string;
+    received: number;
+    distributedPaid: number;
+    distributedPending: number;
+    pending: number;
+    receivedAt: string | null;
+  }> = (linkedBills || [])
+    .filter((b: any) => Number(b.amount_paid || 0) > 0 && b.received_by_name)
+    .map((b: any) => {
+      const billDistributions = (distributions || []).filter((d: any) => d.bill_id === b.id);
+      const distributedPaid = billDistributions
+        .filter((d: any) => d.status === "Paid")
+        .reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
+      const distributedPending = billDistributions
+        .filter((d: any) => d.status === "Pending")
+        .reduce((s: number, d: any) => s + Number(d.allotted_amount || 0), 0);
+      const received = Number(b.amount_paid || 0);
+      return {
+        key: `${b.id}-${b.received_by_name}`,
+        receiver: b.received_by_name,
+        billId: b.id,
+        billNumber: b.quote_number,
+        billClient: b.client_name,
+        received,
+        distributedPaid,
+        distributedPending,
+        pending: received - distributedPaid,
+        receivedAt: b.received_at,
+      };
+    })
+    .filter(row => row.pending > 0); // auto-clear fully-distributed rows
+
+  const totalCashInHand = cashInHand.reduce((s, r) => s + r.pending, 0);
 
   // Linked-bills aggregates (project sync)
   const linkedBillsCount = (linkedBills || []).length;
@@ -1421,6 +1491,64 @@ const ProjectDetail = () => {
             </Card>
           </div>
 
+          {/* ── Cash in Hand (per-project) ────────────────────────────
+              Shows who currently holds project cash. Auto-computed from each
+              bill's amount_paid + received_by_name minus the sum of distributions
+              from that bill marked as 'Paid'. When fully distributed, the row
+              disappears — no manual cleanup needed. */}
+          {cashInHand.length > 0 && (
+            <Card className="mb-4 bg-gradient-to-br from-amber-500/5 to-orange-500/10 border-amber-500/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-amber-600" />
+                  Cash in Hand (this project)
+                  <Badge variant="outline" className="ml-1 bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
+                    Total: ₹{totalCashInHand.toLocaleString()}
+                  </Badge>
+                </CardTitle>
+                <p className="text-[11px] text-muted-foreground">
+                  These employees received bill payments and haven't yet distributed all of it. Mark distributions as <span className="font-semibold">Paid</span> below to clear the entry automatically.
+                </p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-amber-500/10">
+                        <TableHead className="text-xs">Custodian</TableHead>
+                        <TableHead className="text-xs">From Bill</TableHead>
+                        <TableHead className="text-xs text-right">Received</TableHead>
+                        <TableHead className="text-xs text-right">Distributed (Paid)</TableHead>
+                        <TableHead className="text-xs text-right">Pending Distribute</TableHead>
+                        <TableHead className="text-xs text-right">Still in Hand</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cashInHand.map(row => (
+                        <TableRow key={row.key}>
+                          <TableCell className="font-semibold text-sm">
+                            <div className="flex items-center gap-1.5">
+                              <UserCheck className="h-3.5 w-3.5 text-amber-600" />
+                              {row.receiver}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <div className="font-mono font-semibold">{row.billNumber}</div>
+                            <div className="text-[10px] text-muted-foreground">{row.billClient}</div>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold whitespace-nowrap">₹{row.received.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-emerald-700 whitespace-nowrap">₹{row.distributedPaid.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-amber-700 whitespace-nowrap">₹{row.distributedPending.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-extrabold text-orange-700 whitespace-nowrap">₹{row.pending.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="bg-card/40 backdrop-blur-md border-border/50">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -1583,9 +1711,20 @@ const ProjectDetail = () => {
                         <TableCell className="text-xs">
                           {d.bill_id && d.bill ? (
                             <div><span className="font-mono font-semibold">{d.bill.quote_number}</span><div className="text-[10px] text-muted-foreground">{d.bill.client_name}</div></div>
-                          ) : d.sale_id && d.sale ? (
-                            <div><span className="font-semibold">{d.sale.customer?.customer_name || "Sale"}</span><div className="text-[10px] text-muted-foreground">{d.sale.sale_date ? format(new Date(d.sale.sale_date), "MMM d, yyyy") : ""} · ₹{Number(d.sale.amount || 0).toLocaleString()}</div></div>
-                          ) : <span className="text-muted-foreground">—</span>}
+                          ) : d.sale_id ? (() => {
+                            // Resolve sale from already-fetched projectSales (no embed needed,
+                            // so this works even when the project_sales table is missing).
+                            const s = (projectSales || []).find((x: any) => x.id === d.sale_id);
+                            if (!s) return <span className="font-mono text-[10px] text-muted-foreground">Sale #{String(d.sale_id).slice(0, 8)}…</span>;
+                            return (
+                              <div>
+                                <span className="font-semibold">{s.customer?.customer_name || "Sale"}</span>
+                                <div className="text-[10px] text-muted-foreground">
+                                  {s.sale_date ? format(new Date(s.sale_date), "MMM d, yyyy") : ""} · ₹{Number(s.amount || 0).toLocaleString()}
+                                </div>
+                              </div>
+                            );
+                          })() : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="text-right font-bold text-indigo-700 whitespace-nowrap">₹{Number(d.allotted_amount || 0).toLocaleString()}</TableCell>
                         <TableCell>

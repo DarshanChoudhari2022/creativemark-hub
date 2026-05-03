@@ -586,15 +586,28 @@ function UploadPanel({ onImported, userId }: { onImported: () => void; userId?: 
         created_by: userId || null,
       }));
 
-      // Use upsert-like behavior: insert and ignore duplicates per the unique index
-      const { error } = await supabase
+      // CRITICAL: a plain .insert([...]) is one transaction — a single duplicate
+      // row aborts the whole batch and saves zero rows. Use upsert with
+      // ignoreDuplicates so existing contacts are skipped silently and the rest
+      // are saved. The unique index is (created_by, phone) WHERE phone IS NOT NULL.
+      const { data: saved, error } = await supabase
         .from("broadcast_contacts")
-        .insert(rows);
+        .upsert(rows, { onConflict: "created_by,phone", ignoreDuplicates: true })
+        .select("id");
 
-      if (error && !error.message?.includes("duplicate")) {
+      if (error) {
+        console.error("[broadcast] CSV upload error:", error);
         toast.error(`Upload failed: ${error.message}`);
       } else {
-        toast.success(`Imported ${parsed.length} contact${parsed.length === 1 ? "" : "s"} from ${file.name}`);
+        const savedCount = saved?.length || 0;
+        const dupCount = parsed.length - savedCount;
+        if (savedCount === 0) {
+          toast.info(`No new contacts — all ${parsed.length} already exist.`);
+        } else if (dupCount > 0) {
+          toast.success(`Imported ${savedCount} new contacts (${dupCount} duplicates skipped)`);
+        } else {
+          toast.success(`Imported ${savedCount} contact${savedCount === 1 ? "" : "s"} from ${file.name}`);
+        }
         onImported();
       }
     } catch (e: any) {
@@ -674,14 +687,30 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
         created_by: userId || null,
       }));
 
-      const { error } = await supabase
-        .from("broadcast_contacts")
-        .insert(rows);
+      console.log(`[broadcast] Importing ${rows.length} phone contacts. Sample:`, rows.slice(0, 3));
 
-      if (error && !error.message?.includes("duplicate")) {
+      // Use upsert + ignoreDuplicates — phone import almost always has dupes
+      // (re-imports, numbers shared across contacts). A vanilla .insert() would
+      // see one conflict and abort the whole transaction, saving zero rows
+      // while showing a misleading 'duplicate' success toast.
+      const { data: saved, error } = await supabase
+        .from("broadcast_contacts")
+        .upsert(rows, { onConflict: "created_by,phone", ignoreDuplicates: true })
+        .select("id");
+
+      if (error) {
+        console.error("[broadcast] Phone import save error:", error);
         toast.error(`Save failed: ${error.message}`);
       } else {
-        toast.success(`Imported ${contacts.length} contact${contacts.length === 1 ? "" : "s"} from your phone`);
+        const savedCount = saved?.length || 0;
+        const dupCount = contacts.length - savedCount;
+        if (savedCount === 0) {
+          toast.info(`No new contacts — all ${contacts.length} already imported.`);
+        } else if (dupCount > 0) {
+          toast.success(`Imported ${savedCount} new (${dupCount} duplicates skipped)`);
+        } else {
+          toast.success(`Imported ${savedCount} contact${savedCount === 1 ? "" : "s"} from your phone`);
+        }
         onImported();
       }
     } catch (e: any) {

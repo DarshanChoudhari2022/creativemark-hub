@@ -983,34 +983,65 @@ const Quotations = () => {
               )}
               <div><Label>Notes</Label><Input value={billPayForm.notes} onChange={e => setBillPayForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></div>
 
-              {/* Received By — captures who actually received the cash / cheque / UPI transfer */}
+              {/* Received By — full employee dropdown + custom option.
+                  This name drives the Cash in Hand / Cash Custody log that tracks
+                  who is currently holding this payment until it's distributed. */}
               <div className="border-t pt-3 space-y-2">
                 <Label className="flex items-center gap-1.5">
                   <UserCheck className="h-3.5 w-3.5 text-green-600" />
-                  Received By Name *
+                  Received By *
                 </Label>
-                <Input
-                  value={billPayForm.receivedByName}
-                  onChange={e => setBillPayForm(f => ({ ...f, receivedByName: e.target.value }))}
-                  placeholder="e.g. Darshan, Ramesh, Cashier"
-                  className="font-semibold"
-                />
-                {allEmployees.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    <span className="text-[10px] text-muted-foreground self-center mr-1">Quick pick:</span>
+                <Select
+                  value={
+                    billPayForm.receivedByName === ""
+                      ? ""
+                      : billPayForm.receivedByName === (user?.name || "__me__")
+                      ? "__me__"
+                      : allEmployees.some(e => e.name === billPayForm.receivedByName)
+                      ? `emp:${allEmployees.find(e => e.name === billPayForm.receivedByName)!.id}`
+                      : "__custom__"
+                  }
+                  onValueChange={(v) => {
+                    if (v === "__me__") setBillPayForm(f => ({ ...f, receivedByName: user?.name || "" }));
+                    else if (v === "__custom__") setBillPayForm(f => ({ ...f, receivedByName: "" }));
+                    else if (v.startsWith("emp:")) {
+                      const emp = allEmployees.find(e => e.id === v.slice(4));
+                      if (emp) setBillPayForm(f => ({ ...f, receivedByName: emp.name }));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="font-semibold">
+                    <SelectValue placeholder="Select employee…" />
+                  </SelectTrigger>
+                  <SelectContent>
                     {user?.name && (
-                      <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
-                        onClick={() => setBillPayForm(f => ({ ...f, receivedByName: user.name }))}
-                      >Me ({user.name})</Button>
+                      <SelectItem value="__me__">Me ({user.name})</SelectItem>
                     )}
-                    {allEmployees.slice(0, 6).map(emp => (
-                      <Button key={emp.id} type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
-                        onClick={() => setBillPayForm(f => ({ ...f, receivedByName: emp.name }))}
-                      >{emp.name}</Button>
-                    ))}
-                  </div>
+                    {allEmployees.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                          All Employees ({allEmployees.length})
+                        </div>
+                        {allEmployees.map(emp => (
+                          <SelectItem key={emp.id} value={`emp:${emp.id}`}>{emp.name}</SelectItem>
+                        ))}
+                      </>
+                    )}
+                    <SelectItem value="__custom__">✏️ Custom name…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* Show free-text input when Custom is picked OR name doesn't match any employee */}
+                {(!allEmployees.some(e => e.name === billPayForm.receivedByName) && billPayForm.receivedByName !== (user?.name || "__never__")) && (
+                  <Input
+                    value={billPayForm.receivedByName}
+                    onChange={e => setBillPayForm(f => ({ ...f, receivedByName: e.target.value }))}
+                    placeholder="Type a name (e.g. Cashier, Partner-XYZ)"
+                    className="font-semibold"
+                  />
                 )}
-                <p className="text-[10px] text-muted-foreground">This name will appear in the Bills list and the project's payment log.</p>
+                <p className="text-[10px] text-muted-foreground">
+                  This person becomes the custodian of the cash. A cash-in-hand entry is created automatically and clears once they distribute the amount in the project's Money Distribution tab.
+                </p>
               </div>
             </div>
             <DialogFooter>

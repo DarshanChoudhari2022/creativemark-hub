@@ -191,28 +191,72 @@ export async function importPhoneContacts(): Promise<BroadcastContact[]> {
     throw new Error("Permission to read contacts was denied.");
   }
 
+  // Request a generous projection — different plugin versions key these fields
+  // slightly differently, so we cast a wide net then normalize below.
   const result = await Contacts.getContacts({
     projection: {
       name: true,
       phones: true,
       emails: true,
+      organization: true,
     },
   });
 
-  const raw = result?.contacts || [];
+  // The plugin may return either { contacts: [...] } or just an array,
+  // depending on version. Handle both.
+  const raw: any[] = Array.isArray(result)
+    ? result
+    : Array.isArray(result?.contacts)
+    ? result.contacts
+    : [];
+
+  console.log(`[broadcast] Phone contacts plugin returned ${raw.length} entries.`);
+  if (raw.length > 0) {
+    // Log the SHAPE of the first contact so we can spot field-name drift across
+    // plugin versions (name as object vs string, phones[].number vs .value, etc.)
+    console.log("[broadcast] First raw contact shape:", JSON.stringify(raw[0], null, 2));
+  }
+
   const contacts: BroadcastContact[] = [];
   for (const c of raw) {
-    const display =
-      c?.name?.display ||
-      [c?.name?.given, c?.name?.middle, c?.name?.family].filter(Boolean).join(" ") ||
-      "";
-    const phone = c?.phones?.[0]?.number || "";
-    const email = c?.emails?.[0]?.address || "";
+    if (!c) continue;
+
+    // Name can be: object {display, given, family, ...}, string, or under displayName
+    let display = "";
+    if (typeof c.name === "string") {
+      display = c.name;
+    } else if (c.name && typeof c.name === "object") {
+      display =
+        c.name.display ||
+        c.name.displayName ||
+        [c.name.given, c.name.middle, c.name.family].filter(Boolean).join(" ").trim();
+    }
+    if (!display) display = c.displayName || c.fullName || "";
+
+    // Phones: try common key names — number, value, phone
+    let phone = "";
+    const phonesArr = c.phones || c.phoneNumbers || [];
+    if (Array.isArray(phonesArr) && phonesArr.length > 0) {
+      const p0 = phonesArr[0];
+      phone = (typeof p0 === "string" ? p0 : p0?.number || p0?.value || p0?.phone || "").trim();
+    } else if (typeof c.phone === "string") {
+      phone = c.phone;
+    }
+
+    // Emails: try common key names — address, value, email
+    let email = "";
+    const emailsArr = c.emails || c.emailAddresses || [];
+    if (Array.isArray(emailsArr) && emailsArr.length > 0) {
+      const e0 = emailsArr[0];
+      email = (typeof e0 === "string" ? e0 : e0?.address || e0?.value || e0?.email || "").trim();
+    } else if (typeof c.email === "string") {
+      email = c.email;
+    }
 
     if (!display && !phone && !email) continue;
 
     contacts.push({
-      name: display || phone || email,
+      name: display || phone || email || "Unknown",
       phone: phone ? normalizePhone(phone) : undefined,
       whatsapp: phone ? normalizePhone(phone) : undefined,
       email: email || undefined,
@@ -220,6 +264,8 @@ export async function importPhoneContacts(): Promise<BroadcastContact[]> {
       tags: [],
     });
   }
+
+  console.log(`[broadcast] Normalized ${contacts.length} usable contacts (out of ${raw.length} raw).`);
   return contacts;
 }
 
