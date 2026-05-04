@@ -26,6 +26,7 @@ import CashCustody from "./pages/CashCustody";
 import LeadHunter from "./pages/LeadHunter";
 import Verification from "./pages/Verification";
 import Shifts from "./pages/Shifts";
+import Assignments from "./pages/Assignments";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -72,6 +73,7 @@ const App = () => (
                 <Route path="/lead-hunter" element={<LeadHunter />} />
                 <Route path="/verification" element={<Verification />} />
                 <Route path="/shifts" element={<Shifts />} />
+                <Route path="/assignments" element={<Assignments />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>

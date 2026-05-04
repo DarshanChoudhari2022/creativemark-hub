@@ -15,13 +15,53 @@
 
 import { normalizePhone } from "@/lib/broadcast";
 
-const OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter";
+const OVERPASS_ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter",
+];
 const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
 
-// User-Agent recommended by the OSM project. Some Overpass mirrors
-// require it; sending it from the browser is best-effort (browsers
-// override User-Agent), so we also send Accept-Language.
 const HTTP_HEADERS = { "Accept-Language": "en" };
+
+// Optional Supabase Edge Function proxy (bypasses CORS / mobile network blocks)
+function getProxyUrl(): string | null {
+  const url = (import.meta as any).env?.VITE_SUPABASE_URL || (typeof process !== "undefined" ? process.env.VITE_SUPABASE_URL : "");
+  return url ? `${url}/functions/v1/overpass-proxy` : null;
+}
+
+async function proxyRequest(action: "geocode" | "scrape", payload: Record<string, any>): Promise<any> {
+  const proxy = getProxyUrl();
+  if (!proxy) throw new Error("Proxy not configured");
+  const res = await fetch(proxy, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  if (!res.ok) throw new Error(`Proxy error: HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchOverpass(query: string, signal?: AbortSignal): Promise<any> {
+  let lastError = "";
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", ...HTTP_HEADERS },
+        body: "data=" + encodeURIComponent(query),
+        signal,
+      });
+      if (!res.ok) {
+        lastError = `HTTP ${res.status}`;
+        continue;
+      }
+      return res.json();
+    } catch (e: any) {
+      lastError = e.message || "network error";
+    }
+  }
+  throw new Error(`All Overpass endpoints failed. Last: ${lastError}`);
+}
 
 // ── Types ─────────────────────────────────────────────────────────
 export interface ScrapedLead {
@@ -109,16 +149,37 @@ export interface GeocodeResult {
 
 export async function geocodeCity(query: string): Promise<GeocodeResult | null> {
   if (!query.trim()) return null;
-  const url = `${NOMINATIM_ENDPOINT}?q=${encodeURIComponent(query)}&format=json&limit=1`;
-  const res = await fetch(url, { headers: HTTP_HEADERS });
-  if (!res.ok) throw new Error(`Geocoding failed: HTTP ${res.status}`);
-  const json = await res.json();
-  if (!Array.isArray(json) || json.length === 0) return null;
-  return {
-    display_name: json[0].display_name,
-    lat: parseFloat(json[0].lat),
-    lon: parseFloat(json[0].lon),
-  };
+  const q = query.trim();
+
+  // Try proxy first (avoids CORS / mobile network blocks)
+  try {
+    const json = await proxyRequest("geocode", { city: q });
+    if (!Array.isArray(json) || json.length === 0) return null;
+    return {
+      display_name: json[0].display_name,
+      lat: parseFloat(json[0].lat),
+      lon: parseFloat(json[0].lon),
+    };
+  } catch (proxyErr) {
+    // Fallback to direct Nominatim with one retry
+    const url = `${NOMINATIM_ENDPOINT}?q=${encodeURIComponent(q)}&format=json&limit=1`;
+    let lastErr: any;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 800));
+        const res = await fetch(url, { headers: HTTP_HEADERS });
+        if (!res.ok) throw new Error(`Geocoding failed: HTTP ${res.status}`);
+        const json = await res.json();
+        if (!Array.isArray(json) || json.length === 0) return null;
+        return {
+          display_name: json[0].display_name,
+          lat: parseFloat(json[0].lat),
+          lon: parseFloat(json[0].lon),
+        };
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr;
+  }
 }
 
 // ── Scrape ───────────────────────────────────────────────────────
@@ -132,30 +193,21 @@ export interface ScrapeOptions {
 
 export async function scrapeLeads(opts: ScrapeOptions): Promise<ScrapedLead[]> {
   const limit = opts.limit ?? 200;
-  // Overpass QL: `nwr` queries nodes + ways + relations of a category
-  // around a center point. `out tags center` gives us tags + a center
-  // coordinate even for ways/relations (which don't have a single lat/lon).
   const q = `
     [out:json][timeout:30];
     nwr${opts.category.query}(around:${opts.radiusMeters},${opts.lat},${opts.lon});
     out tags center ${limit};
   `.trim();
 
-  const res = await fetch(OVERPASS_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", ...HTTP_HEADERS },
-    body: "data=" + encodeURIComponent(q),
-  });
-
-  if (!res.ok) {
-    throw new Error(
-      res.status === 429 || res.status === 504
-        ? "Overpass server is busy. Please try again in 30 seconds."
-        : `Scrape failed: HTTP ${res.status}`
-    );
+  // Try Supabase edge-function proxy first (bypasses CORS / mobile network blocks)
+  let json: any;
+  try {
+    json = await proxyRequest("scrape", { query: q });
+  } catch (proxyErr) {
+    // Fallback to direct endpoints with retry across mirrors
+    json = await fetchOverpass(q);
   }
 
-  const json = await res.json();
   const elements: any[] = json?.elements || [];
 
   const out: ScrapedLead[] = [];

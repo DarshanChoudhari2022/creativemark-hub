@@ -586,23 +586,41 @@ function UploadPanel({ onImported, userId }: { onImported: () => void; userId?: 
         created_by: userId || null,
       }));
 
-      // CRITICAL: a plain .insert([...]) is one transaction — a single duplicate
-      // row aborts the whole batch and saves zero rows. Use upsert with
-      // ignoreDuplicates so existing contacts are skipped silently and the rest
-      // are saved. The unique index is (created_by, phone) WHERE phone IS NOT NULL.
-      // Because the index is partial (excludes NULL phones), we must upsert
-      // phone-rows and insert no-phone rows separately.
+      // The partial unique index (created_by, phone) WHERE phone IS NOT NULL
+      // cannot be used with PostgreSQL ON CONFLICT. We deduplicate client-side
+      // by querying existing phones for this user, then inserting only new rows.
       const rowsWithPhone = rows.filter(r => r.phone != null);
       const rowsWithoutPhone = rows.filter(r => r.phone == null);
 
       const saved: any[] = [];
       let error: any = null;
 
-      if (rowsWithPhone.length > 0) {
+      // Helper: insert only new phone contacts by checking existing first
+      const insertNewPhones = async (phoneRows: any[]) => {
+        if (!userId) {
+          const { data: s, error: e } = await supabase
+            .from("broadcast_contacts")
+            .insert(phoneRows)
+            .select("id");
+          return { s, e };
+        }
+        const { data: existing } = await supabase
+          .from("broadcast_contacts")
+          .select("phone")
+          .eq("created_by", userId)
+          .in("phone", phoneRows.map((r: any) => r.phone));
+        const existingPhones = new Set((existing || []).map((x: any) => x.phone));
+        const newRows = phoneRows.filter((r: any) => !existingPhones.has(r.phone));
+        if (newRows.length === 0) return { s: [], e: null };
         const { data: s, error: e } = await supabase
           .from("broadcast_contacts")
-          .upsert(rowsWithPhone, { onConflict: "created_by,phone", ignoreDuplicates: true })
+          .insert(newRows)
           .select("id");
+        return { s, e };
+      };
+
+      if (rowsWithPhone.length > 0) {
+        const { s, e } = await insertNewPhones(rowsWithPhone);
         if (e) error = e;
         else saved.push(...(s || []));
       }
@@ -709,23 +727,39 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
 
       console.log(`[broadcast] Importing ${rows.length} phone contacts. Sample:`, rows.slice(0, 3));
 
-      // Use upsert + ignoreDuplicates — phone import almost always has dupes
-      // (re-imports, numbers shared across contacts). A vanilla .insert() would
-      // see one conflict and abort the whole transaction, saving zero rows
-      // while showing a misleading 'duplicate' success toast.
-      // Split null-phone rows because the partial unique index (WHERE phone IS NOT NULL)
-      // cannot serve as an ON CONFLICT target for NULL values.
+      // The partial unique index (created_by, phone) WHERE phone IS NOT NULL
+      // cannot be used with PostgreSQL ON CONFLICT. We deduplicate client-side.
       const rowsWithPhone = rows.filter(r => r.phone != null);
       const rowsWithoutPhone = rows.filter(r => r.phone == null);
 
       const saved: any[] = [];
       let error: any = null;
 
-      if (rowsWithPhone.length > 0) {
+      const insertNewPhones = async (phoneRows: any[]) => {
+        if (!userId) {
+          const { data: s, error: e } = await supabase
+            .from("broadcast_contacts")
+            .insert(phoneRows)
+            .select("id");
+          return { s, e };
+        }
+        const { data: existing } = await supabase
+          .from("broadcast_contacts")
+          .select("phone")
+          .eq("created_by", userId)
+          .in("phone", phoneRows.map((r: any) => r.phone));
+        const existingPhones = new Set((existing || []).map((x: any) => x.phone));
+        const newRows = phoneRows.filter((r: any) => !existingPhones.has(r.phone));
+        if (newRows.length === 0) return { s: [], e: null };
         const { data: s, error: e } = await supabase
           .from("broadcast_contacts")
-          .upsert(rowsWithPhone, { onConflict: "created_by,phone", ignoreDuplicates: true })
+          .insert(newRows)
           .select("id");
+        return { s, e };
+      };
+
+      if (rowsWithPhone.length > 0) {
+        const { s, e } = await insertNewPhones(rowsWithPhone);
         if (e) error = e;
         else saved.push(...(s || []));
       }

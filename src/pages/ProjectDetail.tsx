@@ -347,13 +347,18 @@ const ProjectDetail = () => {
 
   // Commission calculations + per-product profitability
   const liveCustomers = projectCustomers?.filter(c => c.subscription_status === "Active") || [];
-  const totalEarnings = projectSales?.reduce((s, sale) => s + Number(sale.amount || 0), 0) || 0;
+  const rawSalesTotal = projectSales?.reduce((s, sale) => s + Number(sale.amount || 0), 0) || 0;
   const totalCommission = projectSales?.reduce((s, sale) => s + Number(sale.commission_amount || 0), 0) || 0;
   const totalExtraCharges = projectSales?.reduce((s, sale) => s + Number(sale.extra_charges || 0), 0) || 0;
   const totalSaleExpenses = projectSales?.reduce((s, sale) => s + Number(sale.sale_expenses || 0), 0) || 0;
-  // Net profit = (Money received + Extra charges) − (Commission + Sale-level expenses)
-  const netSalesProfit = totalEarnings + totalExtraCharges - totalCommission - totalSaleExpenses;
-  const salesCount = projectSales?.length || 0;
+  const projectExpensesTotal = projectExpenses?.reduce((acc, e) => acc + Number(e.amount || 0), 0) || 0;
+
+  // Sync linked bills with sales totals so paid bills count as revenue
+  const totalEarnings = rawSalesTotal + linkedBillsPaid;
+  const salesCount = (projectSales?.length || 0) + linkedBillsCount;
+
+  // Net profit = (Money received + Extra charges) − (Commission + Sale expenses + Project expenses)
+  const netSalesProfit = totalEarnings + totalExtraCharges - totalCommission - totalSaleExpenses - projectExpensesTotal;
   const effectiveCommPct = project.commission_percentage || commissionPct;
 
   const handleAddTask = (e: React.FormEvent) => {
@@ -1025,35 +1030,48 @@ const ProjectDetail = () => {
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground uppercase">Revenue (Budget)</Label>
-                    <div className="text-2xl font-bold text-primary">₹{(project.budget_revenue || 0).toLocaleString()}</div>
+                    <Label className="text-xs text-muted-foreground uppercase">Actual Revenue</Label>
+                    <div className="text-2xl font-bold text-primary">₹{(totalEarnings + totalExtraCharges).toLocaleString()}</div>
+                    <div className="text-[10px] text-muted-foreground">Sales + Bills + Extras</div>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase">Actual Expenses</Label>
-                    <div className="text-2xl font-bold text-red-500">₹{(projectExpenses?.reduce((acc, e) => acc + Number(e.amount), 0) || 0).toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-red-500">₹{(projectExpensesTotal + totalCommission + totalSaleExpenses).toLocaleString()}</div>
+                    <div className="text-[10px] text-muted-foreground">Project + Commission + Sale</div>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2 pt-4 border-t border-border/50">
                   <div className="flex justify-between items-end">
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase">Estimated Profit</Label>
-                      <div className="text-xl font-bold text-green-600">
-                        ₹{((project.budget_revenue || 0) - (projectExpenses?.reduce((acc, e) => acc + Number(e.amount), 0) || 0)).toLocaleString()}
+                      <Label className="text-xs text-muted-foreground uppercase">Net Profit</Label>
+                      <div className={`text-xl font-bold ${netSalesProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        ₹{netSalesProfit.toLocaleString()}
                       </div>
                     </div>
-                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
-                      {(project.budget_revenue || 0) > 0 
-                        ? (((project.budget_revenue - (projectExpenses?.reduce((acc, e) => acc + Number(e.amount), 0) || 0)) / project.budget_revenue) * 100).toFixed(1)
+                    <Badge className={`${netSalesProfit >= 0 ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-red-500/10 text-red-600 border-red-500/20"}`}>
+                      {(totalEarnings + totalExtraCharges) > 0
+                        ? ((netSalesProfit / (totalEarnings + totalExtraCharges)) * 100).toFixed(1)
                         : 0}% Margin
                     </Badge>
                   </div>
-                  <Progress 
-                    value={(project.budget_revenue || 0) > 0 
-                      ? ((project.budget_revenue - (projectExpenses?.reduce((acc, e) => acc + Number(e.amount), 0) || 0)) / project.budget_revenue) * 100 
-                      : 0} 
-                    className="h-2" 
+                  <Progress
+                    value={(totalEarnings + totalExtraCharges) > 0
+                      ? Math.max(0, Math.min(100, ((netSalesProfit / (totalEarnings + totalExtraCharges)) * 100)))
+                      : 0}
+                    className="h-2"
                   />
+                </div>
+
+                <div className="pt-2 border-t border-border/50 space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Revenue Budget</span>
+                    <span>₹{(project.budget_revenue || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Cost Budget</span>
+                    <span>₹{(project.budget_cost || 0).toLocaleString()}</span>
+                  </div>
                 </div>
 
                 <div className="pt-4 space-y-4">
