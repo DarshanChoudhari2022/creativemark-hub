@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Users, Upload, Smartphone, MessageCircle, Mail, Send, Search,
   RefreshCw, FileSpreadsheet, CheckCircle2, AlertCircle,
-  Sparkles, History, X, Loader2,
+  Sparkles, History, X, Loader2, Paperclip, FileImage, File, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -79,10 +79,12 @@ export default function BroadcastHub() {
 
   const refreshSaved = useCallback(async () => {
     setLoadingSaved(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("broadcast_contacts")
       .select("*")
       .order("created_at", { ascending: false });
+    if (user?.id) query = query.eq("created_by", user.id);
+    const { data, error } = await query;
     if (error) {
       console.warn("[broadcast] failed to load saved contacts:", error.message);
       toast.error(
@@ -94,7 +96,7 @@ export default function BroadcastHub() {
       setSavedContacts((data || []) as BroadcastContact[]);
     }
     setLoadingSaved(false);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     refreshSaved();
@@ -182,6 +184,31 @@ export default function BroadcastHub() {
   const [activeTemplate, setActiveTemplate] = useState<BroadcastTemplate>(BROADCAST_TEMPLATES[0]);
   const [message, setMessage] = useState<string>(BROADCAST_TEMPLATES[0].message);
   const [emailSubject, setEmailSubject] = useState<string>(`${BROADCAST_TEMPLATES[0].emoji} ${BROADCAST_TEMPLATES[0].label} from CreativeMark`);
+  const [attachments, setAttachments] = useState<{ name: string; url: string; type: "pdf" | "image" }[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const attachFileRef = useRef<HTMLInputElement>(null);
+
+  const handleAttachFile = async (file: File) => {
+    if (!file) return;
+    setUploadingAttachment(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+      const isPdf = ext === "pdf";
+      if (!isImage && !isPdf) { toast.error("Only PDF and image files are supported."); return; }
+      const path = `broadcast/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error: upErr } = await supabase.storage.from("broadcast-media").upload(path, file, { upsert: true });
+      if (upErr) { toast.error("Upload failed: " + upErr.message); return; }
+      const { data: urlData } = supabase.storage.from("broadcast-media").getPublicUrl(path);
+      const publicUrl = urlData?.publicUrl || "";
+      setAttachments(prev => [...prev, { name: file.name, url: publicUrl, type: isImage ? "image" : "pdf" }]);
+      toast.success(`${file.name} uploaded — URL appended to message`);
+      setMessage(prev => prev + `\n\n📎 ${file.name}:\n${publicUrl}`);
+    } finally {
+      setUploadingAttachment(false);
+      if (attachFileRef.current) attachFileRef.current.value = "";
+    }
+  };
 
   const pickTemplate = (key: string) => {
     const t = BROADCAST_TEMPLATES.find(x => x.key === key);
@@ -287,7 +314,7 @@ export default function BroadcastHub() {
               </TabsContent>
 
               <TabsContent value="phone" className="m-0">
-                <PhonePanel onImported={refreshSaved} userId={user?.id} />
+                <PhonePanel onImported={refreshSaved} userId={user?.id} userName={user?.name || user?.email || "You"} />
                 <ContactsListWithFilters
                   contacts={filtered.filter(c => c.source === "phone")}
                   search={search}
@@ -376,6 +403,43 @@ export default function BroadcastHub() {
                 <pre className="text-[11px] whitespace-pre-wrap font-sans text-foreground">
                   {personalize(message, selectedContacts[0]?.name || "Friend")}
                 </pre>
+              </div>
+
+              {/* Attachments (PDF / images) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-muted-foreground">Attachments (PDF / Images)</Label>
+                  <input
+                    ref={attachFileRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAttachFile(f); }}
+                  />
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => attachFileRef.current?.click()} disabled={uploadingAttachment}>
+                    {uploadingAttachment ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Paperclip className="h-3 w-3 mr-1" />}
+                    {uploadingAttachment ? "Uploading…" : "Attach File"}
+                  </Button>
+                </div>
+                {attachments.length > 0 && (
+                  <div className="space-y-1">
+                    {attachments.map((a, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px] bg-muted/40 rounded p-1.5">
+                        {a.type === "pdf" ? <File className="h-3.5 w-3.5 text-red-500 shrink-0" /> : <FileImage className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
+                        <span className="flex-1 truncate">{a.name}</span>
+                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-red-400"
+                          onClick={() => {
+                            setAttachments(prev => prev.filter((_, j) => j !== i));
+                            setMessage(prev => prev.replace(`\n\n📎 ${a.name}:\n${a.url}`, ""));
+                          }}
+                        ><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {attachments.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground">Upload a brochure PDF or offer image — its link will be added to the message automatically.</p>
+                )}
               </div>
 
               {/* Send buttons */}
@@ -705,9 +769,10 @@ function UploadPanel({ onImported, userId }: { onImported: () => void; userId?: 
 // ═══════════════════════════════════════════════════════════════
 // PhonePanel — import from device address book (APK only)
 // ═══════════════════════════════════════════════════════════════
-function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: string }) {
+function PhonePanel({ onImported, userId, userName }: { onImported: () => void; userId?: string; userName?: string }) {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ total: number; saved: number; dupes: number } | null>(null);
 
   useEffect(() => {
     isPhoneContactsAvailable().then(setAvailable);
@@ -715,6 +780,7 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
 
   const importNow = async () => {
     setBusy(true);
+    setImportSummary(null);
     try {
       const contacts = await importPhoneContacts();
       if (contacts.length === 0) {
@@ -735,8 +801,6 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
 
       console.log(`[broadcast] Importing ${rows.length} phone contacts. Sample:`, rows.slice(0, 3));
 
-      // The partial unique index (created_by, phone) WHERE phone IS NOT NULL
-      // cannot be used with PostgreSQL ON CONFLICT. We deduplicate client-side.
       const rowsWithPhone = rows.filter(r => r.phone != null);
       const rowsWithoutPhone = rows.filter(r => r.phone == null);
 
@@ -791,12 +855,13 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
       } else {
         const savedCount = saved.length;
         const dupCount = contacts.length - savedCount;
+        setImportSummary({ total: contacts.length, saved: savedCount, dupes: dupCount });
         if (savedCount === 0) {
           toast.info(`No new contacts — all ${contacts.length} already imported.`);
         } else if (dupCount > 0) {
-          toast.success(`Imported ${savedCount} new (${dupCount} duplicates skipped)`);
+          toast.success(`Imported ${savedCount} new contacts (${dupCount} already existed)`);
         } else {
-          toast.success(`Imported ${savedCount} contact${savedCount === 1 ? "" : "s"} from your phone`);
+          toast.success(`Imported ${savedCount} contact${savedCount === 1 ? "" : "s"} from ${userName || "your phone"}`);
         }
         onImported();
       }
@@ -833,22 +898,36 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
   }
 
   return (
-    <div className="rounded-lg border-2 border-dashed bg-muted/30 p-4 mb-3">
-      <div className="flex items-start gap-3">
-        <Smartphone className="h-7 w-7 text-primary shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold">Import from your phone</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Tap below — Android will ask for permission to read your address book. Contacts will be saved to your CRM and reused for every future broadcast.
-          </p>
-          <div className="mt-2">
-            <Button size="sm" onClick={importNow} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Smartphone className="h-4 w-4 mr-1" />}
-              {busy ? "Importing…" : "Import Phone Contacts"}
-            </Button>
+    <div className="space-y-2 mb-3">
+      <div className="rounded-lg border-2 border-dashed bg-muted/30 p-4">
+        <div className="flex items-start gap-3">
+          <Smartphone className="h-7 w-7 text-primary shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold">
+              {userName ? `${userName}'s Phone` : "Import from your phone"}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Tap below — Android will ask for permission to read your address book.
+              All phone numbers (including multiple numbers per contact) will be imported and saved under your account only.
+            </p>
+            <div className="mt-2">
+              <Button size="sm" onClick={importNow} disabled={busy}>
+                {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Smartphone className="h-4 w-4 mr-1" />}
+                {busy ? "Importing…" : `Import ${userName ? userName + "'s" : "Phone"} Contacts`}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
+      {importSummary && (
+        <div className="rounded-lg border bg-blue-50 border-blue-200 p-3 text-[11px] text-blue-900 space-y-1">
+          <p className="font-semibold">Import complete — {importSummary.total.toLocaleString()} numbers found on phone</p>
+          <div className="flex gap-4">
+            <span className="text-green-700 font-semibold">✓ {importSummary.saved.toLocaleString()} new imported</span>
+            {importSummary.dupes > 0 && <span className="text-amber-700">⊘ {importSummary.dupes.toLocaleString()} already existed (duplicates skipped)</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

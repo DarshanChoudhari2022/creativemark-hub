@@ -23,7 +23,6 @@ import Financials from "./pages/Financials";
 import Notifications from "./pages/Notifications";
 import BroadcastHub from "./pages/BroadcastHub";
 import CashCustody from "./pages/CashCustody";
-import LeadHunter from "./pages/LeadHunter";
 import Verification from "./pages/Verification";
 import Shifts from "./pages/Shifts";
 import Assignments from "./pages/Assignments";
@@ -70,8 +69,7 @@ const App = () => (
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/broadcast" element={<BroadcastHub />} />
                 <Route path="/cash-custody" element={<CashCustody />} />
-                <Route path="/lead-hunter" element={<LeadHunter />} />
-                <Route path="/verification" element={<Verification />} />
+                                <Route path="/verification" element={<Verification />} />
                 <Route path="/shifts" element={<Shifts />} />
                 <Route path="/assignments" element={<Assignments />} />
                 <Route path="/settings" element={<Settings />} />

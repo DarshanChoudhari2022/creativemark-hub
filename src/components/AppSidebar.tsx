@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3, Zap, Briefcase, Banknote, Bell, MapPin, Megaphone, Sparkles, ShieldCheck, Clock, List } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, Target, FileText, Wallet, CalendarDays, Settings, Handshake, BarChart3, Zap, Briefcase, Banknote, Bell, MapPin, Megaphone, ShieldCheck, Clock, List } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar,
@@ -24,7 +24,6 @@ const items = [
   { title: "Notifications", url: "/notifications", icon: Bell },
   { title: "Partners", url: "/partners", icon: Handshake },
   { title: "Smart Lead Hub", url: "/smart-leads", icon: Zap },
-  { title: "Lead Hunter", url: "/lead-hunter", icon: Sparkles },
   { title: "Broadcast", url: "/broadcast", icon: Megaphone },
   { title: "Cash Custody", url: "/cash-custody", icon: Wallet },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -32,7 +31,7 @@ const items = [
 
 import { useAuth } from "@/contexts/AuthContext";
 
-const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners", "/financials", "/live-tracking", "/cash-custody", "/lead-hunter"];
+const ADMIN_ONLY_ROUTES = ["/analytics", "/quotations", "/recovery", "/settings", "/partners", "/financials", "/live-tracking", "/cash-custody"];
 
 export function AppSidebar() {
   const { state, setOpenMobile, isMobile } = useSidebar();

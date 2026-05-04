@@ -489,6 +489,25 @@ const ProjectDetail = () => {
     };
     const { error } = await supabase.from("project_sale_distributions").insert([payload]);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+
+    // Auto-create a work_log so the amount shows in the employee's Recent Work
+    if (payload.employee_id && payload.allotted_amount > 0) {
+      const billRef = newDist.linkType === "bill"
+        ? (linkedBills || []).find((b: any) => b.id === newDist.bill_id)?.quote_number || newDist.bill_id
+        : (projectSales || []).find((s: any) => s.id === newDist.sale_id)?.sale_date || newDist.sale_id;
+      await supabase.from("work_logs").insert({
+        employee_id: payload.employee_id,
+        date: payload.paid_date || new Date().toISOString().slice(0, 10),
+        client_id: null,
+        work_type: "Sale Distribution",
+        location: "Office",
+        hours: 0,
+        amount: payload.allotted_amount,
+        notes: `Distribution — ${payload.job_role} — ${billRef}`,
+        status: "Completed",
+      });
+    }
+
     queryClient.invalidateQueries({ queryKey: ["project_distributions", id] });
     setIsAddDistOpen(false);
     resetDistForm();

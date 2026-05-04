@@ -233,16 +233,6 @@ export async function importPhoneContacts(): Promise<BroadcastContact[]> {
     }
     if (!display) display = c.displayName || c.fullName || "";
 
-    // Phones: try common key names — number, value, phone
-    let phone = "";
-    const phonesArr = c.phones || c.phoneNumbers || [];
-    if (Array.isArray(phonesArr) && phonesArr.length > 0) {
-      const p0 = phonesArr[0];
-      phone = (typeof p0 === "string" ? p0 : p0?.number || p0?.value || p0?.phone || "").trim();
-    } else if (typeof c.phone === "string") {
-      phone = c.phone;
-    }
-
     // Emails: try common key names — address, value, email
     let email = "";
     const emailsArr = c.emails || c.emailAddresses || [];
@@ -253,19 +243,48 @@ export async function importPhoneContacts(): Promise<BroadcastContact[]> {
       email = c.email;
     }
 
-    if (!display && !phone && !email) continue;
+    // Collect ALL phone numbers — one BroadcastContact per number so we
+    // capture every number (this was the reason 3625 → 1007: only [0] was used).
+    const phonesArr = c.phones || c.phoneNumbers || [];
+    const allPhones: string[] = [];
+    if (Array.isArray(phonesArr) && phonesArr.length > 0) {
+      for (const p of phonesArr) {
+        const num = (typeof p === "string" ? p : p?.number || p?.value || p?.phone || "").trim();
+        if (num) allPhones.push(num);
+      }
+    } else if (typeof c.phone === "string" && c.phone) {
+      allPhones.push(c.phone);
+    }
 
-    contacts.push({
-      name: display || phone || email || "Unknown",
-      phone: phone ? normalizePhone(phone) : undefined,
-      whatsapp: phone ? normalizePhone(phone) : undefined,
-      email: email || undefined,
-      source: "phone",
-      tags: [],
-    });
+    if (!display && allPhones.length === 0 && !email) continue;
+
+    if (allPhones.length === 0) {
+      // No phone — save as email/name-only contact
+      contacts.push({
+        name: display || email || "Unknown",
+        phone: undefined,
+        whatsapp: undefined,
+        email: email || undefined,
+        source: "phone",
+        tags: [],
+      });
+    } else {
+      // One entry per phone number — this is the key fix
+      for (const rawPhone of allPhones) {
+        const normalized = normalizePhone(rawPhone);
+        contacts.push({
+          name: display || normalized || "Unknown",
+          phone: normalized,
+          whatsapp: normalized,
+          email: email || undefined,
+          source: "phone",
+          tags: [],
+        });
+      }
+    }
   }
 
-  console.log(`[broadcast] Normalized ${contacts.length} usable contacts (out of ${raw.length} raw).`);
+  console.log(`[broadcast] Normalized ${contacts.length} usable contacts (out of ${raw.length} raw contacts).`);
   return contacts;
 }
 
