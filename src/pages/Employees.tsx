@@ -53,6 +53,7 @@ const Employees = () => {
     customRole: "",
     phone: "", 
     email: "", 
+    password: "Creative@123",
     salary: 0, amount: 0,
     target: 50 // Default target
   });
@@ -94,7 +95,7 @@ const Employees = () => {
     // 1. Create the Auth User
     const { data: authData, error: authError } = await tempSupabase.auth.signUp({
       email: form.email,
-      password: "Creative@123", // Default password
+      password: form.password || "Creative@123",
       options: { data: { full_name: form.name } }
     });
 
@@ -138,6 +139,7 @@ const Employees = () => {
         customRole: emp.custom_role || "",
         phone: emp.phone || "",
         email: emp.email || "",
+        password: "Creative@123",
         salary: emp.salary || 0,
         amount: 0,
         target: emp.lead_target || 50
@@ -184,7 +186,7 @@ const Employees = () => {
 
   const resetForm = () => {
     setEditingEmp(null);
-    setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", salary: 0, amount: 0, target: 50 });
+    setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", password: "Creative@123", salary: 0, amount: 0, target: 50 });
     setPhoneError("");
   };
 
@@ -341,6 +343,18 @@ const Employees = () => {
                     </div>
                     <div><Label>Email *</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Required for Login" /></div>
                   </div>
+                  {!editingEmp && (
+                    <div>
+                      <Label>Login Password</Label>
+                      <Input
+                        type="text"
+                        value={form.password}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        placeholder="Default: Creative@123"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Employee uses this to log in to the Creative Mark Field App</p>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 gap-3">
                     <div><Label>Lead Target</Label><Input type="number" value={form.target} onChange={(e) => setForm({ ...form, target: +e.target.value })} /></div>
                   </div>

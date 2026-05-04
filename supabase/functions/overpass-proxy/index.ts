@@ -1,5 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.104.0";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.openstreetmap.ru/api/interpreter",
@@ -7,10 +13,15 @@ const OVERPASS_ENDPOINTS = [
 const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
   }
 
@@ -42,13 +53,13 @@ Deno.serve(async (req) => {
       if (!res.ok) {
         return new Response(JSON.stringify({ error: `Geocoding failed: HTTP ${res.status}` }), {
           status: 502,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...CORS_HEADERS },
         });
       }
       const json = await res.json();
       return new Response(JSON.stringify(json), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
       });
     }
 
@@ -71,7 +82,7 @@ Deno.serve(async (req) => {
           const json = await res.json();
           return new Response(JSON.stringify(json), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...CORS_HEADERS },
           });
         } catch (e: any) {
           lastError = e.message || "network error";
@@ -79,19 +90,19 @@ Deno.serve(async (req) => {
       }
       return new Response(
         JSON.stringify({ error: `All Overpass endpoints failed. Last: ${lastError}` }),
-        { status: 502, headers: { "Content-Type": "application/json" } }
+        { status: 502, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
       );
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
   } catch (error: any) {
     console.error("overpass-proxy error:", error);
     return new Response(JSON.stringify({ error: error.message || "Server error" }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
   }
 });

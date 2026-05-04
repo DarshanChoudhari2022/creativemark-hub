@@ -95,7 +95,7 @@ const ProjectDetail = () => {
   // (missing FK relationship in user's DB schema, deleted client row, etc.) we
   // FALL BACK to a plain select so the page still renders. Without this fallback
   // the whole page shows "Project not found" even when the project exists.
-  const { data: project, isLoading: isProjectLoading } = useQuery({
+  const { data: project, isLoading: isProjectLoading, isError: isProjectError } = useQuery({
     queryKey: ["project", id],
     queryFn: async () => {
       const withEmbed = await supabase
@@ -343,7 +343,13 @@ const ProjectDetail = () => {
   });
 
   if (isProjectLoading) return <div className="p-4 md:p-8 text-center">Loading project...</div>;
+  if (isProjectError) return <div className="p-4 md:p-8 text-center text-red-500">Failed to load project. Please go back and try again.</div>;
   if (!project) return <div className="p-4 md:p-8 text-center text-red-500">Project not found</div>;
+
+  // Linked-bills aggregates — declared here so they can be used in calculations below
+  const linkedBillsCount = (linkedBills || []).length;
+  const linkedBillsTotal = (linkedBills || []).reduce((s: number, b: any) => s + Number(b.grand_total || 0), 0);
+  const linkedBillsPaid = (linkedBills || []).reduce((s: number, b: any) => s + Number(b.amount_paid || 0), 0);
 
   // Commission calculations + per-product profitability
   const liveCustomers = projectCustomers?.filter(c => c.subscription_status === "Active") || [];
@@ -595,11 +601,6 @@ const ProjectDetail = () => {
 
   const totalCashInHand = cashInHand.reduce((s, r) => s + r.pending, 0);
 
-  // Linked-bills aggregates (project sync)
-  const linkedBillsCount = (linkedBills || []).length;
-  const linkedBillsTotal = (linkedBills || []).reduce((s: number, b: any) => s + Number(b.grand_total || 0), 0);
-  const linkedBillsPaid = (linkedBills || []).reduce((s: number, b: any) => s + Number(b.amount_paid || 0), 0);
-
   const kanbanColumns = ["Todo", "In Progress", "In Review", "Approved", "Completed"];
 
   const getPriorityIcon = (priority: string) => {
@@ -825,7 +826,7 @@ const ProjectDetail = () => {
             <div className="space-y-2 pt-2 border-t border-border/50">
               <div className="flex items-center gap-2 text-sm">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                <span>Active since {format(new Date(project.created_at), "MMM yyyy")}</span>
+                <span>Active since {project.created_at ? format(new Date(project.created_at), "MMM yyyy") : "—"}</span>
               </div>
               <Button variant="ghost" className="w-full justify-start h-9 px-2 text-primary hover:bg-primary/5 text-sm gap-2">
                 <MessageSquare className="h-4 w-4" />
@@ -838,8 +839,8 @@ const ProjectDetail = () => {
 
       {/* Kanban Board */}
       <Tabs defaultValue="kanban" className="space-y-6">
-        <div className="flex items-center justify-between overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
-          <TabsList className="bg-background/50 border border-border/50 flex-nowrap min-w-full md:min-w-0">
+        <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="bg-background/50 border border-border/50 flex-nowrap w-max md:w-auto">
             <TabsTrigger value="kanban" className="gap-2">
               <Trello className="h-4 w-4" />
               Kanban

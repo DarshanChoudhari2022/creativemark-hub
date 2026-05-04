@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Plus, FileText, Download, Send, Eye, Search, Trash2, CheckCircle, XCircle, CreditCard, Wallet, Briefcase, UserCheck } from "lucide-react";
+import { Plus, FileText, Download, Send, Eye, Search, Trash2, CheckCircle, XCircle, CreditCard, Wallet, Briefcase, UserCheck, Users, DollarSign } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -59,6 +59,13 @@ const Quotations = () => {
   const [payBillOpen, setPayBillOpen] = useState(false);
   const [payBillTarget, setPayBillTarget] = useState<any | null>(null);
   const [billPayForm, setBillPayForm] = useState({ amount: 0, date: "", paymentMode: "UPI", chequeNo: "", transactionId: "", notes: "", receivedByName: "" });
+
+  // Bill distribution dialog
+  const [distBillOpen, setDistBillOpen] = useState(false);
+  const [distBillTarget, setDistBillTarget] = useState<any | null>(null);
+  const [distExpenses, setDistExpenses] = useState<Array<{ id: string; title: string; amount: string; category: string }>>([]);
+  const [distShares, setDistShares] = useState<Array<{ id: string; employee_id: string; employee_name: string; job_role: string; amount: string }>>([]);
+  const [distSaving, setDistSaving] = useState(false);
 
   // Builder state — GST defaults to OFF per user request
   const [type, setType] = useState<"Quotation" | "Bill">("Quotation");
@@ -468,6 +475,91 @@ const Quotations = () => {
     setPayBillOpen(true);
   };
 
+  const openDistributeBill = (q: any) => {
+    setDistBillTarget(q);
+    setDistExpenses([]);
+    const initialShare = { id: crypto.randomUUID(), employee_id: "", employee_name: q.received_by_name || "", job_role: "Salesperson", amount: "" };
+    setDistShares([initialShare]);
+    setDistBillOpen(true);
+  };
+
+  const handleSaveDistribution = async () => {
+    if (!distBillTarget) return;
+    setDistSaving(true);
+    try {
+      const amountReceived = Number(distBillTarget.amount_paid || 0);
+      const totalExpenses = distExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const netAmount = amountReceived - totalExpenses;
+      const totalShares = distShares.reduce((s, sh) => s + (Number(sh.amount) || 0), 0);
+      if (totalShares > netAmount + 0.01) {
+        toast.error(`Total shares (${formatINR(totalShares)}) exceed net distributable (${formatINR(netAmount)}). Adjust shares or reduce expenses.`);
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+
+      // 1. Save each employee share as a project_sale_distribution + work_log
+      for (const sh of distShares) {
+        if (!sh.employee_name.trim() || !(Number(sh.amount) > 0)) continue;
+        const emp = allEmployees.find(e => e.name === sh.employee_name || e.id === sh.employee_id);
+
+        if (distBillTarget.project_id) {
+          await supabase.from("project_sale_distributions").insert({
+            project_id: distBillTarget.project_id,
+            bill_id: distBillTarget.id,
+            employee_id: emp?.id || null,
+            employee_name: sh.employee_name,
+            job_role: sh.job_role,
+            allotted_amount: Number(sh.amount),
+            status: "Pending",
+            notes: `Bill ${distBillTarget.quote_number} distribution`,
+          });
+        }
+
+        if (emp?.id) {
+          await supabase.from("work_logs").insert({
+            employee_id: emp.id,
+            date: today,
+            client_id: distBillTarget.client_id || null,
+            work_type: "Sale Distribution",
+            location: "Office",
+            hours: 0,
+            amount: Number(sh.amount),
+            notes: `Distribution for bill ${distBillTarget.quote_number} — ${sh.job_role}`,
+          });
+        }
+      }
+
+      // 2. Save expenses as work_log entries tagged to receiver (so they appear in employee costs)
+      for (const ex of distExpenses) {
+        if (!ex.title.trim() || !(Number(ex.amount) > 0)) continue;
+        const receiverEmp = allEmployees.find(e => e.name === distBillTarget.received_by_name);
+        if (receiverEmp) {
+          await supabase.from("work_logs").insert({
+            employee_id: receiverEmp.id,
+            date: today,
+            client_id: distBillTarget.client_id || null,
+            work_type: `Expense — ${ex.category || "Other"}`,
+            location: "Expense",
+            hours: 0,
+            amount: -(Number(ex.amount)),
+            notes: `${ex.title} (expense for bill ${distBillTarget.quote_number})`,
+          });
+        }
+      }
+
+      toast.success("Distribution saved and work logs updated!");
+      setDistBillOpen(false);
+      setDistBillTarget(null);
+      setDistExpenses([]);
+      setDistShares([]);
+    } catch (err: any) {
+      toast.error("Save failed: " + (err.message || "unknown error"));
+    } finally {
+      setDistSaving(false);
+    }
+  };
+
   const handleRecordBillPayment = async () => {
     if (!payBillTarget || !billPayForm.amount || !billPayForm.date) { toast.error("Amount and date required"); return; }
     if (!billPayForm.receivedByName.trim()) { toast.error("Please enter who received the payment"); return; }
@@ -486,6 +578,21 @@ const Quotations = () => {
       received_at: new Date().toISOString(),
     }).eq("id", payBillTarget.id);
     if (qErr) { toast.error("Failed to update bill: " + qErr.message); return; }
+
+    // Auto-create a work log for the receiving employee so their earnings are tracked
+    const receiverEmp = allEmployees.find(e => e.name === billPayForm.receivedByName.trim());
+    if (receiverEmp) {
+      await supabase.from("work_logs").insert({
+        employee_id: receiverEmp.id,
+        date: billPayForm.date,
+        client_id: payBillTarget.client_id || null,
+        work_type: "Payment Collection",
+        location: "Field",
+        hours: 0,
+        amount: Number(billPayForm.amount),
+        notes: `Collected payment for bill ${payBillTarget.quote_number}`,
+      });
+    }
 
     // 2. Insert into payment_history so ClientDetail stays in sync
     if (payBillTarget.client_id) {
@@ -829,6 +936,11 @@ const Quotations = () => {
                           <Wallet className="h-4 w-4" />
                         </Button>
                       )}
+                      {q.type === "Bill" && (q.amount_paid || 0) > 0 && (
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-purple-600 hover:bg-purple-50" onClick={() => openDistributeBill(q)} title="Distribute Payment">
+                          <Users className="h-4 w-4" />
+                        </Button>
+                      )}
                       {q.type === "Quotation" && q.status === "Sent" && (
                         <>
                           <Button size="sm" variant="ghost" className="h-8 px-2 text-green-600 hover:bg-green-50" onClick={() => updateStatus(q, "Approved")}>
@@ -1047,6 +1159,96 @@ const Quotations = () => {
             <DialogFooter>
               <Button variant="outline" onClick={() => setPayBillOpen(false)}>Cancel</Button>
               <Button className="bg-primary hover:bg-primary-hover" onClick={handleRecordBillPayment}>Record Payment</Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
+
+      {/* Bill Distribution Dialog */}
+      <Dialog open={distBillOpen} onOpenChange={(open) => { if (!open) { setDistBillOpen(false); setDistBillTarget(null); } }}>
+        {distBillTarget && (
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-purple-600" />
+                Distribute Payment — {distBillTarget.quote_number}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="p-3 bg-muted/30 rounded-lg text-sm space-y-1">
+                <div className="flex justify-between"><span className="text-muted-foreground">Amount Received:</span><span className="font-bold text-green-600">{formatINR(distBillTarget.amount_paid || 0)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Total Expenses:</span><span className="font-semibold text-red-500">−{formatINR(distExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0))}</span></div>
+                <div className="flex justify-between border-t pt-1"><span className="font-semibold">Net to Distribute:</span><span className="font-bold text-primary">{formatINR((distBillTarget.amount_paid || 0) - distExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0))}</span></div>
+                {distBillTarget.received_by_name && <div className="text-[10px] text-muted-foreground">Custodian: {distBillTarget.received_by_name}</div>}
+              </div>
+
+              {/* Expenses Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="flex items-center gap-1.5 text-sm font-semibold"><DollarSign className="h-3.5 w-3.5 text-red-500" />Bill Expenses</Label>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDistExpenses(ex => [...ex, { id: crypto.randomUUID(), title: "", amount: "", category: "Other" }])}>
+                    <Plus className="h-3 w-3 mr-1" />Add Expense
+                  </Button>
+                </div>
+                {distExpenses.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No expenses — full amount distributable</p>}
+                {distExpenses.map((ex, i) => (
+                  <div key={ex.id} className="grid grid-cols-12 gap-1 mb-1 items-center">
+                    <div className="col-span-5"><Input placeholder="Expense title" value={ex.title} onChange={e => setDistExpenses(prev => prev.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} className="h-8 text-xs" /></div>
+                    <div className="col-span-3">
+                      <Select value={ex.category} onValueChange={v => setDistExpenses(prev => prev.map((x, j) => j === i ? { ...x, category: v } : x))}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["Travel", "Material", "Food", "Commission", "Other"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-3"><Input type="number" placeholder="₹" value={ex.amount} onChange={e => setDistExpenses(prev => prev.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))} className="h-8 text-xs" /></div>
+                    <div className="col-span-1 flex justify-center"><Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500" onClick={() => setDistExpenses(prev => prev.filter((_, j) => j !== i))}><Trash2 className="h-3 w-3" /></Button></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Employee Shares Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="flex items-center gap-1.5 text-sm font-semibold"><Users className="h-3.5 w-3.5 text-purple-600" />Employee Shares</Label>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDistShares(sh => [...sh, { id: crypto.randomUUID(), employee_id: "", employee_name: "", job_role: "Salesperson", amount: "" }])}>
+                    <Plus className="h-3 w-3 mr-1" />Add Employee
+                  </Button>
+                </div>
+                {distShares.map((sh, i) => (
+                  <div key={sh.id} className="grid grid-cols-12 gap-1 mb-1 items-center">
+                    <div className="col-span-4">
+                      <Select value={sh.employee_id || "__custom__"} onValueChange={v => {
+                        const emp = allEmployees.find(e => e.id === v);
+                        setDistShares(prev => prev.map((x, j) => j === i ? { ...x, employee_id: v === "__custom__" ? "" : v, employee_name: emp?.name || x.employee_name } : x));
+                      }}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select employee" /></SelectTrigger>
+                        <SelectContent>
+                          {allEmployees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                          <SelectItem value="__custom__">Custom…</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-3"><Input placeholder="Role" value={sh.job_role} onChange={e => setDistShares(prev => prev.map((x, j) => j === i ? { ...x, job_role: e.target.value } : x))} className="h-8 text-xs" /></div>
+                    <div className="col-span-4"><Input type="number" placeholder="₹ Amount" value={sh.amount} onChange={e => setDistShares(prev => prev.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))} className="h-8 text-xs" /></div>
+                    <div className="col-span-1 flex justify-center"><Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500" onClick={() => setDistShares(prev => prev.filter((_, j) => j !== i))}><Trash2 className="h-3 w-3" /></Button></div>
+                  </div>
+                ))}
+                <div className="flex justify-between text-xs mt-2 text-muted-foreground">
+                  <span>Total allocated:</span>
+                  <span className={distShares.reduce((s, sh) => s + (Number(sh.amount) || 0), 0) > (distBillTarget.amount_paid || 0) - distExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0) + 0.01 ? "text-red-500 font-bold" : "font-semibold"}>
+                    {formatINR(distShares.reduce((s, sh) => s + (Number(sh.amount) || 0), 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDistBillOpen(false)}>Cancel</Button>
+              <Button className="bg-purple-600 hover:bg-purple-700 text-white" onClick={handleSaveDistribution} disabled={distSaving}>
+                {distSaving ? "Saving…" : "Save Distribution"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         )}

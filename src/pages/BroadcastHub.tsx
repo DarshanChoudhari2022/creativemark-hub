@@ -595,26 +595,34 @@ function UploadPanel({ onImported, userId }: { onImported: () => void; userId?: 
       const saved: any[] = [];
       let error: any = null;
 
-      // Helper: insert only new phone contacts by checking existing first
+      // Deduplicate within the batch by phone number (handles phone books with
+      // multiple entries for the same number). upsert + ignoreDuplicates=true
+      // emits ON CONFLICT DO NOTHING so the partial unique index is respected.
       const insertNewPhones = async (phoneRows: any[]) => {
+        const uniqueByPhone = [...new Map(phoneRows.map((r: any) => [r.phone, r])).values()];
         if (!userId) {
           const { data: s, error: e } = await supabase
             .from("broadcast_contacts")
-            .insert(phoneRows)
+            .upsert(uniqueByPhone, { ignoreDuplicates: true })
             .select("id");
           return { s, e };
         }
-        const { data: existing } = await supabase
-          .from("broadcast_contacts")
-          .select("phone")
-          .eq("created_by", userId)
-          .in("phone", phoneRows.map((r: any) => r.phone));
-        const existingPhones = new Set((existing || []).map((x: any) => x.phone));
-        const newRows = phoneRows.filter((r: any) => !existingPhones.has(r.phone));
+        // Check existing in batches of 500 to avoid IN-clause limits
+        const existingPhones = new Set<string>();
+        for (let i = 0; i < uniqueByPhone.length; i += 500) {
+          const chunk = uniqueByPhone.slice(i, i + 500);
+          const { data: existing } = await supabase
+            .from("broadcast_contacts")
+            .select("phone")
+            .eq("created_by", userId)
+            .in("phone", chunk.map((r: any) => r.phone));
+          (existing || []).forEach((x: any) => existingPhones.add(x.phone));
+        }
+        const newRows = uniqueByPhone.filter((r: any) => !existingPhones.has(r.phone));
         if (newRows.length === 0) return { s: [], e: null };
         const { data: s, error: e } = await supabase
           .from("broadcast_contacts")
-          .insert(newRows)
+          .upsert(newRows, { ignoreDuplicates: true })
           .select("id");
         return { s, e };
       };
@@ -627,7 +635,7 @@ function UploadPanel({ onImported, userId }: { onImported: () => void; userId?: 
       if (!error && rowsWithoutPhone.length > 0) {
         const { data: s, error: e } = await supabase
           .from("broadcast_contacts")
-          .insert(rowsWithoutPhone)
+          .upsert(rowsWithoutPhone, { ignoreDuplicates: true })
           .select("id");
         if (e) error = e;
         else saved.push(...(s || []));
@@ -736,24 +744,29 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
       let error: any = null;
 
       const insertNewPhones = async (phoneRows: any[]) => {
+        const uniqueByPhone = [...new Map(phoneRows.map((r: any) => [r.phone, r])).values()];
         if (!userId) {
           const { data: s, error: e } = await supabase
             .from("broadcast_contacts")
-            .insert(phoneRows)
+            .upsert(uniqueByPhone, { ignoreDuplicates: true })
             .select("id");
           return { s, e };
         }
-        const { data: existing } = await supabase
-          .from("broadcast_contacts")
-          .select("phone")
-          .eq("created_by", userId)
-          .in("phone", phoneRows.map((r: any) => r.phone));
-        const existingPhones = new Set((existing || []).map((x: any) => x.phone));
-        const newRows = phoneRows.filter((r: any) => !existingPhones.has(r.phone));
+        const existingPhones = new Set<string>();
+        for (let i = 0; i < uniqueByPhone.length; i += 500) {
+          const chunk = uniqueByPhone.slice(i, i + 500);
+          const { data: existing } = await supabase
+            .from("broadcast_contacts")
+            .select("phone")
+            .eq("created_by", userId)
+            .in("phone", chunk.map((r: any) => r.phone));
+          (existing || []).forEach((x: any) => existingPhones.add(x.phone));
+        }
+        const newRows = uniqueByPhone.filter((r: any) => !existingPhones.has(r.phone));
         if (newRows.length === 0) return { s: [], e: null };
         const { data: s, error: e } = await supabase
           .from("broadcast_contacts")
-          .insert(newRows)
+          .upsert(newRows, { ignoreDuplicates: true })
           .select("id");
         return { s, e };
       };
@@ -766,7 +779,7 @@ function PhonePanel({ onImported, userId }: { onImported: () => void; userId?: s
       if (!error && rowsWithoutPhone.length > 0) {
         const { data: s, error: e } = await supabase
           .from("broadcast_contacts")
-          .insert(rowsWithoutPhone)
+          .upsert(rowsWithoutPhone, { ignoreDuplicates: true })
           .select("id");
         if (e) error = e;
         else saved.push(...(s || []));

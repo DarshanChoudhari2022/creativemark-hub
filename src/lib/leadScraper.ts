@@ -24,20 +24,29 @@ const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
 const HTTP_HEADERS = { "Accept-Language": "en" };
 
 // Optional Supabase Edge Function proxy (bypasses CORS / mobile network blocks)
-function getProxyUrl(): string | null {
-  const url = (import.meta as any).env?.VITE_SUPABASE_URL || (typeof process !== "undefined" ? process.env.VITE_SUPABASE_URL : "");
-  return url ? `${url}/functions/v1/overpass-proxy` : null;
+function getProxyConfig(): { url: string; anonKey: string } | null {
+  const env = (import.meta as any).env || {};
+  const url = env.VITE_SUPABASE_URL || "";
+  const anonKey = env.VITE_SUPABASE_ANON_KEY || "";
+  return url && anonKey ? { url: `${url}/functions/v1/overpass-proxy`, anonKey } : null;
 }
 
 async function proxyRequest(action: "geocode" | "scrape", payload: Record<string, any>): Promise<any> {
-  const proxy = getProxyUrl();
-  if (!proxy) throw new Error("Proxy not configured");
-  const res = await fetch(proxy, {
+  const cfg = getProxyConfig();
+  if (!cfg) throw new Error("Proxy not configured");
+  const res = await fetch(cfg.url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": cfg.anonKey,
+      "Authorization": `Bearer ${cfg.anonKey}`,
+    },
     body: JSON.stringify({ action, ...payload }),
   });
-  if (!res.ok) throw new Error(`Proxy error: HTTP ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Proxy error: HTTP ${res.status}${errText ? ` — ${errText}` : ""}`);
+  }
   return res.json();
 }
 
