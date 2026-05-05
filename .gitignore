@@ -1,3 +1,6 @@
+# Android APK builds (too large for GitHub)
+*.apk
+
 # Logs
 logs
 *.log

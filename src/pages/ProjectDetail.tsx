@@ -174,6 +174,19 @@ const ProjectDetail = () => {
     },
   });
 
+  // Fetch Partners for distribution dropdown
+  const { data: partners } = useQuery({
+    queryKey: ["partners_dropdown"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("partners")
+        .select("id, name, commission_type, commission_rate")
+        .eq("status", "Active");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Fetch Project Customers
   const { data: projectCustomers } = useQuery({
     queryKey: ["project_customers", id],
@@ -256,8 +269,11 @@ const ProjectDetail = () => {
     linkType: "bill" as "bill" | "sale",
     bill_id: "",
     sale_id: "",
+    recipientType: "employee" as "employee" | "partner",
     employee_id: "",
     employee_name: "",
+    partner_id: "",
+    partner_name: "",
     job_role: "Salesperson",
     allotted_amount: "0",
     status: "Pending" as "Pending" | "Paid",
@@ -465,13 +481,17 @@ const ProjectDetail = () => {
 
   // ── Money / Job Distribution handlers ──
   const resetDistForm = () => setNewDist({
-    linkType: "bill", bill_id: "", sale_id: "", employee_id: "", employee_name: "",
+    linkType: "bill", bill_id: "", sale_id: "",
+    recipientType: "employee",
+    employee_id: "", employee_name: "",
+    partner_id: "", partner_name: "",
     job_role: "Salesperson", allotted_amount: "0", status: "Pending", paid_date: "", notes: "",
   });
 
   const handleAddDist = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDist.employee_name.trim()) { toast({ title: "Employee name required", variant: "destructive" }); return; }
+    const recipientName = newDist.recipientType === "partner" ? newDist.partner_name : newDist.employee_name;
+    if (!recipientName.trim()) { toast({ title: "Recipient name required", variant: "destructive" }); return; }
     if (!newDist.job_role.trim()) { toast({ title: "Job role required", variant: "destructive" }); return; }
     if (newDist.linkType === "bill" && !newDist.bill_id) { toast({ title: "Select a bill", variant: "destructive" }); return; }
     if (newDist.linkType === "sale" && !newDist.sale_id) { toast({ title: "Select a sale", variant: "destructive" }); return; }
@@ -479,8 +499,8 @@ const ProjectDetail = () => {
       project_id: id,
       bill_id: newDist.linkType === "bill" ? newDist.bill_id : null,
       sale_id: newDist.linkType === "sale" ? newDist.sale_id : null,
-      employee_id: newDist.employee_id || null,
-      employee_name: newDist.employee_name.trim(),
+      employee_id: newDist.recipientType === "employee" ? (newDist.employee_id || null) : null,
+      employee_name: recipientName.trim(),
       job_role: newDist.job_role.trim(),
       allotted_amount: parseFloat(newDist.allotted_amount) || 0,
       status: newDist.status,
@@ -505,6 +525,19 @@ const ProjectDetail = () => {
         amount: payload.allotted_amount,
         notes: `Distribution — ${payload.job_role} — ${billRef}`,
         status: "Completed",
+      });
+    }
+
+    // Auto-create a partner_ledger entry so the commission shows in the Partners page
+    if (newDist.recipientType === "partner" && newDist.partner_id && payload.allotted_amount > 0) {
+      const bill = newDist.linkType === "bill" ? (linkedBills || []).find((b: any) => b.id === newDist.bill_id) : null;
+      const sale = newDist.linkType === "sale" ? (projectSales || []).find((s: any) => s.id === newDist.sale_id) : null;
+      await supabase.from("partner_ledger").insert({
+        partner_id: newDist.partner_id,
+        client_name: bill?.client_name || sale?.customer?.customer_name || project?.client?.name || "—",
+        project_value: bill ? Number(bill.grand_total || 0) : sale ? Number(sale.amount || 0) : 0,
+        commission_amount: payload.allotted_amount,
+        status: payload.status,
       });
     }
 
@@ -1699,27 +1732,58 @@ const ProjectDetail = () => {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label>Employee *</Label>
-                        <Select
-                          value={newDist.employee_id || "custom"}
-                          onValueChange={v => {
-                            if (v === "custom") { setNewDist({ ...newDist, employee_id: "", employee_name: "" }); return; }
-                            const emp = employees?.find(e => e.id === v);
-                            setNewDist({ ...newDist, employee_id: v, employee_name: emp?.name || "" });
-                          }}
-                        >
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="custom">Custom name…</SelectItem>
-                            {(employees || []).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          className="mt-1"
-                          placeholder="Name"
-                          value={newDist.employee_name}
-                          onChange={e => setNewDist({ ...newDist, employee_name: e.target.value })}
-                        />
+                        <Label>Recipient *</Label>
+                        <div className="grid grid-cols-2 gap-1 mt-1 mb-2">
+                          <Button
+                            type="button" size="sm"
+                            variant={newDist.recipientType === "employee" ? "default" : "outline"}
+                            onClick={() => setNewDist({ ...newDist, recipientType: "employee", partner_id: "", partner_name: "" })}
+                          >Employee</Button>
+                          <Button
+                            type="button" size="sm"
+                            variant={newDist.recipientType === "partner" ? "default" : "outline"}
+                            onClick={() => setNewDist({ ...newDist, recipientType: "partner", employee_id: "", employee_name: "" })}
+                          >Partner</Button>
+                        </div>
+                        {newDist.recipientType === "employee" ? (
+                          <>
+                            <Select
+                              value={newDist.employee_id || "custom"}
+                              onValueChange={v => {
+                                if (v === "custom") { setNewDist({ ...newDist, employee_id: "", employee_name: "" }); return; }
+                                const emp = employees?.find(e => e.id === v);
+                                setNewDist({ ...newDist, employee_id: v, employee_name: emp?.name || "" });
+                              }}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="custom">Custom name…</SelectItem>
+                                {(employees || []).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Input className="mt-1" placeholder="Name" value={newDist.employee_name} onChange={e => setNewDist({ ...newDist, employee_name: e.target.value })} />
+                          </>
+                        ) : (
+                          <>
+                            <Select
+                              value={newDist.partner_id || "custom"}
+                              onValueChange={v => {
+                                if (v === "custom") { setNewDist({ ...newDist, partner_id: "", partner_name: "" }); return; }
+                                const p = (partners || []).find((x: any) => x.id === v);
+                                setNewDist({ ...newDist, partner_id: v, partner_name: p?.name || "", employee_name: p?.name || "" });
+                              }}
+                            >
+                              <SelectTrigger><SelectValue placeholder="Select partner" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="custom">Custom name…</SelectItem>
+                                {(partners || []).map((p: any) => (
+                                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input className="mt-1" placeholder="Partner name" value={newDist.partner_name} onChange={e => setNewDist({ ...newDist, partner_name: e.target.value, employee_name: e.target.value })} />
+                          </>
+                        )}
                       </div>
                       <div>
                         <Label>Job Role *</Label>
@@ -1770,7 +1834,7 @@ const ProjectDetail = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="text-[10px] uppercase">
-                      <TableHead>Employee</TableHead>
+                      <TableHead>Recipient</TableHead>
                       <TableHead>Job Role</TableHead>
                       <TableHead>For</TableHead>
                       <TableHead className="text-right">Allotted</TableHead>
