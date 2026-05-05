@@ -243,8 +243,9 @@ export async function importPhoneContacts(): Promise<BroadcastContact[]> {
       email = c.email;
     }
 
-    // Collect ALL phone numbers — one BroadcastContact per number so we
-    // capture every number (this was the reason 3625 → 1007: only [0] was used).
+    // Collect phones — but we emit ONE BroadcastContact per device contact
+    // (not per number). The device address book already de-dupes people, so
+    // 3507 contacts → 3507 rows. Extra numbers per contact go into `notes`.
     const phonesArr = c.phones || c.phoneNumbers || [];
     const allPhones: string[] = [];
     if (Array.isArray(phonesArr) && phonesArr.length > 0) {
@@ -256,32 +257,25 @@ export async function importPhoneContacts(): Promise<BroadcastContact[]> {
       allPhones.push(c.phone);
     }
 
-    if (!display && allPhones.length === 0 && !email) continue;
+    // Normalize + de-dupe the per-contact phone list
+    const normalizedPhones = Array.from(
+      new Set(allPhones.map(normalizePhone).filter(Boolean))
+    );
 
-    if (allPhones.length === 0) {
-      // No phone — save as email/name-only contact
-      contacts.push({
-        name: display || email || "Unknown",
-        phone: undefined,
-        whatsapp: undefined,
-        email: email || undefined,
-        source: "phone",
-        tags: [],
-      });
-    } else {
-      // One entry per phone number — this is the key fix
-      for (const rawPhone of allPhones) {
-        const normalized = normalizePhone(rawPhone);
-        contacts.push({
-          name: display || normalized || "Unknown",
-          phone: normalized,
-          whatsapp: normalized,
-          email: email || undefined,
-          source: "phone",
-          tags: [],
-        });
-      }
-    }
+    if (!display && normalizedPhones.length === 0 && !email) continue;
+
+    const primary = normalizedPhones[0];
+    const extras = normalizedPhones.slice(1);
+
+    contacts.push({
+      name: display || primary || email || "Unknown",
+      phone: primary || undefined,
+      whatsapp: primary || undefined,
+      email: email || undefined,
+      source: "phone",
+      tags: [],
+      notes: extras.length > 0 ? `Other numbers: ${extras.join(", ")}` : undefined,
+    });
   }
 
   console.log(`[broadcast] Normalized ${contacts.length} usable contacts (out of ${raw.length} raw contacts).`);

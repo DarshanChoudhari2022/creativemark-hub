@@ -39,7 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
 const Employees = () => {
   const { isShielded, withShield } = usePrivacyShield();
   const { data: employeesData, loading, insert: insertEmployee, update: updateEmployee, remove: removeEmployee, refresh: refreshEmployees } = useSupabaseTable<any>('employees', '*, work_logs(*), client_assignments(client_id, clients(name)), leads:leads!assigned_to(id, stage), society_data(*)');
-  const { data: clients } = useSupabaseTable<any>('clients', 'id, name, whatsapp');
+  const { data: clients } = useSupabaseTable<any>('clients', 'id, name, whatsapp, phone');
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [editingEmp, setEditingEmp] = useState<any | null>(null);
@@ -263,9 +263,34 @@ const Employees = () => {
 
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").slice(0, 2);
   const sendWorkLogToClient = (emp: any, log: any) => {
-    const msg = `Hi, this is to confirm that ${emp.name} (${emp.displayRole || emp.role}) worked on "${log.workType}" at ${log.location} on ${formatDateDDMMYYYY(new Date(log.date))} for ${log.hours} hours. — CreativeMark`;
+    if (!log?.client_id) {
+      toast.error("This work log isn't linked to a client.");
+      return;
+    }
     const client = clients?.find((c: any) => c.id === log.client_id);
-    if (client?.whatsapp) window.open(waLink(client.whatsapp, msg), "_blank");
+    if (!client) {
+      toast.error("Linked client not found.");
+      return;
+    }
+    const phone = client.whatsapp || client.phone;
+    if (!phone) {
+      toast.error(`No WhatsApp/phone saved for ${client.name}. Add one in Clients.`);
+      return;
+    }
+    const workType = log.work_type || log.workType || "work";
+    const hours = log.hours ?? "";
+    const msg = `Hi, this is to confirm that ${emp.name} (${emp.displayRole || emp.role}) worked on "${workType}" at ${log.location || ""} on ${formatDateDDMMYYYY(new Date(log.date))} for ${hours} hours. — CreativeMark`;
+    const url = waLink(phone, msg);
+    // window.open can be blocked inside Capacitor/WebView; anchor-click falls
+    // back to native intent handling and also survives popup blockers on web.
+    const win = window.open(url, "_blank", "noopener");
+    if (!win) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.click();
+    }
   };
 
   const roles: EmployeeRole[] = ["Video Editor", "Graphic Designer", "Social Media Manager", "Photographer", "Campaign Strategist", "Content Writer", "Sales Executive", "Project Manager", "Others"];

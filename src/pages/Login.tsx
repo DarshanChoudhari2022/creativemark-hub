@@ -36,14 +36,7 @@ export default function Login() {
         toast.error(authError.message);
       } else {
         toast.success("Welcome back!");
-        // Route mobile (Capacitor) users straight to the field app; web
-        // users still land on the admin dashboard.
-        let target = "/";
-        try {
-          const { Capacitor } = await import("@capacitor/core");
-          if (Capacitor.isNativePlatform()) target = "/field";
-        } catch { /* not in Capacitor */ }
-        navigate(target);
+        navigate("/");
       }
     } catch (err) {
       setError("An unexpected error occurred");

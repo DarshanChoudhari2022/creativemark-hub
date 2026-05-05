@@ -44,8 +44,13 @@ import { useAuth } from "@/contexts/AuthContext";
 const Clients = () => {
   const { user } = useAuth();
   const { isShielded, withShield } = usePrivacyShield();
-  const { data: clientsData, loading, insert, update, remove } = useSupabaseTable<any>('clients', '*, client_services(*), client_assignments(employee_id, employees(name))');
-  // Fetch bills separately to avoid FK join issues on the main query
+  // Keep the primary clients call small + fast so the spinner clears quickly.
+  // Related data (services, assignments, bills, payments) is fetched in
+  // parallel and merged in afterwards — the list renders as soon as clients
+  // arrive, even if the side queries are still in flight.
+  const { data: clientsData, loading, error: clientsError, insert, update, remove } = useSupabaseTable<any>('clients', '*');
+  const { data: allServices } = useSupabaseTable<any>('client_services', 'client_id, service_name, active');
+  const { data: allAssignments } = useSupabaseTable<any>('client_assignments', 'client_id, employee_id, employees(name)');
   const { data: allBills } = useSupabaseTable<any>('quotations', 'client_id, grand_total, total_amount, amount_paid, type, status, is_bill, quotation_number, quote_number');
   const { data: allPayments } = useSupabaseTable<any>('payment_history', 'client_id, amount');
   const [view, setView] = useState<"cards" | "table">("cards");
@@ -71,29 +76,55 @@ const Clients = () => {
   };
 
   const clients = useMemo(() => {
+    // Group side-data by client_id once so the per-client map stays O(n).
+    const servicesByClient = new Map<string, any[]>();
+    for (const s of allServices) {
+      if (!s?.active) continue;
+      const list = servicesByClient.get(s.client_id) || [];
+      list.push(s);
+      servicesByClient.set(s.client_id, list);
+    }
+    const assignmentsByClient = new Map<string, any[]>();
+    for (const a of allAssignments) {
+      const list = assignmentsByClient.get(a.client_id) || [];
+      list.push(a);
+      assignmentsByClient.set(a.client_id, list);
+    }
+    const billsByClient = new Map<string, any[]>();
+    for (const b of allBills) {
+      const list = billsByClient.get(b.client_id) || [];
+      list.push(b);
+      billsByClient.set(b.client_id, list);
+    }
+    const paymentsByClient = new Map<string, any[]>();
+    for (const p of allPayments) {
+      const list = paymentsByClient.get(p.client_id) || [];
+      list.push(p);
+      paymentsByClient.set(p.client_id, list);
+    }
+
     return clientsData.map(c => {
-      // Get this client's bills from the separate query
-      const clientBills = allBills.filter((b: any) => b.client_id === c.id);
+      const clientBills = billsByClient.get(c.id) || [];
       const invoices = clientBills.filter((b: any) => b.is_bill || b.type === "Bill" || (b.quotation_number || b.quote_number || "").startsWith("BL-"));
       const totalBilled = invoices.reduce((s: number, b: any) => s + (b.grand_total || b.total_amount || 0), 0);
-      
-      // Calculate total paid from payment history for accurate dynamic sync
-      const clientPayments = allPayments.filter((p: any) => p.client_id === c.id);
+
+      const clientPayments = paymentsByClient.get(c.id) || [];
       const totalPaid = clientPayments.reduce((s: number, p: any) => s + (p.amount || 0), 0);
-      
+
       const outstanding = totalBilled > 0 ? Math.max(0, totalBilled - totalPaid) : (c.outstanding || 0);
+      const assignments = assignmentsByClient.get(c.id) || [];
 
       return {
         ...c,
-        serviceLabels: c.client_services?.filter((s: any) => s.active).map((s: any) => s.service_name) || [],
-        assignedEmployees: c.client_assignments?.map((a: any) => a.employee_id) || [],
-        assignedEmployeeNames: c.client_assignments?.map((a: any) => a.employees?.name).filter(Boolean) || [],
+        serviceLabels: (servicesByClient.get(c.id) || []).map((s: any) => s.service_name),
+        assignedEmployees: assignments.map((a: any) => a.employee_id),
+        assignedEmployeeNames: assignments.map((a: any) => a.employees?.name).filter(Boolean),
         paymentStatus: outstanding > 0 ? "Overdue" : (totalBilled > 0 ? "Paid" : (c.payment_status || "Paid")),
         outstanding,
         totalBilled,
       };
     });
-  }, [clientsData, allBills, allPayments]);
+  }, [clientsData, allServices, allAssignments, allBills, allPayments]);
 
   const filtered = useMemo(() => {
     return clients.filter(c => {
@@ -317,6 +348,12 @@ const Clients = () => {
         <Card className="p-12 text-center">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
           <p className="text-muted-foreground">Loading clients...</p>
+        </Card>
+      ) : clientsError ? (
+        <Card className="p-8 text-center border-red-200 bg-red-50/30">
+          <h3 className="text-base font-semibold text-red-700 mb-1">Couldn't load clients</h3>
+          <p className="text-sm text-red-600 mb-3">{clientsError.message}</p>
+          <Button size="sm" variant="outline" onClick={() => window.location.reload()}>Retry</Button>
         </Card>
       ) : filtered.length === 0 ? (
         <Card className="p-12 text-center">

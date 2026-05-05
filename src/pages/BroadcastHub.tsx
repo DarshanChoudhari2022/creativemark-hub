@@ -238,28 +238,28 @@ export default function BroadcastHub() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
         {/* ── Left: Contacts panel ───────────────────────────── */}
         <div className="lg:col-span-3 space-y-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
+          <Card className="p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
               <h2 className="font-bold text-base flex items-center gap-2">
                 <Users className="h-4 w-4 text-primary" /> Contacts
               </h2>
-              <Badge variant="outline" className="text-xs">
-                {allContacts.length} total · {filtered.length} shown · {selectedIds.size} selected
+              <Badge variant="outline" className="text-[10px] sm:text-xs">
+                {allContacts.length} · {filtered.length} shown · {selectedIds.size} selected
               </Badge>
             </div>
 
             <Tabs defaultValue="all" className="w-full">
-              <TabsList className="grid grid-cols-4 mb-3 w-full">
-                <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-                <TabsTrigger value="crm" className="text-xs">From CRM</TabsTrigger>
-                <TabsTrigger value="upload" className="text-xs">
-                  <Upload className="h-3 w-3 mr-1" /> Upload
+              <TabsList className="grid grid-cols-4 mb-3 w-full h-auto">
+                <TabsTrigger value="all" className="text-[11px] sm:text-xs px-1 sm:px-3">All</TabsTrigger>
+                <TabsTrigger value="crm" className="text-[11px] sm:text-xs px-1 sm:px-3">CRM</TabsTrigger>
+                <TabsTrigger value="upload" className="text-[11px] sm:text-xs px-1 sm:px-3">
+                  <Upload className="h-3 w-3 sm:mr-1" /> <span className="hidden sm:inline">Upload</span>
                 </TabsTrigger>
-                <TabsTrigger value="phone" className="text-xs">
-                  <Smartphone className="h-3 w-3 mr-1" /> Phone
+                <TabsTrigger value="phone" className="text-[11px] sm:text-xs px-1 sm:px-3">
+                  <Smartphone className="h-3 w-3 sm:mr-1" /> <span className="hidden sm:inline">Phone</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -772,11 +772,28 @@ function UploadPanel({ onImported, userId }: { onImported: () => void; userId?: 
 function PhonePanel({ onImported, userId, userName }: { onImported: () => void; userId?: string; userName?: string }) {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [importSummary, setImportSummary] = useState<{ total: number; saved: number; dupes: number } | null>(null);
 
   useEffect(() => {
     isPhoneContactsAvailable().then(setAvailable);
   }, []);
+
+  const clearAllPhoneContacts = async () => {
+    if (!confirm("Delete ALL phone-imported contacts for your account? This cannot be undone. CSV uploads and CRM clients/leads/partners are NOT affected.")) return;
+    setClearing(true);
+    try {
+      let query = supabase.from("broadcast_contacts").delete().eq("source", "phone");
+      if (userId) query = query.eq("created_by", userId);
+      const { error } = await query;
+      if (error) { toast.error(`Clear failed: ${error.message}`); return; }
+      setImportSummary(null);
+      toast.success("Phone-imported contacts cleared. Re-import for a fresh, clean list.");
+      onImported();
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const importNow = async () => {
     setBusy(true);
@@ -796,6 +813,7 @@ function PhonePanel({ onImported, userId, userName }: { onImported: () => void; 
         email: c.email || null,
         source: "phone",
         tags: [],
+        notes: c.notes || null,
         created_by: userId || null,
       }));
 
@@ -882,16 +900,12 @@ function PhonePanel({ onImported, userId, userName }: { onImported: () => void; 
 
   if (!available) {
     return (
-      <div className="rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 p-4 mb-3">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-6 w-6 text-amber-600 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-amber-900">Phone import is APK-only</p>
-            <p className="text-[11px] text-amber-800 mt-0.5">
-              Install the latest CreativeMark Hub APK on your phone to read contacts directly from the device.
-              On the web, you can still upload a CSV/Excel exported from your phone.
-            </p>
-          </div>
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 mb-3">
+        <div className="flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-amber-900 leading-snug">
+            Phone import works inside the CreativeMark Hub APK only. On the web, upload a CSV/Excel instead.
+          </p>
         </div>
       </div>
     );
@@ -899,33 +913,37 @@ function PhonePanel({ onImported, userId, userName }: { onImported: () => void; 
 
   return (
     <div className="space-y-2 mb-3">
-      <div className="rounded-lg border-2 border-dashed bg-muted/30 p-4">
-        <div className="flex items-start gap-3">
-          <Smartphone className="h-7 w-7 text-primary shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold">
-              {userName ? `${userName}'s Phone` : "Import from your phone"}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Tap below — Android will ask for permission to read your address book.
-              All phone numbers (including multiple numbers per contact) will be imported and saved under your account only.
-            </p>
-            <div className="mt-2">
-              <Button size="sm" onClick={importNow} disabled={busy}>
-                {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Smartphone className="h-4 w-4 mr-1" />}
-                {busy ? "Importing…" : `Import ${userName ? userName + "'s" : "Phone"} Contacts`}
-              </Button>
-            </div>
-          </div>
-        </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Button
+          size="sm"
+          onClick={importNow}
+          disabled={busy || clearing}
+          className="flex-1 sm:flex-initial"
+        >
+          {busy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Smartphone className="h-4 w-4 mr-1.5" />}
+          {busy ? "Importing…" : "Import Device Contacts"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={clearAllPhoneContacts}
+          disabled={busy || clearing}
+          className="flex-1 sm:flex-initial text-red-600 border-red-200 hover:bg-red-50"
+          title="Delete all previously imported phone contacts, then re-import for a clean list"
+        >
+          {clearing ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+          {clearing ? "Clearing…" : "Clear & Reset"}
+        </Button>
       </div>
+      <p className="text-[10px] text-muted-foreground leading-snug">
+        One contact = one row. Extra numbers on the same contact are stored in notes. Use <span className="font-semibold">Clear &amp; Reset</span> once to wipe the old bloated import, then tap <span className="font-semibold">Import</span>.
+      </p>
       {importSummary && (
-        <div className="rounded-lg border bg-blue-50 border-blue-200 p-3 text-[11px] text-blue-900 space-y-1">
-          <p className="font-semibold">Import complete — {importSummary.total.toLocaleString()} numbers found on phone</p>
-          <div className="flex gap-4">
-            <span className="text-green-700 font-semibold">✓ {importSummary.saved.toLocaleString()} new imported</span>
-            {importSummary.dupes > 0 && <span className="text-amber-700">⊘ {importSummary.dupes.toLocaleString()} already existed (duplicates skipped)</span>}
-          </div>
+        <div className="rounded-md border bg-blue-50 border-blue-200 p-2.5 text-[11px] text-blue-900">
+          <p className="font-semibold">
+            {importSummary.total.toLocaleString()} contacts read · {importSummary.saved.toLocaleString()} new
+            {importSummary.dupes > 0 && ` · ${importSummary.dupes.toLocaleString()} already existed`}
+          </p>
         </div>
       )}
     </div>

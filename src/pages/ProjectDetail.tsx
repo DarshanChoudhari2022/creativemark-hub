@@ -1687,7 +1687,7 @@ const ProjectDetail = () => {
                   <form onSubmit={handleAddDist} className="space-y-3 pt-2">
                     <div>
                       <Label>Link to *</Label>
-                      <div className="grid grid-cols-2 gap-2 mt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
                         <Button type="button" variant={newDist.linkType === "bill" ? "default" : "outline"} size="sm" onClick={() => setNewDist({ ...newDist, linkType: "bill", sale_id: "" })}>
                           <FileText className="h-3 w-3 mr-1" /> Bill ({(linkedBills || []).length})
                         </Button>
@@ -1730,7 +1730,7 @@ const ProjectDetail = () => {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label>Recipient *</Label>
                         <div className="grid grid-cols-2 gap-1 mt-1 mb-2">
@@ -1798,7 +1798,7 @@ const ProjectDetail = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <Label>Allotted ₹ *</Label>
                         <Input type="number" min={0} value={newDist.allotted_amount} onChange={e => setNewDist({ ...newDist, allotted_amount: e.target.value })} />
