@@ -2,11 +2,12 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.creativemark.hub',
-  appName: 'CreativeMark Hub',
+  appName: 'CreativeMark Field',
   webDir: 'dist',
-  server: {
-    url: 'https://creativemark-hub.vercel.app',
-    cleartext: true
+  // Bundle dist/ into the APK so the app works without relying on Vercel
+  // being reachable. Any pushed web update still requires a rebuild-sync.
+  android: {
+    allowMixedContent: true
   }
 };
 

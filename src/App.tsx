@@ -28,6 +28,7 @@ import Shifts from "./pages/Shifts";
 import Assignments from "./pages/Assignments";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
+import FieldApp from "./pages/FieldApp";
 import Signup from "./pages/Signup";
 import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -50,6 +51,8 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             
             <Route element={<ProtectedRoute />}>
+              {/* Field sales mobile app — no sidebar chrome, mobile-first. */}
+              <Route path="/field" element={<FieldApp />} />
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/analytics" element={<Analytics />} />

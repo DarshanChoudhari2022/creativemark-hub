@@ -32,6 +32,10 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Geolocation for the Field app (live tracking + visit coordinates). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Device contacts for Broadcast Hub import (@capacitor-community/contacts).
          Both READ and WRITE are mandatory in the manifest because the plugin
          declares them together under a single "contacts" permission alias —

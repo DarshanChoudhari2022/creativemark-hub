@@ -12,6 +12,7 @@ dependencies {
     implementation project(':capacitor-community-contacts')
     implementation project(':capacitor-community-file-opener')
     implementation project(':capacitor-filesystem')
+    implementation project(':capacitor-geolocation')
     implementation project(':capacitor-share')
 
 }
