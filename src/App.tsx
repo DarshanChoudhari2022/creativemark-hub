@@ -26,6 +26,7 @@ import CashCustody from "./pages/CashCustody";
 import Verification from "./pages/Verification";
 import Shifts from "./pages/Shifts";
 import Assignments from "./pages/Assignments";
+import FieldReports from "./pages/FieldReports";
 import NotFound from "./pages/NotFound.tsx";
 import Login from "./pages/Login";
 import FieldApp from "./pages/FieldApp";
@@ -75,6 +76,7 @@ const App = () => (
                                 <Route path="/verification" element={<Verification />} />
                 <Route path="/shifts" element={<Shifts />} />
                 <Route path="/assignments" element={<Assignments />} />
+                <Route path="/field-reports" element={<FieldReports />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>
