@@ -55,7 +55,8 @@ const Employees = () => {
     email: "", 
     password: "Creative@123",
     salary: 0, amount: 0,
-    target: 50 // Default target
+    target: 50, // Default target
+    project: "society_one" as string,
   });
   const [phoneError, setPhoneError] = useState("");
   const [logForm, setLogForm] = useState({ date: new Date().toISOString().slice(0, 10), clientId: "", workType: "", location: "", hours: 0, amount: 0, notes: "" });
@@ -118,6 +119,7 @@ const Employees = () => {
       base_rate: form.salary,
       salary: form.salary,
       lead_target: form.target,
+      project: form.project,
       status: "Active",
     });
 
@@ -142,7 +144,8 @@ const Employees = () => {
         password: "Creative@123",
         salary: emp.salary || 0,
         amount: 0,
-        target: emp.lead_target || 50
+        target: emp.lead_target || 50,
+        project: emp.project || "society_one",
       });
       setAddOpen(true);
     });
@@ -161,6 +164,7 @@ const Employees = () => {
       email: form.email,
       salary: form.salary,
       lead_target: form.target,
+      project: form.project,
     });
 
     if (error) {
@@ -186,7 +190,7 @@ const Employees = () => {
 
   const resetForm = () => {
     setEditingEmp(null);
-    setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", password: "Creative@123", salary: 0, amount: 0, target: 50 });
+    setForm({ name: "", role: "Graphic Designer", customRole: "", phone: "", email: "", password: "Creative@123", salary: 0, amount: 0, target: 50, project: "society_one" });
     setPhoneError("");
   };
 
@@ -307,22 +311,62 @@ const Employees = () => {
               className="border-primary text-primary hover:bg-primary/10 mr-2"
               onClick={async () => {
                 toast.loading("Generating logins for existing employees...", { id: 'gen-logins' });
-                let count = 0;
+                let created = 0;
+                let alreadyExist = 0;
+                let noEmail = 0;
+                let errors = 0;
                 for (const emp of employees) {
-                  if (!emp.email) continue;
+                  if (!emp.email) { noEmail++; continue; }
                   // Attempt to sign up
                   const { data: authData, error: authError } = await tempSupabase.auth.signUp({
                     email: emp.email,
                     password: "Creative@123",
                     options: { data: { full_name: emp.name } }
                   });
-                  if (!authError && authData?.user) {
-                    // Update employee ID to match the new auth user ID
-                    await supabase.from('employees').update({ id: authData.user.id }).eq('id', emp.id);
-                    count++;
+                  if (authError) continue;
+                  // Supabase returns a user with empty identities for already-registered emails
+                  const isNew = authData?.user?.identities && authData.user.identities.length > 0;
+                  if (isNew && authData.user!.id !== emp.id) {
+                    const newId = authData.user!.id;
+                    const oldId = emp.id;
+                    // SAFE ID MIGRATION: update all child tables FIRST to prevent cascade data loss
+                    const childTables = [
+                      { table: 'work_logs', col: 'employee_id' },
+                      { table: 'client_assignments', col: 'employee_id' },
+                      { table: 'employee_location_history', col: 'employee_id' },
+                      { table: 'employee_shifts', col: 'employee_id' },
+                      { table: 'society_data', col: 'employee_id' },
+                      { table: 'assigned_societies', col: 'employee_id' },
+                      { table: 'salary_payments', col: 'employee_id' },
+                      { table: 'leads', col: 'assigned_to' },
+                    ];
+                    for (const { table, col } of childTables) {
+                      await supabase.from(table).update({ [col]: newId }).eq(col, oldId);
+                    }
+                    // Copy employee row with new ID, then remove old row
+                    const { data: fullEmp } = await supabase.from('employees').select('*').eq('id', oldId).single();
+                    if (fullEmp) {
+                      const { id: _drop, ...rest } = fullEmp;
+                      const { error: insErr } = await supabase.from('employees').insert({ ...rest, id: newId });
+                      if (insErr) {
+                        console.error(`Failed to migrate ${emp.name}:`, insErr.message);
+                        errors++;
+                        continue;
+                      }
+                      // Safe to delete old row now — child refs already moved
+                      await supabase.from('employees').delete().eq('id', oldId);
+                    }
+                    created++;
+                  } else if (!isNew) {
+                    alreadyExist++;
                   }
                 }
-                toast.success(`Generated ${count} new logins. Default Password: Creative@123`, { id: 'gen-logins' });
+                const parts = [];
+                if (created > 0) parts.push(`${created} new logins created`);
+                if (alreadyExist > 0) parts.push(`${alreadyExist} already had logins`);
+                if (noEmail > 0) parts.push(`${noEmail} skipped (no email)`);
+                if (errors > 0) parts.push(`${errors} failed`);
+                toast.success(`${parts.join(', ')}. Default Password: Creative@123`, { id: 'gen-logins' });
                 refreshEmployees();
               }}
             >
@@ -380,8 +424,18 @@ const Employees = () => {
                       <p className="text-[10px] text-muted-foreground mt-0.5">Employee uses this to log in to the Creative Mark Field App</p>
                     </div>
                   )}
-                  <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div><Label>Lead Target</Label><Input type="number" value={form.target} onChange={(e) => setForm({ ...form, target: +e.target.value })} /></div>
+                    <div><Label>Project</Label>
+                      <Select value={form.project} onValueChange={(v) => setForm({ ...form, project: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="society_one">Society One</SelectItem>
+                          <SelectItem value="smart_tap_ai">Smart Tap AI</SelectItem>
+                          <SelectItem value="both">Both</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
@@ -436,6 +490,8 @@ const Employees = () => {
                       <div className="flex items-center gap-2">
                         <span className="font-bold"><Masked>{emp.name}</Masked></span>
                         <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[emp.status] || ""}`}>{emp.status}</Badge>
+                        {emp.project === 'smart_tap_ai' && <Badge variant="outline" className="text-[10px] bg-violet-100 text-violet-700 border-violet-200">Smart Tap AI</Badge>}
+                        {emp.project === 'both' && <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-200">All Projects</Badge>}
                         {emp.onFieldToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">On Field</span>}
                       </div>
                       <div className="text-sm text-muted-foreground">{emp.displayRole || emp.role}</div>

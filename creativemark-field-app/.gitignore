@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.expo/
+*.local
+.DS_Store
+*.tsbuildinfo
+android/
+ios/

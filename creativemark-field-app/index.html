@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0F172A" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>CM Field</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+
+  <!-- ========== SPLASH / LOADING ========== -->
+  <div id="splash" class="screen active">
+    <div class="splash-inner">
+      <div class="logo-mark">
+        <svg viewBox="0 0 64 64" width="72" height="72">
+          <circle cx="32" cy="32" r="30" fill="#1E40AF" opacity="0.15"/>
+          <path d="M32 6C21.5 6 13 14.5 13 25c0 14 19 33 19 33s19-19 19-33C51 14.5 42.5 6 32 6z" fill="#3B82F6"/>
+          <circle cx="32" cy="25" r="9" fill="#0F172A"/>
+          <circle cx="32" cy="25" r="5" fill="#38BDF8"/>
+        </svg>
+      </div>
+      <h1 class="splash-title">CM Field</h1>
+      <p class="splash-sub">Field Operations Tracker</p>
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <!-- ========== LOGIN ========== -->
+  <div id="login" class="screen">
+    <div class="login-inner">
+      <div class="logo-mark">
+        <svg viewBox="0 0 64 64" width="64" height="64">
+          <circle cx="32" cy="32" r="30" fill="#1E40AF" opacity="0.15"/>
+          <path d="M32 6C21.5 6 13 14.5 13 25c0 14 19 33 19 33s19-19 19-33C51 14.5 42.5 6 32 6z" fill="#3B82F6"/>
+          <circle cx="32" cy="25" r="9" fill="#0F172A"/>
+          <circle cx="32" cy="25" r="5" fill="#38BDF8"/>
+        </svg>
+      </div>
+      <h1 class="login-title">CM Field</h1>
+      <p class="login-sub">Sign in to start your shift</p>
+      <div class="form-group">
+        <input id="login-email" type="email" placeholder="Employee Email" autocapitalize="none" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" />
+      </div>
+      <button id="btn-login" class="btn btn-primary btn-full">Sign In</button>
+      <p id="login-error" class="error-text"></p>
+    </div>
+  </div>
+
+  <!-- ========== MAIN APP (post-login) ========== -->
+  <div id="app" class="screen">
+
+    <!-- ---- TAB: Dashboard ---- -->
+    <div id="tab-dashboard" class="tab-page active">
+      <div class="page-scroll">
+        <h2 class="page-title">Overview</h2>
+        <p class="page-subtitle">Your activity for today</p>
+
+        <div class="stats-row">
+          <div class="stat-box">
+            <span class="stat-label">Target</span>
+            <span id="stat-target" class="stat-value">15</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Visited</span>
+            <span id="stat-visited" class="stat-value">0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Progress</span>
+            <span id="stat-progress" class="stat-value accent">0%</span>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-bar-container">
+          <div id="progress-bar" class="progress-bar-fill" style="width:0%"></div>
+        </div>
+
+        <!-- Tracking Card -->
+        <div class="card" id="tracking-card">
+          <div class="card-header">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#38BDF8" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            <h3>Live Tracking</h3>
+          </div>
+          <p id="tracking-desc" class="card-desc">Start your shift to share your location with your manager.</p>
+          <button id="btn-start-shift" class="btn btn-primary btn-full">Start Shift</button>
+          <button id="btn-stop-shift" class="btn btn-danger btn-full" style="display:none">Stop Shift</button>
+        </div>
+
+        <!-- Status Card -->
+        <div class="card">
+          <div class="card-header">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#38BDF8" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <h3>System Status</h3>
+          </div>
+          <div id="status-list" class="status-list">
+            <div class="status-row"><span class="dot dot-grey"></span><span>Checking GPS...</span></div>
+          </div>
+        </div>
+
+        <button id="btn-logout" class="btn btn-outline-danger btn-full">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Log Out
+        </button>
+      </div>
+    </div>
+
+    <!-- ---- TAB: Assignments ---- -->
+    <div id="tab-assignments" class="tab-page">
+      <div class="page-scroll">
+        <h2 class="page-title">My Assignments</h2>
+        <p id="assignments-subtitle" class="page-subtitle">Loading...</p>
+        <div id="assignments-list" class="assignments-list"></div>
+      </div>
+    </div>
+
+    <!-- ---- TAB: My Visits ---- -->
+    <div id="tab-visits" class="tab-page">
+      <div class="page-scroll">
+        <h2 class="page-title">My Visits</h2>
+        <p id="visits-subtitle" class="page-subtitle">Loading...</p>
+        <div class="visits-filter-row">
+          <button class="filter-btn active" data-range="today">Today</button>
+          <button class="filter-btn" data-range="week">This Week</button>
+          <button class="filter-btn" data-range="month">This Month</button>
+        </div>
+        <div id="visits-list" class="visits-list"></div>
+      </div>
+    </div>
+
+    <!-- ---- Visit Detail / Edit Modal ---- -->
+    <div id="visit-modal" class="modal-overlay">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h3 id="modal-title">Visit Details</h3>
+          <button id="btn-close-modal" class="modal-close">&times;</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- ---- TAB: Log Visit (Society One) ---- -->
+    <div id="tab-visit" class="tab-page project-society">
+      <div class="page-scroll">
+        <h2 class="page-title">Log Visit</h2>
+        <p class="page-subtitle">Enter details of the society visited</p>
+
+        <div class="card form-card">
+          <div class="form-group">
+            <label>Society Name *</label>
+            <input id="visit-name" type="text" placeholder="E.g. Green Valley Apartments" />
+          </div>
+          <div class="form-group">
+            <label>Address *</label>
+            <input id="visit-address" type="text" placeholder="Full address" />
+          </div>
+          <div class="form-group">
+            <label>Contact Person</label>
+            <input id="visit-contact" type="text" placeholder="E.g. Secretary Name" />
+          </div>
+          <div class="form-group">
+            <label>Contact Phone</label>
+            <input id="visit-phone" type="tel" placeholder="Phone Number" />
+          </div>
+          <div class="form-group">
+            <label>Number of Flats</label>
+            <input id="visit-flats" type="number" placeholder="Total Flats" inputmode="numeric" />
+          </div>
+
+          <!-- Photo Evidence -->
+          <label class="section-label">Proof Photos (Optional)</label>
+          <p class="hint-text">A selfie and building photo help verify your visit.</p>
+          <div class="photo-row">
+            <div class="photo-box" id="photo-selfie">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#38BDF8" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+              <span>Take Selfie</span>
+              <input type="file" accept="image/*" capture="user" class="photo-input" data-kind="selfie" />
+            </div>
+            <div class="photo-box" id="photo-building">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#38BDF8" stroke-width="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><path d="M9 22v-4h6v4"/></svg>
+              <span>Building Photo</span>
+              <input type="file" accept="image/*" capture="environment" class="photo-input" data-kind="building" />
+            </div>
+          </div>
+
+          <div id="visit-location-info" class="location-info"></div>
+
+          <button id="btn-submit-visit" class="btn btn-primary btn-full">Submit Visit</button>
+          <p id="visit-error" class="error-text"></p>
+          <p id="visit-success" class="success-text"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- TAB: Log Shop Visit (Smart Tap AI) ---- -->
+    <div id="tab-shop" class="tab-page project-smart-tap">
+      <div class="page-scroll">
+        <h2 class="page-title">Log Shop Visit</h2>
+        <p class="page-subtitle">Smart Tap AI — Record shop owner details</p>
+
+        <div class="card form-card">
+          <div class="form-group">
+            <label>Person / Owner Name *</label>
+            <input id="shop-person-name" type="text" placeholder="Business person's name" />
+          </div>
+          <div class="form-group">
+            <label>Mobile Number *</label>
+            <input id="shop-mobile" type="tel" placeholder="Phone number" inputmode="tel" />
+          </div>
+          <div class="form-group">
+            <label>Shop / Business Name</label>
+            <input id="shop-name" type="text" placeholder="Shop or business name" />
+          </div>
+          <div class="form-group">
+            <label>Interest in Smart Tap AI *</label>
+            <div class="interest-pills">
+              <button class="pill-btn active" data-interest="interested">Interested</button>
+              <button class="pill-btn" data-interest="not_interested">Not Interested</button>
+              <button class="pill-btn" data-interest="follow_up">Follow Up</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Next Call / Follow-up Date</label>
+            <input id="shop-next-call" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea id="shop-notes" rows="3" placeholder="Any additional details..."></textarea>
+          </div>
+
+          <!-- Photo Evidence -->
+          <label class="section-label">Photos (Optional)</label>
+          <div class="photo-row">
+            <div class="photo-box" id="photo-shop-selfie">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#38BDF8" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+              <span>Your Selfie</span>
+              <input type="file" accept="image/*" capture="user" class="photo-input" data-kind="shop-selfie" />
+            </div>
+            <div class="photo-box" id="photo-shop-building">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#38BDF8" stroke-width="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><path d="M9 22v-4h6v4"/></svg>
+              <span>Shop Photo</span>
+              <input type="file" accept="image/*" capture="environment" class="photo-input" data-kind="shop-building" />
+            </div>
+          </div>
+
+          <button id="btn-submit-shop" class="btn btn-primary btn-full">Submit Shop Visit</button>
+          <p id="shop-error" class="error-text"></p>
+          <p id="shop-success" class="success-text"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ──── SHIFT START MODAL ──── -->
+    <div id="shift-start-modal" class="modal-overlay">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h3>Start Your Shift</h3>
+          <button class="modal-close" id="btn-close-shift-start">&times;</button>
+        </div>
+        <div class="modal-body">
+          <label class="section-label">Take a Selfie *</label>
+          <p class="hint-text">A selfie is required to start your shift.</p>
+          <div class="photo-row">
+            <div class="photo-box" id="photo-shift-start">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#38BDF8" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+              <span>Tap to take selfie</span>
+              <input type="file" accept="image/*" capture="user" class="photo-input" data-kind="shift-start" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Planned Work for Today</label>
+            <textarea id="shift-planned-work" rows="3" placeholder="What will you work on today?"></textarea>
+          </div>
+
+          <button id="btn-no-work-flag" class="btn btn-outline-danger btn-full btn-sm" style="margin-bottom:12px">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            No Work Assigned Today
+          </button>
+
+          <button id="btn-confirm-shift-start" class="btn btn-primary btn-full">Start Shift</button>
+          <p id="shift-start-error" class="error-text"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ──── SHIFT END MODAL ──── -->
+    <div id="shift-end-modal" class="modal-overlay">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h3>End Your Shift</h3>
+          <button class="modal-close" id="btn-close-shift-end">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="early-shift-warning" class="early-warning" style="display:none">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="#F59E0B" stroke="none"><path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+            <div>
+              <strong>Early Shift End</strong>
+              <p id="early-warning-text">You are ending your shift early.</p>
+            </div>
+          </div>
+
+          <label class="section-label">End Selfie *</label>
+          <p class="hint-text">Take a selfie to close your shift.</p>
+          <div class="photo-row">
+            <div class="photo-box" id="photo-shift-end">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#38BDF8" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+              <span>Tap to take selfie</span>
+              <input type="file" accept="image/*" capture="user" class="photo-input" data-kind="shift-end" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Work Summary *</label>
+            <textarea id="shift-work-summary" rows="3" placeholder="What did you work on today?"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Shops / Societies Visited</label>
+            <input id="shift-shops-count" type="number" placeholder="How many?" inputmode="numeric" />
+          </div>
+
+          <button id="btn-confirm-shift-end" class="btn btn-danger btn-full">End Shift</button>
+          <p id="shift-end-error" class="error-text"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- Bottom Tab Bar ---- -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="dashboard">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="tab-btn" data-tab="assignments">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>Tasks</span>
+      </button>
+      <button class="tab-btn" data-tab="visits">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Visits</span>
+      </button>
+      <button class="tab-btn project-society" data-tab="visit">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Log</span>
+      </button>
+      <button class="tab-btn project-smart-tap" data-tab="shop" style="display:none">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Shop</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

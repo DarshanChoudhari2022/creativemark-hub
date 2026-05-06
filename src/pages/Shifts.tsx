@@ -28,6 +28,9 @@ interface Shift {
   duration_min: number | null;
   visit_count: number | null;
   notes: string | null;
+  planned_work: string | null;
+  no_work_flag: boolean | null;
+  work_summary: string | null;
 }
 
 interface Employee {
@@ -324,6 +327,28 @@ const Shifts = () => {
                         </div>
                       </div>
                     </div>
+
+                    {(s.planned_work || s.no_work_flag || s.work_summary) && (
+                      <div className="mt-3 pt-3 border-t border-border/40 space-y-1.5">
+                        {s.no_work_flag && (
+                          <div className="flex items-center gap-1.5 text-amber-500 text-[11px] font-semibold">
+                            <Activity className="w-3 h-3" /> No work assigned (flagged by employee)
+                          </div>
+                        )}
+                        {s.planned_work && (
+                          <div className="text-[11px]">
+                            <span className="text-muted-foreground font-semibold">Plan: </span>
+                            <span>{s.planned_work}</span>
+                          </div>
+                        )}
+                        {s.work_summary && (
+                          <div className="text-[11px]">
+                            <span className="text-muted-foreground font-semibold">Summary: </span>
+                            <span>{s.work_summary}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {(s.start_lat != null || s.end_lat != null) && (
                       <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/40 text-[11px]">

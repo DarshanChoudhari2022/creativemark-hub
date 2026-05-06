@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Search, Trophy, Handshake, FileText, Download } from "lucide-react";
+import { Plus, Search, Trophy, Handshake, FileText, Download, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,11 @@ const Partners = () => {
   const [editPartnerId, setEditPartnerId] = useState<string | null>(null);
   const [detailPartner, setDetailPartner] = useState<any | null>(null);
   const [ledger, setLedger] = useState<any[]>([]);
+  const [commOpen, setCommOpen] = useState(false);
+  const [editingComm, setEditingComm] = useState<any | null>(null);
+  const [commForm, setCommForm] = useState({
+    client_name: "", project_value: 0, commission_amount: 0, status: "Pending" as "Pending" | "Paid",
+  });
   const [form, setForm] = useState({
     name: "", phone: "", email: "", whatsapp: "", category: "",
     businessName: "", address: "", pan: "",
@@ -127,6 +132,54 @@ const Partners = () => {
       .eq("partner_id", p.id)
       .order("created_at", { ascending: false });
     setLedger(data || []);
+  };
+
+  const saveCommission = async () => {
+    if (!detailPartner) return;
+    if (!commForm.client_name) { toast.error("Client name is required"); return; }
+
+    const payload = {
+      partner_id: detailPartner.id,
+      client_name: commForm.client_name,
+      project_value: commForm.project_value,
+      commission_amount: commForm.commission_amount,
+      status: commForm.status,
+    };
+
+    let error;
+    if (editingComm) {
+      const res = await supabase.from("partner_ledger").update(payload).eq("id", editingComm.id);
+      error = res.error;
+    } else {
+      const res = await supabase.from("partner_ledger").insert(payload);
+      error = res.error;
+    }
+
+    if (error) {
+      toast.error("Failed to save commission: " + error.message);
+      return;
+    }
+
+    toast.success(editingComm ? "Commission updated" : "Commission added");
+    setCommOpen(false);
+    setEditingComm(null);
+    setCommForm({ client_name: "", project_value: 0, commission_amount: 0, status: "Pending" });
+    // Refresh ledger
+    const { data } = await supabase.from("partner_ledger").select("*").eq("partner_id", detailPartner.id).order("created_at", { ascending: false });
+    setLedger(data || []);
+    fetchPartners();
+  };
+
+  const deleteCommission = async (entryId: string) => {
+    if (!confirm("Delete this commission entry?")) return;
+    const { error } = await supabase.from("partner_ledger").delete().eq("id", entryId);
+    if (error) {
+      toast.error("Failed to delete: " + error.message);
+      return;
+    }
+    toast.success("Commission deleted");
+    setLedger(ledger.filter(e => e.id !== entryId));
+    fetchPartners();
   };
 
   const saveTerms = async () => {
@@ -415,12 +468,48 @@ const Partners = () => {
 
             {/* Commission Ledger */}
             <div>
-              <h4 className="font-bold text-sm mb-2">Commission Ledger</h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-sm">Commission Ledger</h4>
+                <Button size="sm" className="h-7 text-xs bg-primary hover:bg-primary-hover" onClick={() => {
+                  setEditingComm(null);
+                  setCommForm({ client_name: "", project_value: 0, commission_amount: 0, status: "Pending" });
+                  setCommOpen(true);
+                }}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Commission
+                </Button>
+              </div>
+
+              {/* Commission Add/Edit Form */}
+              {commOpen && (
+                <div className="border rounded-lg p-3 mb-3 bg-muted/30 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-xs">Client Name *</Label><Input value={commForm.client_name} onChange={(e) => setCommForm({ ...commForm, client_name: e.target.value })} placeholder="Client name" /></div>
+                    <div><Label className="text-xs">Status</Label>
+                      <Select value={commForm.status} onValueChange={(v: "Pending" | "Paid") => setCommForm({ ...commForm, status: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Paid">Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-xs">Project Value (₹)</Label><Input type="number" value={commForm.project_value} onChange={(e) => setCommForm({ ...commForm, project_value: +e.target.value })} /></div>
+                    <div><Label className="text-xs">Commission Amount (₹)</Label><Input type="number" value={commForm.commission_amount} onChange={(e) => setCommForm({ ...commForm, commission_amount: +e.target.value })} /></div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setCommOpen(false); setEditingComm(null); }}>Cancel</Button>
+                    <Button size="sm" className="h-7 text-xs bg-primary hover:bg-primary-hover" onClick={saveCommission}>{editingComm ? "Update" : "Save"}</Button>
+                  </div>
+                </div>
+              )}
+
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead><TableHead>Client</TableHead><TableHead className="text-right">Project Value</TableHead>
-                    <TableHead className="text-right">Commission</TableHead><TableHead>Status</TableHead>
+                    <TableHead className="text-right">Commission</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -433,10 +522,27 @@ const Partners = () => {
                       <TableCell>
                         <Badge variant="outline" className={`text-[10px] ${entry.status === "Paid" ? "bg-green-100 text-green-700" : entry.status === "Pending" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{entry.status}</Badge>
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+                          setEditingComm(entry);
+                          setCommForm({
+                            client_name: entry.client_name || "",
+                            project_value: entry.project_value || 0,
+                            commission_amount: entry.commission_amount || 0,
+                            status: entry.status || "Pending",
+                          });
+                          setCommOpen(true);
+                        }}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:text-red-700" onClick={() => deleteCommission(entry.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {ledger.length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground">No commissions recorded yet</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No commissions recorded yet</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
