@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { MapPin, Navigation, Clock, AlertTriangle, CheckCircle2, WifiOff, Activity, Play, Square, Route as RouteIcon, X } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import { EmployeeMovementTimeline } from '@/components/EmployeeMovementTimeline';
 
 interface Shift {
   id: string;
@@ -412,7 +413,7 @@ const LiveTracking = () => {
           )}
         </Card>
 
-        {/* Right Side: Employee List */}
+        {/* Right Side: Employee List + Movement Timeline */}
         <Card className="h-full border-border/50 shadow-sm flex flex-col">
           <div className="p-4 border-b border-border bg-muted/20">
             <h3 className="font-semibold flex items-center gap-2">
@@ -438,43 +439,61 @@ const LiveTracking = () => {
               const shift = shiftsToday[emp.id];
               const isSelected = selectedId === emp.id;
               return (
-                <button
-                  key={emp.id}
-                  onClick={() => selectEmployee(emp.id)}
-                  className={`w-full text-left flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                    isSelected
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border/50 hover:bg-muted/30'
-                  }`}
-                >
-                  <div className="relative">
-                    <Avatar className="h-10 w-10 border border-border">
-                      <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
-                        {getInitials(emp.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${dotCls}`}></div>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate flex items-center gap-1.5">
-                      {emp.name}
-                      {shift && !shift.ended_at && (
-                        <span title="Shift in progress" className="inline-flex items-center gap-0.5 text-[10px] text-green-600 font-semibold">
-                          <Play className="w-2.5 h-2.5 fill-current" />
-                        </span>
-                      )}
+                <div key={emp.id}>
+                  <button
+                    onClick={() => selectEmployee(emp.id)}
+                    className={`w-full text-left flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                      isSelected
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border/50 hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className="relative">
+                      <Avatar className="h-10 w-10 border border-border">
+                        <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
+                          {getInitials(emp.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${dotCls}`}></div>
                     </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" />
-                      {lastUpdate ? formatDistanceToNow(lastUpdate, { addSuffix: true }) : 'never'}
-                    </div>
-                  </div>
 
-                  <Badge variant="outline" className="text-[10px] shrink-0">
-                    {visitsToday[emp.id] || 0} today
-                  </Badge>
-                </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate flex items-center gap-1.5">
+                        {emp.name}
+                        {shift && !shift.ended_at && (
+                          <span title="Shift in progress" className="inline-flex items-center gap-0.5 text-[10px] text-green-600 font-semibold">
+                            <Play className="w-2.5 h-2.5 fill-current" />
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" />
+                        {lastUpdate ? formatDistanceToNow(lastUpdate, { addSuffix: true }) : 'never'}
+                      </div>
+                    </div>
+
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {visitsToday[emp.id] || 0} today
+                    </Badge>
+                  </button>
+
+                  {/* Movement timeline for selected employee */}
+                  {isSelected && shift && (
+                    <div className="ml-2 mr-1 mt-1 mb-2 border border-border/40 rounded-lg p-2 bg-muted/10">
+                      <EmployeeMovementTimeline
+                        employeeId={emp.id}
+                        employeeName={emp.name}
+                        shiftStartedAt={shift.started_at}
+                        shiftEndedAt={shift.ended_at}
+                      />
+                    </div>
+                  )}
+                  {isSelected && !shift && (
+                    <div className="ml-2 mr-1 mt-1 mb-2 text-[11px] text-amber-600 bg-amber-50 rounded-md px-3 py-2">
+                      No shift started today — movement timeline unavailable.
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

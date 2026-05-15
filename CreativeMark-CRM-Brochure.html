@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CreativeMark Hub — Business CRM & Field Operations Suite</title>
+  <style>
+    :root {
+      --primary: #1e3a8a;
+      --accent: #3b82f6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --dark: #0f172a;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.55;
+    }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      background: var(--card);
+      padding: 48px 56px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+    }
+    @media print {
+      .page { box-shadow: none; margin: 0; padding: 32px 40px; }
+      .no-print { display: none !important; }
+      body { background: #fff; }
+    }
+
+    /* Header */
+    .brand-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid var(--primary);
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+    .brand-left { display: flex; align-items: center; gap: 16px; }
+    .logo-icon {
+      width: 56px; height: 56px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 22px;
+    }
+    .brand-title { font-size: 28px; font-weight: 800; color: var(--dark); letter-spacing: -0.5px; }
+    .brand-tagline { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .apk-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--dark); color: #fff; padding: 8px 14px; border-radius: 999px;
+      font-size: 12px; font-weight: 700;
+    }
+    .apk-badge svg { width: 18px; height: 18px; }
+
+    /* Typography */
+    h1 { font-size: 26px; font-weight: 800; color: var(--dark); margin-bottom: 8px; }
+    h2 { font-size: 18px; font-weight: 700; color: var(--primary); margin: 28px 0 10px; display: flex; align-items: center; gap: 8px; }
+    h2 .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+    h3 { font-size: 14px; font-weight: 700; color: var(--dark); margin: 16px 0 6px; }
+    p { font-size: 13px; color: var(--text); margin-bottom: 10px; }
+    .lead { font-size: 14px; color: var(--muted); max-width: 720px; }
+
+    /* Feature cards */
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 14px 0;
+    }
+    .feature-card {
+      border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+      background: #fff; transition: transform .15s;
+    }
+    .feature-card:hover { transform: translateY(-2px); }
+    .feature-card .icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: grid; place-items: center; margin-bottom: 8px;
+    }
+    .feature-card h4 { font-size: 13px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+    .feature-card p { font-size: 12px; color: var(--muted); margin: 0; }
+    .tag {
+      display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.4px; padding: 3px 8px; border-radius: 4px; margin-top: 8px;
+    }
+    .tag-web { background: #dbeafe; color: #1e40af; }
+    .tag-android { background: #d1fae5; color: #065f46; }
+    .tag-both { background: #f3e8ff; color: #6b21a8; }
+
+    /* Stats strip */
+    .stats-strip {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0;
+    }
+    .stat-box {
+      border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center;
+      background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    }
+    .stat-box .num { font-size: 22px; font-weight: 800; color: var(--primary); }
+    .stat-box .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 10px 0; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { font-weight: 700; color: var(--dark); background: #f8fafc; font-size: 11px; text-transform: uppercase; }
+    td { color: var(--text); }
+    tr:hover td { background: #f8fafc; }
+
+    /* Screenshot placeholder */
+    .screenshot {
+      border: 2px dashed var(--border); border-radius: 10px;
+      min-height: 140px; display: grid; place-items: center;
+      color: var(--muted); font-size: 12px; margin: 10px 0;
+      background: #f8fafc;
+    }
+    .screenshot strong { color: var(--primary); display: block; margin-bottom: 4px; }
+
+    /* Two column layout for some sections */
+    .cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+    /* APK highlight */
+    .apk-hero {
+      background: linear-gradient(135deg, var(--dark), #1e293b);
+      color: #fff; border-radius: 12px; padding: 22px 26px;
+      display: flex; align-items: center; justify-content: space-between; margin: 18px 0;
+    }
+    .apk-hero h3 { color: #fff; font-size: 16px; margin: 0; }
+    .apk-hero p { color: #cbd5e1; font-size: 12px; margin: 4px 0 0; }
+    .apk-hero .btn {
+      background: var(--success); color: #fff; border: none; padding: 10px 18px;
+      border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;
+    }
+
+    /* Name suggestions */
+    .name-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 6px 14px; font-size: 13px; font-weight: 700; margin: 4px 4px 4px 0;
+    }
+    .name-pill .badge { background: var(--accent); color: #fff; font-size: 9px; padding: 2px 6px; border-radius: 4px; }
+
+    /* Footer */
+    .footer {
+      margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--muted); text-align: center;
+    }
+
+    /* Page break hints for print */
+    .page-break { page-break-before: always; }
+
+    /* Utility */
+    .mt-2 { margin-top: 8px; }
+    .mb-2 { margin-bottom: 8px; }
+    .text-center { text-align: center; }
+    .muted { color: var(--muted); }
+
+    @media (max-width: 720px) {
+      .page { padding: 24px; }
+      .feature-grid, .stats-strip, .cols-2 { grid-template-columns: 1fr; }
+      .brand-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ========== COVER / PAGE 1 ========== -->
+  <div class="page">
+    <div class="brand-header">
+      <div class="brand-left">
+        <div class="logo-icon">CM</div>
+        <div>
+          <div class="brand-title">CreativeMark Hub</div>
+          <div class="brand-tagline">All-in-One Business CRM & Field Operations Suite</div>
+        </div>
+      </div>
+      <div class="apk-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M8 12h8M12 8v8"/></svg>
+        Android APK Available
+      </div>
+    </div>
+
+    <h1>Run Your Business Like a Pro — From Your Desk & On the Field</h1>
+    <p class="lead">
+      CreativeMark Hub is a production-ready CRM + ERP hybrid built for Indian agencies, dealers, and service businesses. It combines a powerful web dashboard for managers with a lightweight Android field app for employees — all synced in real time via Supabase.
+    </p>
+
+    <div class="stats-strip">
+      <div class="stat-box"><div class="num">20+</div><div class="lbl">Modules</div></div>
+      <div class="stat-box"><div class="num">Web + APK</div><div class="lbl">Platforms</div></div>
+      <div class="stat-box"><div class="num">Real-Time</div><div class="lbl">GPS Tracking</div></div>
+      <div class="stat-box"><div class="num">Auto</div><div class="lbl">Lead Assignment</div></div>
+    </div>
+
+    <div class="screenshot">
+      <span><strong>SCREENSHOT PLACEHOLDER 1</strong><br>Dashboard Overview — Add your screenshot here</span>
+    </div>
+
+    <h2><span class="dot"></span>What This Product Is</h2>
+    <p>
+      This is a <strong>Customer Relationship Management (CRM)</strong> system with integrated <strong>Enterprise Resource Planning (ERP)</strong> capabilities. It is designed for businesses that need to manage clients, leads, projects, finances, employees, partners, and field operations in one unified platform. The Android APK (CM Field) lets ground staff log visits, capture geo-tagged selfies, and share live location with managers.
+    </p>
+
+    <h2><span class="dot"></span>Suggested Product Names</h2>
+    <div class="mt-2">
+      <span class="name-pill">CreativeMark Hub <span class="badge">Current</span></span>
+      <span class="name-pill">BizOps CRM</span>
+      <span class="name-pill">FieldSync Pro</span>
+      <span class="name-pill">LeadLoop India</span>
+      <span class="name-pill">SalesMap CRM</span>
+      <span class="name-pill">TrackNClose</span>
+      <span class="name-pill">ProfitPilot</span>
+    </div>
+    <p class="muted mt-2" style="font-size:12px">
+      <em>Recommendation:</em> Keep <strong>CreativeMark Hub</strong> if you already have brand equity, or switch to <strong>FieldSync Pro</strong> / <strong>SalesMap CRM</strong> for a productized SaaS identity when selling to other businesses.
+    </p>
+
+    <div class="apk-hero">
+      <div>
+        <h3>CM Field — Android App</h3>
+        <p>3.7 MB lightweight APK • GPS tracking • Selfie-verified shifts • Offline-capable</p>
+      </div>
+      <button class="btn no-print" onclick="window.print()">Print / Save PDF</button>
+    </div>
+  </div>
+
+  <!-- ========== PAGE 2 ========== -->
+  <div class="page page-break">
+    <h2><span class="dot"></span>Web Dashboard — Core Modules</h2>
+    <p class="lead">The web dashboard is the control center for owners, managers, and back-office teams. Built with React 18, Tailwind CSS, and shadcn/ui components.</p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon" style="background:#dbeafe; color:#1e40af">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </div>
+        <h4>Command Dashboard</h4>
+        <p>Live KPIs, 7-month revenue bar charts, lead pipeline donut chart, monthly profit area chart, product performance leaderboard, upcoming schedule, overdue payments, and follow-up alerts.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#dcfce7; color:#166534">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        </div>
+        <h4>Client Management</h4>
+        <p>Category-based clients (Politician, Clothing, Motors, Custom), service tags, payment status, outstanding amounts, WhatsApp/SMS buttons, card + table views, role-based access control.</p>
+        <span class="tag tag-both">Web + Field</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fef3c7; color:#92400e">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <h4>Lead Pipeline (Kanban + Table)</h4>
+        <p>6-stage pipeline: New → Contacted → Quotation Sent → Negotiation → Converted → Lost. Heat levels (Hot/Warm/Cold), aging alerts, next-call tracking, communication logs, smart lead merging.</p>
+        <span class="tag tag-both">Web + Field</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fce7f3; color:#9d174d">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <h4>Smart Lead Hub (Auto-Assignment)</h4>
+        <p>Real-time lead ingestion from Just Dial, Meta Ads, Google Ads, and OEM CRM via webhooks. Weighted auto-assignment by workload, conversion rate, and SLA breach detection (15-min threshold).</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#e0e7ff; color:#3730a3">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        </div>
+        <h4>Employee & Work Management</h4>
+        <p>Employee profiles with auth login creation, role & project assignment (Society One / Smart Tap AI / Both), work log tracking, earnings & dues, lead targets, and conversion rate analytics.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#ccfbf1; color:#115e59">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <h4>Live GPS Tracking</h4>
+        <p>Leaflet-powered map showing real-time field employee locations. Color-coded status (Live / Recent / Stale / Offline), route polylines from location history, shift duration, and visit counts.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fee2e2; color:#991b1b">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <h4>Quotations & Bills + PDF</h4>
+        <p>Full builder with line items, GST toggle, discount %, custom terms, bank & UPI details. One-click PDF generation. Convert quotation to bill. Record payments (UPI / Cash / Cheque / NEFT).</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#f3e8ff; color:#6b21a8">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h4>Recovery & Collections</h4>
+        <p>Overdue bill dashboard with days-overdue sorting. One-click WhatsApp reminders (soft → firm → final templates). Payment history per client. Privacy-shielded sensitive amounts.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+    </div>
+
+    <div class="screenshot">
+      <span><strong>SCREENSHOT PLACEHOLDER 2</strong><br>Lead Kanban Board / Live Tracking Map — Add your screenshot here</span>
+    </div>
+  </div>
+
+  <!-- ========== PAGE 3 ========== -->
+  <div class="page page-break">
+    <h2><span class="dot"></span>Web Dashboard — Advanced Modules</h2>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon" style="background:#dbeafe; color:#1e40af">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        </div>
+        <h4>Calendar & Scheduling</h4>
+        <p>Month view calendar with events (Shoot, Meeting, Deadline, Holiday, Internal). Auto-imports lead follow-up dates. Assign employees to events. Conflict-free scheduling.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#dcfce7; color:#166534">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        </div>
+        <h4>Project Hub</h4>
+        <p>Manage Client Projects and Inhouse SaaS products. Track progress %, priority, assignee, deadlines, live customer count, and total earnings per project. Project detail pages with full history.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fef3c7; color:#92400e">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <h4>Financial Intelligence</h4>
+        <p>Collected revenue, total expenses, net profit with margin %, outstanding dues. Monthly cash-flow bar chart, expense distribution pie chart, project profitability table, and CSV export.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fce7f3; color:#9d174d">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <h4>Broadcast Hub (Bulk Messaging)</h4>
+        <p>Send festival greetings, offers, and brochures via WhatsApp or Email to thousands. Unified contact pool from CRM + CSV/Excel uploads + phone contact imports. Templates with auto-personalization. PDF/image attachment support.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#e0e7ff; color:#3730a3">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </div>
+        <h4>Partner & Commission Network</h4>
+        <p>Referral partner onboarding with agreement PDF generation. Commission ledger (percentage or flat), bank/UPI details, PAN capture, partner leaderboard, and payout status tracking.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#ccfbf1; color:#115e59">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <h4>Privacy Shield & Security</h4>
+        <p>One-click masking of financial figures and client names for screen-sharing safety. Admin confirmation for destructive edits. Row-Level Security (RLS) policies on every Supabase table.</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fee2e2; color:#991b1b">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33"/><path d="M12 18a6 6 0 0 0 6-6"/></svg>
+        </div>
+        <h4>Settings & Integrations</h4>
+        <p>Company profile, webhook config for Just Dial / Meta / Google Ads / OEM CRM, integration status dots, notification preferences (payment reminders, lead assignments, daily summary).</p>
+        <span class="tag tag-web">Web Only</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#f3e8ff; color:#6b21a8">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M6 20V10M18 20V10M3 20h18M5 20v-6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6"/></svg>
+        </div>
+        <h4>Cash Custody & Shifts</h4>
+        <p>Petty cash tracking, employee shift scheduling, daily assignment dispatch to field staff, and visit verification workflows with manager approval.</p>
+        <span class="tag tag-both">Web + Field</span>
+      </div>
+    </div>
+
+    <div class="screenshot">
+      <span><strong>SCREENSHOT PLACEHOLDER 3</strong><br>Financial Dashboard / Broadcast Hub — Add your screenshot here</span>
+    </div>
+  </div>
+
+  <!-- ========== PAGE 4 ========== -->
+  <div class="page page-break">
+    <h2><span class="dot"></span>CM Field — Android App Features</h2>
+    <p class="lead">A 3.7 MB lightweight Capacitor-powered Android app for ground staff. Employees log in, start their shift with a selfie, and their manager sees them on the Live Tracking map instantly.</p>
+
+    <div class="apk-hero" style="background: linear-gradient(135deg, #065f46, #10b981);">
+      <div>
+        <h3>Download APK</h3>
+        <p>File: <code>app-debug.apk</code> • Size: ~3.7 MB • Supports Android 8+ • Requires GPS & Camera</p>
+      </div>
+      <div style="font-size:22px; font-weight:800; color:#fff;">FREE</div>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon" style="background:#d1fae5; color:#065f46">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        </div>
+        <h4>Secure Login</h4>
+        <p>Employees log in with email + password via Supabase Auth. Auto-session management. Logout clears tracking.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#dbeafe; color:#1e40af">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <h4>Selfie-Verified Shift Start/End</h4>
+        <p>Employees take a selfie to start and end their shift. Photos are uploaded to Supabase Storage with timestamp + GPS coordinates. Prevents proxy attendance.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fef3c7; color:#92400e">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <h4>Live GPS Heartbeat (Every 2 Min)</h4>
+        <p>Location pushed to the server every 2 minutes while on shift. Manager sees live status: Live, Recent, Stale, or Offline.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fce7f3; color:#9d174d">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+        <h4>Society Visit Logging (Society One)</h4>
+        <p>Log society name, address, contact person, phone, number of flats. Attach selfie + building photo. Auto-captures GPS and generates Google Maps link.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#e0e7ff; color:#3730a3">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M8 12h8M12 8v8"/></svg>
+        </div>
+        <h4>Shop Visit Logging (Smart Tap AI)</h4>
+        <p>Record shop owner details, mobile number, interest level (Interested / Not Interested / Follow Up), next call date, notes, and photos.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#ccfbf1; color:#115e59">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        </div>
+        <h4>My Assignments & Daily Tasks</h4>
+        <p>Manager-assigned societies/tasks appear in the app daily. Mark assignments done with one tap. Pending vs Completed split view.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#fee2e2; color:#991b1b">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h4>Visit History & Edit</h4>
+        <p>Review all past visits for today/week/month. Tap any visit to view details or edit society name, address, contact, and flat count.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="icon" style="background:#f3e8ff; color:#6b21a8">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        </div>
+        <h4>Auto-Sync & Real-Time Stats</h4>
+        <p>Dashboard stats refresh every 30 seconds. Target vs visited progress bar. System status panel for GPS, permission, and tracking health.</p>
+        <span class="tag tag-android">Android</span>
+      </div>
+    </div>
+
+    <h3>APK Build Details</h3>
+    <table>
+      <tr><th>Property</th><th>Value</th></tr>
+      <tr><td>App Name</td><td>CM Field</td></tr>
+      <tr><td>Package Size</td><td>~3.7 MB (debug APK)</td></tr>
+      <tr><td>Framework</td><td>Capacitor 6 + Vanilla JS + Vite</td></tr>
+      <tr><td>Backend</td><td>Supabase (PostgreSQL + Auth + Storage)</td></tr>
+      <tr><td>Min Android</td><td>API 26 (Android 8.0+)</td></tr>
+      <tr><td>Permissions</td><td>Location (fine + coarse), Camera, Internet, Foreground Service</td></tr>
+      <tr><td>GPS Accuracy</td><td>Rejects visits if accuracy &gt; 200m</td></tr>
+      <tr><td>Heartbeat</td><td>Every 2 minutes while shift is active</td></tr>
+    </table>
+
+    <div class="screenshot">
+      <span><strong>SCREENSHOT PLACEHOLDER 4</strong><br>CM Field App Screens (Dashboard + Shift Modal + Visit Form) — Add your screenshots here</span>
+    </div>
+  </div>
+
+  <!-- ========== PAGE 5 ========== -->
+  <div class="page page-break">
+    <h2><span class="dot"></span>Complete Feature Index</h2>
+    <p class="lead">A quick-reference master list of every capability available in the CreativeMark Hub ecosystem.</p>
+
+    <table>
+      <tr><th style="width:30%">Category</th><th>Features</th><th style="width:12%">Platform</th></tr>
+      <tr><td><strong>Dashboard</strong></td><td>KPI cards, Revenue chart (billed vs received), Lead pipeline donut, Monthly profit area chart, Product performance leaderboard, Upcoming schedule, Overdue payments list, Follow-ups due today, Pending tasks, Employees on field widget, Privacy shield toggle</td><td>Web</td></tr>
+      <tr><td><strong>Clients</strong></td><td>Add/edit/delete, Category tags (Politician, Clothing, Motors, Custom), Service labels, Payment status filter, Outstanding amount, Assigned employees, WhatsApp & SMS quick actions, Card + Table view, Role-based access</td><td>Web</td></tr>
+      <tr><td><strong>Leads</strong></td><td>Kanban (6 stages) + Table view, Heat (Hot/Warm/Cold), Aging alerts, Next-call & action-item tracking, Communication log (Call/WhatsApp/SMS), Estimated value, Source attribution, Smart lead merge, Browser notification reminders</td><td>Web</td></tr>
+      <tr><td><strong>Smart Lead Hub</strong></td><td>Webhook ingestion (Just Dial, Meta, Google, OEM), Auto-assignment algorithm (workload + conversion rate), 15-min SLA breach alerts, Response time tracking, Live activity feed, Sales roster management, Platform integration status</td><td>Web</td></tr>
+      <tr><td><strong>Employees</strong></td><td>Profile & auth creation, Roles & custom roles, Project assignment, Work log (date, client, type, hours, amount), Earnings / Advance / Dues / Net payable, Lead conversion rate, Lead target vs active, Bulk login fix tool</td><td>Web</td></tr>
+      <tr><td><strong>Live Tracking</strong></td><td>Leaflet map with real-time markers, Color-coded status (Live/Recent/Stale/Offline), Route polylines from history, Shift duration & visit count popup, Employee filter, Auto-pan on selection, Supabase realtime subscriptions</td><td>Web</td></tr>
+      <tr><td><strong>Quotations</strong></td><td>Line-item builder, Service presets, GST toggle, Discount %, Custom terms, Bank & UPI details, PDF generation (jsPDF + autotable), Preview dialog, Convert to Bill</td><td>Web</td></tr>
+      <tr><td><strong>Bills & Recovery</strong></td><td>Bill status tracking (Draft/Sent/Approved/Paid/Overdue), Payment recording with mode & transaction ID, Bill distribution to employees, Overdue list with WhatsApp reminders (soft/firm/final), Privacy-shielded amounts</td><td>Web</td></tr>
+      <tr><td><strong>Calendar</strong></td><td>Month view, Event types (Shoot/Meeting/Deadline/Holiday/Internal), Employee assignment, Lead follow-up auto-import, Add/edit/delete events, Type filter</td><td>Web</td></tr>
+      <tr><td><strong>Projects</strong></td><td>Client Project & Inhouse SaaS types, Priority & status, Progress bar, Start/end dates, Assignee, Live customer count, Total earnings, Detail page with full history</td><td>Web</td></tr>
+      <tr><td><strong>Financials</strong></td><td>Revenue, Expenses, Net profit, Profit margin %, Outstanding dues, Monthly cash-flow chart, Expense category pie chart, Project profitability table, Recent transactions, CSV export</td><td>Web</td></tr>
+      <tr><td><strong>Broadcast Hub</strong></td><td>Bulk WhatsApp & Email, Festival + Marketing + General templates, Contact pool (CRM + CSV + Phone imports), Select all / clear, Channel filter, Attachment upload (PDF/Image), Live message preview, Send history</td><td>Web</td></tr>
+      <tr><td><strong>Partners</strong></td><td>Partner onboarding, Agreement PDF generation, Commission ledger (percentage/flat), Bank/UPI/PAN capture, Partner leaderboard, Total earned vs pending, Payout status</td><td>Web</td></tr>
+      <tr><td><strong>Shifts & Assignments</strong></td><td>Shift creation, Society/shop assignment to employees, Priority scoring, Daily dispatch to field app, Visit verification queue, Manager approval workflow</td><td>Web + Field</td></tr>
+      <tr><td><strong>Notifications</strong></td><td>Payment due alerts, Lead follow-up reminders, SLA breach alerts, Overdue bill warnings, Daily summary option, Browser push notifications</td><td>Web</td></tr>
+      <tr><td><strong>Settings</strong></td><td>Company profile (name, tagline, GST, address), Webhook integration config, Integration status dots, Toggle notifications, Privacy shield settings</td><td>Web</td></tr>
+      <tr><td><strong>Field App (CM Field)</strong></td><td>Employee login, Shift start/end with selfie + GPS, Live location heartbeat (2 min), Society visit log (selfie + building photo + GPS), Shop visit log (interest + follow-up date), Daily assignments, Visit history with edit, Auto-sync dashboard, Project filter (Society One / Smart Tap AI / Both)</td><td>Android APK</td></tr>
+    </table>
+
+    <h2><span class="dot"></span>Tech Stack & Architecture</h2>
+    <div class="cols-2">
+      <div>
+        <h3>Frontend</h3>
+        <ul style="font-size:12px; color:var(--muted); padding-left:18px">
+          <li>React 18 + TypeScript + Vite</li>
+          <li>Tailwind CSS + shadcn/ui components</li>
+          <li>Recharts for analytics</li>
+          <li>Leaflet + React-Leaflet for maps</li>
+          <li>React Query (TanStack) for data</li>
+          <li>React Router v6 for navigation</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Backend & Data</h3>
+        <ul style="font-size:12px; color:var(--muted); padding-left:18px">
+          <li>Supabase (PostgreSQL + Auth + Realtime)</li>
+          <li>Row-Level Security (RLS) policies</li>
+          <li>Supabase Storage for photos & PDFs</li>
+          <li>Edge Functions for webhooks</li>
+          <li>Capacitor 6 for Android wrapper</li>
+          <li>jsPDF + autotable for PDF generation</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2><span class="dot"></span>Suggested Add-On Features for Growth</h2>
+    <ul style="font-size:13px; color:var(--text); padding-left:18px; line-height:1.8">
+      <li><strong>Invoice QR Code:</strong> Add UPI QR to generated PDFs for instant payment.</li>
+      <li><strong>Multi-Language:</strong> Hindi/Marathi toggle for the field app to improve adoption.</li>
+      <li><strong>Voice Notes:</strong> Let field staff record 30-sec voice memos instead of typing notes.</li>
+      <li><strong>Expense Scanner:</strong> OCR receipt upload in the Financials module.</li>
+      <li><strong>WhatsApp Business API:</strong> Replace web WhatsApp links with official Business API for automated drip campaigns.</li>
+      <li><strong>Attendance Biometrics:</strong> Face-match verification between shift selfie and employee profile photo.</li>
+      <li><strong>Customer Portal:</strong> Give clients a read-only view of their project progress and invoices.</li>
+      <li><strong>Predictive Analytics:</strong> ML-based lead scoring to predict which leads will convert.</li>
+      <li><strong>Multi-Branch:</strong> Add branch/territory scoping for franchise or multi-city operations.</li>
+    </ul>
+
+    <div class="footer">
+      <strong>CreativeMark Hub</strong> — Built for Indian Businesses • Web Dashboard + Android Field App • Powered by Supabase & React<br>
+      To share on LinkedIn / WhatsApp groups: Print this page (Ctrl+P → Save as PDF), then attach your screenshots before posting.
+    </div>
+  </div>
+
+</body>
+</html>

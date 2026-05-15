@@ -487,14 +487,16 @@ const Employees = () => {
                       <AvatarFallback className="font-bold text-sm bg-primary/10 text-primary">{getInitials(emp.name)}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold"><Masked>{emp.name}</Masked></span>
-                        <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[emp.status] || ""}`}>{emp.status}</Badge>
-                        {emp.project === 'smart_tap_ai' && <Badge variant="outline" className="text-[10px] bg-violet-100 text-violet-700 border-violet-200">Smart Tap AI</Badge>}
-                        {emp.project === 'both' && <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-200">All Projects</Badge>}
-                        {emp.onFieldToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">On Field</span>}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold truncate max-w-[120px] sm:max-w-none"><Masked>{emp.name}</Masked></span>
+                        <Badge variant="outline" className={`text-[10px] shrink-0 ${STATUS_COLORS[emp.status] || ""}`}>{emp.status}</Badge>
                       </div>
-                      <div className="text-sm text-muted-foreground">{emp.displayRole || emp.role}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className="text-sm text-muted-foreground">{emp.displayRole || emp.role}</span>
+                        {emp.project === 'smart_tap_ai' && <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-violet-100 text-violet-700 border-violet-200">Smart Tap AI</Badge>}
+                        {emp.project === 'both' && <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-200">All Projects</Badge>}
+                        {emp.onFieldToday && <span className="text-[9px] px-1.5 py-0 rounded-full bg-primary/10 text-primary font-semibold">On Field</span>}
+                      </div>
                     </div>
                     <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
                       <div className="text-center">
