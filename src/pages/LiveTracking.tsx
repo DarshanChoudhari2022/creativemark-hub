@@ -1,15 +1,16 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { PageHeader } from '@/components/shared';
 import { Card } from '@/components/ui/card';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, CircleMarker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { MapPin, Navigation, Clock, AlertTriangle, CheckCircle2, WifiOff, Activity, Play, Square, Route as RouteIcon, X } from 'lucide-react';
+import { MapPin, Navigation, Clock, AlertTriangle, CheckCircle2, WifiOff, Activity, Play, Square, Route as RouteIcon, X, Locate, ExternalLink } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { EmployeeMovementTimeline } from '@/components/EmployeeMovementTimeline';
+import { MobileTrackingSheet } from '@/components/MobileTrackingSheet';
 
 interface Shift {
   id: string;
@@ -89,11 +90,31 @@ const LiveTracking = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [route, setRoute] = useState<[number, number][]>([]);
   const [routeLoading, setRouteLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   // Mirror selectedId into a ref so the realtime handler (registered once,
   // empty deps) can always read the *current* selection without forcing a
   // channel re-subscribe on every click.
   const selectedIdRef = useRef<string | null>(null);
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+
+  // Responsive detection
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Custom avatar DivIcon factory
+  const makeAvatarIcon = useCallback((name: string, status: EmpStatus) => {
+    const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2);
+    return L.divIcon({
+      className: 'leaflet-marker-avatar',
+      iconSize: [48, 56],
+      iconAnchor: [24, 56],
+      popupAnchor: [0, -48],
+      html: `<div class="avatar-marker-container"><div class="avatar-marker-dot status-${status}">${initials}</div><div class="avatar-marker-arrow"></div></div>`,
+    });
+  }, []);
 
   const fetchEmployees = async () => {
     const { data, error } = await supabase
@@ -248,8 +269,8 @@ const LiveTracking = () => {
   );
 
   return (
-    <div className="h-full flex flex-col">
-      <PageHeader
+    <div className={`h-full flex flex-col ${isMobile ? 'tracking-page-mobile' : ''}`}>
+      {!isMobile && <PageHeader
         title="Live Tracking"
         subtitle="Track field salespersons in real-time"
         actions={
@@ -258,40 +279,42 @@ const LiveTracking = () => {
             Live Updates Active
           </Badge>
         }
-      />
+      />}
 
-      {/* Status filter pills with counts. Click to filter the map + list. */}
-      <div className="flex flex-wrap gap-2 mt-2 mb-3">
-        {([
-          { key: 'all',     label: 'All',      icon: Activity,        cls: 'bg-slate-100 text-slate-700 border-slate-200',     active: 'bg-slate-900 text-white border-slate-900' },
-          { key: 'live',    label: 'Live',     icon: CheckCircle2,    cls: 'bg-green-50 text-green-700 border-green-200',       active: 'bg-green-600 text-white border-green-600' },
-          { key: 'recent',  label: 'Recent',   icon: Clock,           cls: 'bg-blue-50 text-blue-700 border-blue-200',          active: 'bg-blue-600 text-white border-blue-600' },
-          { key: 'stale',   label: 'Stale',    icon: AlertTriangle,   cls: 'bg-amber-50 text-amber-700 border-amber-200',       active: 'bg-amber-600 text-white border-amber-600' },
-          { key: 'offline', label: 'Offline',  icon: WifiOff,         cls: 'bg-slate-50 text-slate-600 border-slate-200',       active: 'bg-slate-600 text-white border-slate-600' },
-        ] as const).map(opt => {
-          const Icon = opt.icon;
-          const count = opt.key === 'all' ? employees.length : counts[opt.key as EmpStatus];
-          const isActive = filter === opt.key;
-          return (
-            <button
-              key={opt.key}
-              onClick={() => setFilter(opt.key as any)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${isActive ? opt.active : opt.cls + ' hover:opacity-80'}`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {opt.label}
-              <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-semibold ${isActive ? 'bg-white/20' : 'bg-white'}`}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Status filter pills — hidden on mobile (filters in bottom sheet) */}
+      {!isMobile && (
+        <div className="flex flex-wrap gap-2 mt-2 mb-3">
+          {([
+            { key: 'all',     label: 'All',      icon: Activity,        cls: 'bg-slate-100 text-slate-700 border-slate-200',     active: 'bg-slate-900 text-white border-slate-900' },
+            { key: 'live',    label: 'Live',     icon: CheckCircle2,    cls: 'bg-green-50 text-green-700 border-green-200',       active: 'bg-green-600 text-white border-green-600' },
+            { key: 'recent',  label: 'Recent',   icon: Clock,           cls: 'bg-blue-50 text-blue-700 border-blue-200',          active: 'bg-blue-600 text-white border-blue-600' },
+            { key: 'stale',   label: 'Stale',    icon: AlertTriangle,   cls: 'bg-amber-50 text-amber-700 border-amber-200',       active: 'bg-amber-600 text-white border-amber-600' },
+            { key: 'offline', label: 'Offline',  icon: WifiOff,         cls: 'bg-slate-50 text-slate-600 border-slate-200',       active: 'bg-slate-600 text-white border-slate-600' },
+          ] as const).map(opt => {
+            const Icon = opt.icon;
+            const count = opt.key === 'all' ? employees.length : counts[opt.key as EmpStatus];
+            const isActive = filter === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => setFilter(opt.key as any)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${isActive ? opt.active : opt.cls + ' hover:opacity-80'}`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {opt.label}
+                <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-semibold ${isActive ? 'bg-white/20' : 'bg-white'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[600px] mt-2">
+      <div className={`flex-1 ${isMobile ? 'relative -mx-4 -mt-2 -mb-4 md:-mx-6 md:-mb-6' : 'grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[600px] mt-2'}`}>
         
         {/* Left Side: Map */}
-        <Card className="lg:col-span-3 h-full overflow-hidden border-border/50 shadow-sm relative z-0">
+        <Card className={`${isMobile ? 'h-full border-0 shadow-none rounded-none' : 'lg:col-span-3 h-full border-border/50 shadow-sm'} overflow-hidden relative z-0`}>
           {/* Selected-employee banner overlay (shows above map). */}
           {selectedEmp && (
             <div className="absolute top-3 left-3 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg shadow-lg p-3 max-w-[300px]">
@@ -313,6 +336,17 @@ const LiveTracking = () => {
                         ? ` → ${format(new Date(shiftsToday[selectedEmp.id].ended_at!), 'HH:mm')}`
                         : ' → ongoing'}
                     </div>
+                  )}
+                  {selectedEmp.current_lat && selectedEmp.current_lng && (
+                    <a
+                      href={`https://www.google.com/maps?q=${selectedEmp.current_lat},${selectedEmp.current_lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Open in Google Maps
+                    </a>
                   )}
                 </div>
                 <button
@@ -367,7 +401,7 @@ const LiveTracking = () => {
                   <Marker
                     key={emp.id}
                     position={[emp.current_lat, emp.current_lng]}
-                    icon={ICONS[status]}
+                    icon={isMobile ? makeAvatarIcon(emp.name, status) : ICONS[status]}
                     eventHandlers={{ click: () => selectEmployee(emp.id) }}
                     opacity={selectedId && !isSelected ? 0.5 : 1}
                   >
@@ -393,13 +427,25 @@ const LiveTracking = () => {
                         ) : (
                           <div className="text-xs text-amber-600 font-medium">No shift started today</div>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); selectEmployee(emp.id); }}
-                          className="mt-2 text-xs text-primary hover:underline inline-flex items-center gap-1"
-                        >
-                          <RouteIcon className="w-3 h-3" />
-                          {isSelected ? 'Hide route' : "Show today's route"}
-                        </button>
+                        <div className="flex items-center gap-3 mt-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); selectEmployee(emp.id); }}
+                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            <RouteIcon className="w-3 h-3" />
+                            {isSelected ? 'Hide route' : "Show today's route"}
+                          </button>
+                          <a
+                            href={`https://www.google.com/maps?q=${emp.current_lat},${emp.current_lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Google Maps
+                          </a>
+                        </div>
                       </div>
                     </Popup>
                   </Marker>
@@ -413,7 +459,19 @@ const LiveTracking = () => {
           )}
         </Card>
 
-        {/* Right Side: Employee List + Movement Timeline */}
+        {/* Desktop: Right sidebar | Mobile: Bottom sheet */}
+        {isMobile ? (
+          <MobileTrackingSheet
+            employees={filteredEmployees}
+            selectedId={selectedId}
+            onSelect={selectEmployee}
+            visitsToday={visitsToday}
+            shiftsToday={shiftsToday}
+            classifyEmployee={classifyEmployee}
+            route={route}
+            routeLoading={routeLoading}
+          />
+        ) : (
         <Card className="h-full border-border/50 shadow-sm flex flex-col">
           <div className="p-4 border-b border-border bg-muted/20">
             <h3 className="font-semibold flex items-center gap-2">
@@ -498,6 +556,7 @@ const LiveTracking = () => {
             })}
           </div>
         </Card>
+        )}
       </div>
     </div>
   );

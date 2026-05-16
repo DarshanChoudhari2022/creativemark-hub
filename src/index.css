@@ -127,3 +127,232 @@
     box-shadow: var(--shadow-card-hover);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Zomato-style Live Tracking — Mobile-first styles
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Custom marker: pulsing ring around employee avatar */
+@keyframes marker-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes marker-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.live-marker-pulse {
+  animation: marker-pulse-ring 2s infinite;
+}
+
+.live-marker-pulse-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(34, 197, 94, 0.4);
+  animation: marker-pulse 2s infinite;
+}
+
+/* Leaflet custom marker overrides for avatar markers */
+.leaflet-marker-avatar {
+  background: none !important;
+  border: none !important;
+}
+
+.avatar-marker-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-marker-dot {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: white;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0,0,0,0.05);
+  position: relative;
+  z-index: 2;
+}
+
+.avatar-marker-dot.status-live {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+.avatar-marker-dot.status-recent {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+.avatar-marker-dot.status-stale {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+.avatar-marker-dot.status-offline {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+.avatar-marker-dot.status-live::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2px solid rgba(34, 197, 94, 0.35);
+  animation: marker-pulse 2s ease-out infinite;
+}
+
+/* Direction arrow below marker */
+.avatar-marker-arrow {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 10px solid white;
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.15));
+}
+
+/* Bottom sheet / drawer for mobile tracking */
+.tracking-bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: white;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.tracking-bottom-sheet .sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: #d1d5db;
+  border-radius: 99px;
+  margin: 10px auto 6px;
+  flex-shrink: 0;
+}
+
+/* Animated route line dashes (Zomato-style) */
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.leaflet-interactive.animated-route {
+  stroke-dasharray: 10 6;
+  animation: dash-flow 1s linear infinite;
+}
+
+/* Route gradient overlay */
+.route-start-dot,
+.route-end-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.route-start-dot {
+  background: #22c55e;
+}
+
+.route-end-dot {
+  background: #ef4444;
+}
+
+/* Status badge animation */
+@keyframes status-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-badge-live {
+  animation: status-breathe 2s ease-in-out infinite;
+}
+
+/* Mobile full-screen map container */
+.tracking-map-mobile {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Employee card in bottom sheet */
+.employee-track-card {
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.employee-track-card:active {
+  transform: scale(0.97);
+}
+
+.employee-track-card.selected {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.04);
+}
+
+/* Float button for recenter */
+.tracking-fab {
+  position: fixed;
+  z-index: 999;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(0 0% 90%);
+  transition: all 0.2s ease;
+}
+
+.tracking-fab:active {
+  transform: scale(0.9);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Override leaflet z-index for popups in mobile tracking mode */
+@media (max-width: 1023px) {
+  .tracking-page-mobile .leaflet-popup {
+    z-index: 998 !important;
+  }
+  .tracking-page-mobile .leaflet-control-zoom {
+    margin-right: 12px !important;
+    margin-bottom: 200px !important;
+  }
+}
