@@ -81,6 +81,92 @@ const ICONS: Record<EmpStatus, L.Icon> = {
   offline: makeIcon('grey'),
 };
 
+/**
+ * MapFocus — auto-zooms / pans map to fit a set of points.
+ * Re-triggers whenever `points` change (e.g. new GPS ping arrives
+ * for the selected employee).
+ */
+function MapFocus({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!points || points.length === 0) return;
+    if (points.length === 1) {
+      map.flyTo(points[0], Math.max(map.getZoom(), 16), { animate: true, duration: 0.8 });
+    } else {
+      const bounds = L.latLngBounds(points.map(p => L.latLng(p[0], p[1])));
+      map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 17, animate: true, duration: 0.8 });
+    }
+  }, [points, map]);
+  return null;
+}
+
+/**
+ * AutoFollow — keeps map centered on the selected employee's latest
+ * position whenever it changes. This is the Zomato "follow rider" behavior.
+ */
+function AutoFollow({ lat, lng, enabled }: { lat: number; lng: number; enabled: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!enabled || !lat || !lng) return;
+    map.panTo([lat, lng], { animate: true, duration: 0.5 });
+  }, [lat, lng, enabled, map]);
+  return null;
+}
+
+/**
+ * SmoothMarker — wraps a react-leaflet Marker and smoothly animates
+ * its position when coordinates change (like a Zomato delivery boy
+ * marker sliding on the map).
+ */
+function SmoothMarker({ position, icon, eventHandlers, opacity, children }: {
+  position: [number, number];
+  icon: L.Icon | L.DivIcon;
+  eventHandlers?: any;
+  opacity?: number;
+  children?: React.ReactNode;
+}) {
+  const markerRef = useRef<L.Marker | null>(null);
+  const prevPos = useRef<[number, number]>(position);
+
+  useEffect(() => {
+    const marker = markerRef.current;
+    if (!marker) return;
+    const [oldLat, oldLng] = prevPos.current;
+    const [newLat, newLng] = position;
+    if (oldLat === newLat && oldLng === newLng) return;
+
+    // Animate over 1 second in 30 steps
+    const steps = 30;
+    const dLat = (newLat - oldLat) / steps;
+    const dLng = (newLng - oldLng) / steps;
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      marker.setLatLng([
+        oldLat + dLat * step,
+        oldLng + dLng * step,
+      ]);
+      if (step >= steps) {
+        clearInterval(interval);
+        prevPos.current = position;
+      }
+    }, 33); // ~30fps
+    return () => clearInterval(interval);
+  }, [position]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={position}
+      icon={icon}
+      eventHandlers={eventHandlers}
+      opacity={opacity}
+    >
+      {children}
+    </Marker>
+  );
+}
+
 const LiveTracking = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [visitsToday, setVisitsToday] = useState<Record<string, number>>({});
@@ -91,6 +177,7 @@ const LiveTracking = () => {
   const [route, setRoute] = useState<[number, number][]>([]);
   const [routeLoading, setRouteLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [autoFollow, setAutoFollow] = useState(true);
   // Mirror selectedId into a ref so the realtime handler (registered once,
   // empty deps) can always read the *current* selection without forcing a
   // channel re-subscribe on every click.
@@ -260,6 +347,7 @@ const LiveTracking = () => {
       return;
     }
     setSelectedId(id);
+    setAutoFollow(true); // re-enable auto-follow when selecting a new employee
     fetchRouteFor(id);
   };
 
@@ -371,11 +459,20 @@ const LiveTracking = () => {
                 url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               />
 
-              {/* Today's route for the selected employee. Drawn under markers. */}
+              {/* Today's route for the selected employee. Animated dashed line like Zomato. */}
               {selectedId && route.length >= 2 && (
                 <Polyline
                   positions={route}
-                  pathOptions={{ color: '#2563EB', weight: 4, opacity: 0.75 }}
+                  pathOptions={{ color: '#2563EB', weight: 4, opacity: 0.75, dashArray: '12 8', className: 'animated-route' }}
+                />
+              )}
+
+              {/* Auto-follow the selected employee's live position (Zomato-style) */}
+              {selectedId && selectedEmp && selectedEmp.current_lat && (
+                <AutoFollow
+                  lat={selectedEmp.current_lat}
+                  lng={selectedEmp.current_lng}
+                  enabled={autoFollow}
                 />
               )}
 
@@ -398,7 +495,7 @@ const LiveTracking = () => {
                 const shift = shiftsToday[emp.id];
                 const isSelected = selectedId === emp.id;
                 return (
-                  <Marker
+                  <SmoothMarker
                     key={emp.id}
                     position={[emp.current_lat, emp.current_lng]}
                     icon={isMobile ? makeAvatarIcon(emp.name, status) : ICONS[status]}
@@ -448,10 +545,21 @@ const LiveTracking = () => {
                         </div>
                       </div>
                     </Popup>
-                  </Marker>
+                  </SmoothMarker>
                 );
               })}
             </MapContainer>
+
+            {/* Mobile: Re-center FAB */}
+            {isMobile && selectedId && selectedEmp && (
+              <button
+                onClick={() => setAutoFollow(true)}
+                className="absolute bottom-48 right-3 z-[1000] bg-white shadow-lg border border-border rounded-full w-11 h-11 flex items-center justify-center hover:bg-muted transition-colors"
+                title="Re-center on employee"
+              >
+                <Locate className="w-5 h-5 text-primary" />
+              </button>
+            )}
           ) : (
             <div className="h-full flex items-center justify-center bg-slate-50">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
