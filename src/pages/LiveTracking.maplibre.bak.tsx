@@ -3,8 +3,6 @@ import { PageHeader } from '@/components/shared';
 import { Card } from '@/components/ui/card';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -81,7 +79,7 @@ const STATUS_COLORS: Record<EmpStatus, string> = {
 function createMarkerElement(name: string, status: EmpStatus): HTMLDivElement {
   const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2);
   const el = document.createElement('div');
-  el.className = 'maplibre-marker-wrapper mapbox-marker-wrapper';
+  el.className = 'maplibre-marker-wrapper';
   el.innerHTML = `<div class="avatar-marker-container"><div class="avatar-marker-dot status-${status}">${initials}</div><div class="avatar-marker-arrow"></div></div>`;
   return el;
 }
@@ -98,15 +96,11 @@ const LiveTracking = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [autoFollow, setAutoFollow] = useState(true);
 
-  const [useMapbox, setUseMapbox] = useState<boolean>(() => {
-    return !!import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-  });
-
   // Refs for map and markers
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any | null>(null);
-  const markersRef = useRef<Map<string, { marker: any; popup: any; element: HTMLDivElement }>>(new Map());
-  const popupRef = useRef<any | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<Map<string, { marker: maplibregl.Marker; popup: maplibregl.Popup; element: HTMLDivElement }>>(new Map());
+  const popupRef = useRef<maplibregl.Popup | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const employeesRef = useRef<any[]>([]);
   const autoFollowRef = useRef(true);
@@ -190,35 +184,16 @@ const LiveTracking = () => {
 
   // ── Initialize map ────────────────────────────────────────────
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    if (!mapContainerRef.current || mapRef.current) return;
 
-    // Destroy previous map if it exists
-    if (mapRef.current) {
-      markersRef.current.forEach(({ marker }) => marker.remove());
-      markersRef.current.clear();
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
-
-    const mapEngine = useMapbox ? mapboxgl : maplibregl;
-
-    if (useMapbox && !import.meta.env.VITE_MAPBOX_ACCESS_TOKEN) {
-      // Mapbox token missing: skip map initialization, UI will show fallback overlay
-      return;
-    }
-
-    if (useMapbox) {
-      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
-    }
-
-    const map = new (mapEngine as any).Map({
+    const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: useMapbox ? 'mapbox://styles/mapbox/navigation-day-v1' : MAP_STYLE,
+      style: MAP_STYLE,
       center: [78.9629, 20.5937], // Center of India [lng, lat]
       zoom: 5,
     });
 
-    map.addControl(new (mapEngine as any).NavigationControl(), 'top-right');
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     map.on('load', () => {
       // Add empty route source + layer (will be updated when employee selected)
@@ -253,14 +228,13 @@ const LiveTracking = () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [useMapbox]);
+  }, []);
 
   // ── Sync markers with employees ───────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map || loading) return;
 
-    const mapEngine = useMapbox ? mapboxgl : maplibregl;
     const existingIds = new Set(markersRef.current.keys());
     const currentIds = new Set(employees.map(e => e.id));
 
@@ -310,11 +284,11 @@ const LiveTracking = () => {
           selectEmployee(emp.id);
         });
 
-        const marker = new (mapEngine as any).Marker({ element: el, anchor: 'bottom' })
+        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat([emp.current_lng, emp.current_lat])
           .addTo(map);
 
-        const popup = new (mapEngine as any).Popup({ offset: [0, -48], closeButton: true, closeOnClick: false, maxWidth: '280px' });
+        const popup = new maplibregl.Popup({ offset: [0, -48], closeButton: true, closeOnClick: false, maxWidth: '280px' });
 
         markersRef.current.set(emp.id, { marker, popup, element: el });
       }
@@ -322,7 +296,7 @@ const LiveTracking = () => {
 
     // Fit bounds if no employee selected and we have employees
     if (!selectedId && employees.length > 0) {
-      const bounds = new (mapEngine as any).LngLatBounds();
+      const bounds = new maplibregl.LngLatBounds();
       employees.forEach(emp => {
         if (emp.current_lat && emp.current_lng) {
           bounds.extend([emp.current_lng, emp.current_lat]);
@@ -332,14 +306,14 @@ const LiveTracking = () => {
         map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 800 });
       }
     }
-  }, [employees, loading, selectedId, useMapbox]);
+  }, [employees, loading, selectedId]);
 
   // ── Update route polyline ─────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const source = map.getSource('employee-route') as any;
+    const source = map.getSource('employee-route') as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
 
     if (selectedId && route.length >= 2) {
@@ -347,7 +321,7 @@ const LiveTracking = () => {
         type: 'Feature',
         geometry: {
           type: 'LineString',
-          // MapLibre/Mapbox use [lng, lat], our route is [lat, lng]
+          // MapLibre uses [lng, lat], our route is [lat, lng]
           coordinates: route.map(([lat, lng]) => [lng, lat]),
         },
         properties: {},
@@ -377,22 +351,21 @@ const LiveTracking = () => {
     const map = mapRef.current;
     if (!map || !selectedId) return;
 
-    const mapEngine = useMapbox ? mapboxgl : maplibregl;
     const emp = employees.find(e => e.id === selectedId);
     if (!emp) return;
 
     if (route.length > 0) {
-      const bounds = new (mapEngine as any).LngLatBounds();
+      const bounds = new maplibregl.LngLatBounds();
       route.forEach(([lat, lng]) => bounds.extend([lng, lat]));
       map.fitBounds(bounds, { padding: 50, maxZoom: 17, duration: 800 });
     } else if (emp.current_lat && emp.current_lng) {
       map.flyTo({ center: [emp.current_lng, emp.current_lat], zoom: Math.max(map.getZoom(), 16), duration: 800 });
     }
-  }, [selectedId, route, useMapbox]);
+  }, [selectedId, route]);
 
   // ── Smooth marker animation ───────────────────────────────────
   function animateMarker(
-    marker: any,
+    marker: maplibregl.Marker,
     from: { lng: number; lat: number },
     to: { lng: number; lat: number }
   ) {
@@ -590,75 +563,6 @@ const LiveTracking = () => {
 
           {!loading ? (
             <>
-              {/* Mapbox / OpenStreetMap Floating Switcher */}
-              <div className="absolute top-3 right-12 z-[10] flex gap-2">
-                <div className="bg-card/90 backdrop-blur-md border border-border shadow-md rounded-full px-1.5 py-1 flex items-center gap-1">
-                  <button
-                    onClick={() => setUseMapbox(true)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
-                      useMapbox 
-                        ? 'bg-slate-900 text-white shadow-sm' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Mapbox GL
-                  </button>
-                  <button
-                    onClick={() => setUseMapbox(false)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
-                      !useMapbox 
-                        ? 'bg-slate-900 text-white shadow-sm' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    OpenStreetMap
-                  </button>
-                </div>
-              </div>
-
-              {/* Mapbox Token Missing Overlay */}
-              {useMapbox && !import.meta.env.VITE_MAPBOX_ACCESS_TOKEN && (
-                <div className="absolute inset-0 z-[20] flex flex-col items-center justify-center bg-slate-950/65 backdrop-blur-sm text-center p-6 text-foreground">
-                  <div className="bg-card/95 border border-border p-6 rounded-2xl max-w-md shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-                    <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center animate-pulse">
-                      <AlertTriangle className="w-6 h-6" />
-                    </div>
-                    <div className="space-y-1">
-                      <h4 className="font-semibold text-base text-card-foreground">Mapbox Access Token Required</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed px-2">
-                        To render Mapbox GL, you need to add your personal Mapbox Access Token. This key is used to load premium vector map tiles.
-                      </p>
-                    </div>
-                    
-                    <div className="bg-muted/80 border border-border rounded-lg p-2.5 text-[11px] font-mono text-muted-foreground w-full select-all text-left">
-                      VITE_MAPBOX_ACCESS_TOKEN=your_token_here
-                    </div>
-
-                    <p className="text-[10px] text-muted-foreground leading-normal">
-                      Add this variable to your <code className="bg-muted px-1 py-0.5 rounded">.env</code> file locally or inside the Vercel project settings dashboard.
-                    </p>
-
-                    <div className="flex gap-2 w-full mt-2">
-                      <button
-                        onClick={() => setUseMapbox(false)}
-                        className="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
-                      >
-                        Use OpenStreetMap
-                      </button>
-                      <a
-                        href="https://account.mapbox.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 px-3 py-2 bg-primary hover:bg-primary-hover active:bg-primary text-white rounded-lg text-xs font-semibold text-center transition-colors inline-flex items-center justify-center gap-1.5"
-                      >
-                        Get Free Token
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
 
               {/* Mobile: Re-center FAB */}

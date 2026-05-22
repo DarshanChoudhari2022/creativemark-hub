@@ -173,7 +173,7 @@
 }
 
 /* MapLibre custom marker overrides for avatar markers */
-.maplibre-marker-wrapper {
+.maplibre-marker-wrapper, .mapbox-marker-wrapper, .mapboxgl-marker {
   background: none !important;
   border: none !important;
 }
