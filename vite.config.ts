@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     // Target modern browsers — safe for Android WebView (auto-updates)
-    target: "es2018",
+    target: "es2020",
     // Smaller output with better minification
     minify: "esbuild",
     cssMinify: true,
@@ -35,10 +35,11 @@ export default defineConfig(({ mode }) => ({
           "vendor-pdf": ["jspdf", "jspdf-autotable"],
           "vendor-query": ["@tanstack/react-query"],
           "vendor-supabase": ["@supabase/supabase-js"],
+          "vendor-maps": ["maplibre-gl"],
         },
       },
     },
     // Reduce chunk size warnings threshold
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 800,
   },
 }));

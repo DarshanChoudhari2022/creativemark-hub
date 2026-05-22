@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { PageHeader } from '@/components/shared';
 import { Card } from '@/components/ui/card';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, CircleMarker } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -11,6 +10,9 @@ import { MapPin, Navigation, Clock, AlertTriangle, CheckCircle2, WifiOff, Activi
 import { format, formatDistanceToNow } from 'date-fns';
 import { EmployeeMovementTimeline } from '@/components/EmployeeMovementTimeline';
 import { MobileTrackingSheet } from '@/components/MobileTrackingSheet';
+
+const OLA_MAPS_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY || '';
+const OLA_STYLE_URL = `https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`;
 
 interface Shift {
   id: string;
@@ -21,22 +23,6 @@ interface Shift {
   end_selfie_url: string | null;
   duration_min: number | null;
   visit_count: number | null;
-}
-
-// Pan + zoom the map onto the selected employee's path. Defined as a child
-// of MapContainer so we have access to the map instance via useMap().
-function MapFocus({ points }: { points: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!points.length) return;
-    if (points.length === 1) {
-      map.flyTo(points[0], Math.max(map.getZoom(), 14), { duration: 0.5 });
-      return;
-    }
-    const bounds = L.latLngBounds(points);
-    map.flyToBounds(bounds, { padding: [40, 40], duration: 0.5 });
-  }, [points, map]);
-  return null;
 }
 
 // Activity thresholds. Match these to the field-app heartbeat (2 min) so a
@@ -55,116 +41,24 @@ function classifyEmployee(emp: { last_location_update?: string | null }): EmpSta
   return 'offline';
 }
 
-// Fix Leaflet's default icon issue in React
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-// Custom icon factory keyed by status colour.
-function makeIcon(color: 'green' | 'blue' | 'orange' | 'grey') {
-  return new L.Icon({
-    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  });
-}
-const ICONS: Record<EmpStatus, L.Icon> = {
-  live: makeIcon('green'),
-  recent: makeIcon('blue'),
-  stale: makeIcon('orange'),
-  offline: makeIcon('grey'),
+// Status → marker dot color
+const STATUS_COLORS: Record<EmpStatus, string> = {
+  live: '#22c55e',
+  recent: '#3b82f6',
+  stale: '#f59e0b',
+  offline: '#94a3b8',
 };
 
 /**
- * MapFocus — auto-zooms / pans map to fit a set of points.
- * Re-triggers whenever `points` change (e.g. new GPS ping arrives
- * for the selected employee).
+ * Create an HTML marker element for an employee, using the avatar-marker
+ * CSS classes configured in index.css.
  */
-function MapFocus({ points }: { points: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!points || points.length === 0) return;
-    if (points.length === 1) {
-      map.flyTo(points[0], Math.max(map.getZoom(), 16), { animate: true, duration: 0.8 });
-    } else {
-      const bounds = L.latLngBounds(points.map(p => L.latLng(p[0], p[1])));
-      map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 17, animate: true, duration: 0.8 });
-    }
-  }, [points, map]);
-  return null;
-}
-
-/**
- * AutoFollow — keeps map centered on the selected employee's latest
- * position whenever it changes. This is the Zomato "follow rider" behavior.
- */
-function AutoFollow({ lat, lng, enabled }: { lat: number; lng: number; enabled: boolean }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!enabled || !lat || !lng) return;
-    map.panTo([lat, lng], { animate: true, duration: 0.5 });
-  }, [lat, lng, enabled, map]);
-  return null;
-}
-
-/**
- * SmoothMarker — wraps a react-leaflet Marker and smoothly animates
- * its position when coordinates change (like a Zomato delivery boy
- * marker sliding on the map).
- */
-function SmoothMarker({ position, icon, eventHandlers, opacity, children }: {
-  position: [number, number];
-  icon: L.Icon | L.DivIcon;
-  eventHandlers?: any;
-  opacity?: number;
-  children?: React.ReactNode;
-}) {
-  const markerRef = useRef<L.Marker | null>(null);
-  const prevPos = useRef<[number, number]>(position);
-
-  useEffect(() => {
-    const marker = markerRef.current;
-    if (!marker) return;
-    const [oldLat, oldLng] = prevPos.current;
-    const [newLat, newLng] = position;
-    if (oldLat === newLat && oldLng === newLng) return;
-
-    // Animate over 1 second in 30 steps
-    const steps = 30;
-    const dLat = (newLat - oldLat) / steps;
-    const dLng = (newLng - oldLng) / steps;
-    let step = 0;
-    const interval = setInterval(() => {
-      step++;
-      marker.setLatLng([
-        oldLat + dLat * step,
-        oldLng + dLng * step,
-      ]);
-      if (step >= steps) {
-        clearInterval(interval);
-        prevPos.current = position;
-      }
-    }, 33); // ~30fps
-    return () => clearInterval(interval);
-  }, [position]);
-
-  return (
-    <Marker
-      ref={markerRef}
-      position={position}
-      icon={icon}
-      eventHandlers={eventHandlers}
-      opacity={opacity}
-    >
-      {children}
-    </Marker>
-  );
+function createMarkerElement(name: string, status: EmpStatus): HTMLDivElement {
+  const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2);
+  const el = document.createElement('div');
+  el.className = 'maplibre-marker-wrapper';
+  el.innerHTML = `<div class="avatar-marker-container"><div class="avatar-marker-dot status-${status}">${initials}</div><div class="avatar-marker-arrow"></div></div>`;
+  return el;
 }
 
 const LiveTracking = () => {
@@ -178,11 +72,19 @@ const LiveTracking = () => {
   const [routeLoading, setRouteLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [autoFollow, setAutoFollow] = useState(true);
-  // Mirror selectedId into a ref so the realtime handler (registered once,
-  // empty deps) can always read the *current* selection without forcing a
-  // channel re-subscribe on every click.
+
+  // Refs for map and markers
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<Map<string, { marker: maplibregl.Marker; popup: maplibregl.Popup; element: HTMLDivElement }>>(new Map());
+  const popupRef = useRef<maplibregl.Popup | null>(null);
   const selectedIdRef = useRef<string | null>(null);
+  const employeesRef = useRef<any[]>([]);
+  const autoFollowRef = useRef(true);
+
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  useEffect(() => { employeesRef.current = employees; }, [employees]);
+  useEffect(() => { autoFollowRef.current = autoFollow; }, [autoFollow]);
 
   // Responsive detection
   useEffect(() => {
@@ -191,18 +93,7 @@ const LiveTracking = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Custom avatar DivIcon factory
-  const makeAvatarIcon = useCallback((name: string, status: EmpStatus) => {
-    const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2);
-    return L.divIcon({
-      className: 'leaflet-marker-avatar',
-      iconSize: [48, 56],
-      iconAnchor: [24, 56],
-      popupAnchor: [0, -48],
-      html: `<div class="avatar-marker-container"><div class="avatar-marker-dot status-${status}">${initials}</div><div class="avatar-marker-arrow"></div></div>`,
-    });
-  }, []);
-
+  // ── Data fetchers ─────────────────────────────────────────────
   const fetchEmployees = async () => {
     const { data, error } = await supabase
       .from('employees')
@@ -216,7 +107,6 @@ const LiveTracking = () => {
     setLoading(false);
   };
 
-  // Today's visit count per employee (for the right sidebar tile + popup).
   const fetchVisitsToday = async () => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -233,7 +123,6 @@ const LiveTracking = () => {
     }
   };
 
-  // Latest shift (open or closed) per employee that started today.
   const fetchShiftsToday = async () => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -244,7 +133,6 @@ const LiveTracking = () => {
       .order('started_at', { ascending: false });
     if (!error && data) {
       const map: Record<string, Shift> = {};
-      // First seen wins (data is sorted desc, so we get the latest shift)
       for (const s of data as Shift[]) {
         if (!map[s.employee_id]) map[s.employee_id] = s;
       }
@@ -252,8 +140,6 @@ const LiveTracking = () => {
     }
   };
 
-  // Pull the day's location history for one employee and stash it as a
-  // polyline. We cap at 500 points to keep the canvas snappy.
   const fetchRouteFor = async (employeeId: string) => {
     setRouteLoading(true);
     const start = new Date();
@@ -273,12 +159,222 @@ const LiveTracking = () => {
     setRoute((data as any[]).map((p) => [p.lat, p.lng] as [number, number]));
   };
 
+  // ── Initialize map ────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: OLA_STYLE_URL,
+      center: [78.9629, 20.5937], // Center of India [lng, lat]
+      zoom: 5,
+      transformRequest: (url: string, resourceType?: string) => {
+        // Inject API key into all OLA Maps requests
+        if (url.includes('olamaps.io')) {
+          const separator = url.includes('?') ? '&' : '?';
+          return { url: `${url}${separator}api_key=${OLA_MAPS_API_KEY}` };
+        }
+        return { url };
+      },
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    map.on('load', () => {
+      // Add empty route source + layer (will be updated when employee selected)
+      map.addSource('employee-route', {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
+      });
+
+      map.addLayer({
+        id: 'employee-route-line',
+        type: 'line',
+        source: 'employee-route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
+        paint: {
+          'line-color': '#2563EB',
+          'line-width': 4,
+          'line-opacity': 0.75,
+          'line-dasharray': [3, 2],
+        },
+      });
+    });
+
+    mapRef.current = map;
+
+    return () => {
+      // Cleanup markers
+      markersRef.current.forEach(({ marker }) => marker.remove());
+      markersRef.current.clear();
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // ── Sync markers with employees ───────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || loading) return;
+
+    const existingIds = new Set(markersRef.current.keys());
+    const currentIds = new Set(employees.map(e => e.id));
+
+    // Remove markers for employees no longer in view
+    existingIds.forEach(id => {
+      if (!currentIds.has(id)) {
+        const entry = markersRef.current.get(id);
+        if (entry) {
+          entry.marker.remove();
+          markersRef.current.delete(id);
+        }
+      }
+    });
+
+    // Add or update markers
+    employees.forEach(emp => {
+      if (!emp.current_lat || !emp.current_lng) return;
+      const status = classifyEmployee(emp);
+      const isSelected = selectedId === emp.id;
+
+      const existing = markersRef.current.get(emp.id);
+      if (existing) {
+        // Smooth animate to new position
+        const currentLngLat = existing.marker.getLngLat();
+        const newLng = emp.current_lng;
+        const newLat = emp.current_lat;
+
+        if (Math.abs(currentLngLat.lng - newLng) > 0.00001 || Math.abs(currentLngLat.lat - newLat) > 0.00001) {
+          animateMarker(existing.marker, currentLngLat, { lng: newLng, lat: newLat });
+        }
+
+        // Update opacity for selection state
+        existing.element.style.opacity = selectedId && !isSelected ? '0.5' : '1';
+
+        // Update status class
+        const dot = existing.element.querySelector('.avatar-marker-dot');
+        if (dot) {
+          dot.className = `avatar-marker-dot status-${status}`;
+        }
+      } else {
+        // Create new marker
+        const el = createMarkerElement(emp.name, status);
+        el.style.cursor = 'pointer';
+        el.style.opacity = selectedId && !isSelected ? '0.5' : '1';
+
+        el.addEventListener('click', () => {
+          selectEmployee(emp.id);
+        });
+
+        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat([emp.current_lng, emp.current_lat])
+          .addTo(map);
+
+        const popup = new maplibregl.Popup({ offset: [0, -48], closeButton: true, closeOnClick: false, maxWidth: '280px' });
+
+        markersRef.current.set(emp.id, { marker, popup, element: el });
+      }
+    });
+
+    // Fit bounds if no employee selected and we have employees
+    if (!selectedId && employees.length > 0) {
+      const bounds = new maplibregl.LngLatBounds();
+      employees.forEach(emp => {
+        if (emp.current_lat && emp.current_lng) {
+          bounds.extend([emp.current_lng, emp.current_lat]);
+        }
+      });
+      if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 800 });
+      }
+    }
+  }, [employees, loading, selectedId]);
+
+  // ── Update route polyline ─────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const source = map.getSource('employee-route') as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    if (selectedId && route.length >= 2) {
+      source.setData({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          // MapLibre uses [lng, lat], our route is [lat, lng]
+          coordinates: route.map(([lat, lng]) => [lng, lat]),
+        },
+        properties: {},
+      });
+    } else {
+      source.setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [] },
+        properties: {},
+      });
+    }
+  }, [route, selectedId]);
+
+  // ── Auto-follow selected employee ─────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedId || !autoFollow) return;
+
+    const emp = employees.find(e => e.id === selectedId);
+    if (emp && emp.current_lat && emp.current_lng) {
+      map.panTo([emp.current_lng, emp.current_lat], { duration: 500 });
+    }
+  }, [employees, selectedId, autoFollow]);
+
+  // ── Fit to route/employee when selection changes ──────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedId) return;
+
+    const emp = employees.find(e => e.id === selectedId);
+    if (!emp) return;
+
+    if (route.length > 0) {
+      const bounds = new maplibregl.LngLatBounds();
+      route.forEach(([lat, lng]) => bounds.extend([lng, lat]));
+      map.fitBounds(bounds, { padding: 50, maxZoom: 17, duration: 800 });
+    } else if (emp.current_lat && emp.current_lng) {
+      map.flyTo({ center: [emp.current_lng, emp.current_lat], zoom: Math.max(map.getZoom(), 16), duration: 800 });
+    }
+  }, [selectedId, route]);
+
+  // ── Smooth marker animation ───────────────────────────────────
+  function animateMarker(
+    marker: maplibregl.Marker,
+    from: { lng: number; lat: number },
+    to: { lng: number; lat: number }
+  ) {
+    const duration = 1000;
+    const start = performance.now();
+
+    function step(now: number) {
+      const t = Math.min((now - start) / duration, 1);
+      // Ease-out cubic
+      const ease = 1 - Math.pow(1 - t, 3);
+      const lng = from.lng + (to.lng - from.lng) * ease;
+      const lat = from.lat + (to.lat - from.lat) * ease;
+      marker.setLngLat([lng, lat]);
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // ── Supabase realtime + polling ───────────────────────────────
   useEffect(() => {
     fetchEmployees();
     fetchVisitsToday();
     fetchShiftsToday();
 
-    // Subscribe to real-time location updates from employees
     const channel = supabase.channel('employee_locations')
       .on(
         'postgres_changes',
@@ -303,15 +399,12 @@ const LiveTracking = () => {
       )
       .subscribe();
 
-    // Polling backup every 30 seconds (also re-classifies stale employees)
     const interval = setInterval(() => {
       fetchEmployees();
       fetchVisitsToday();
       fetchShiftsToday();
     }, 30_000);
 
-    // Force re-render every 30s so the "X minutes ago" labels and the
-    // Live/Stale classification stay current even without DB activity.
     const ticker = setInterval(() => setEmployees((p) => [...p]), 30_000);
 
     return () => {
@@ -322,11 +415,6 @@ const LiveTracking = () => {
   }, []);
 
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").slice(0, 2);
-
-  // Default center of India if no employees, otherwise center on the first employee
-  const center: [number, number] = employees.length > 0 && employees[0].current_lat
-    ? [employees[0].current_lat, employees[0].current_lng]
-    : [20.5937, 78.9629];
 
   const counts = useMemo(() => {
     const c: Record<EmpStatus, number> = { live: 0, recent: 0, stale: 0, offline: 0 };
@@ -339,22 +427,32 @@ const LiveTracking = () => {
     [employees, filter]
   );
 
-  // Click-to-focus from sidebar. Loads the polyline once.
-  const selectEmployee = (id: string) => {
-    if (selectedId === id) {
+  const selectEmployee = useCallback((id: string) => {
+    if (selectedIdRef.current === id) {
       setSelectedId(null);
       setRoute([]);
       return;
     }
     setSelectedId(id);
-    setAutoFollow(true); // re-enable auto-follow when selecting a new employee
+    setAutoFollow(true);
     fetchRouteFor(id);
-  };
+  }, []);
 
   const selectedEmp = useMemo(
     () => (selectedId ? employees.find((e) => e.id === selectedId) : null),
     [selectedId, employees]
   );
+
+  // ── Show popup for selected employee on marker click ──────────
+  useEffect(() => {
+    if (!selectedEmp || !mapRef.current) return;
+
+    // Close existing popup
+    if (popupRef.current) {
+      popupRef.current.remove();
+      popupRef.current = null;
+    }
+  }, [selectedId]);
 
   return (
     <div className={`h-full flex flex-col ${isMobile ? 'tracking-page-mobile' : ''}`}>
@@ -405,7 +503,7 @@ const LiveTracking = () => {
         <Card className={`${isMobile ? 'h-full border-0 shadow-none rounded-none' : 'lg:col-span-3 h-full border-border/50 shadow-sm'} overflow-hidden relative z-0`}>
           {/* Selected-employee banner overlay (shows above map). */}
           {selectedEmp && (
-            <div className="absolute top-3 left-3 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg shadow-lg p-3 max-w-[300px]">
+            <div className="absolute top-3 left-3 z-[10] bg-card/95 backdrop-blur border border-border rounded-lg shadow-lg p-3 max-w-[300px]">
               <div className="flex items-start gap-2">
                 <RouteIcon className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
@@ -449,117 +547,20 @@ const LiveTracking = () => {
           )}
 
           {!loading ? (
-            <MapContainer
-              center={center}
-              zoom={employees.length > 0 ? 12 : 5}
-              style={{ height: '100%', width: '100%', zIndex: 0 }}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              />
+            <>
+              <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
 
-              {/* Today's route for the selected employee. Animated dashed line like Zomato. */}
-              {selectedId && route.length >= 2 && (
-                <Polyline
-                  positions={route}
-                  pathOptions={{ color: '#2563EB', weight: 4, opacity: 0.75, dashArray: '12 8', className: 'animated-route' }}
-                />
+              {/* Mobile: Re-center FAB */}
+              {isMobile && selectedId && selectedEmp && (
+                <button
+                  onClick={() => setAutoFollow(true)}
+                  className="absolute bottom-48 right-3 z-[10] bg-white shadow-lg border border-border rounded-full w-11 h-11 flex items-center justify-center hover:bg-muted transition-colors"
+                  title="Re-center on employee"
+                >
+                  <Locate className="w-5 h-5 text-primary" />
+                </button>
               )}
-
-              {/* Auto-follow the selected employee's live position (Zomato-style) */}
-              {selectedId && selectedEmp && selectedEmp.current_lat && (
-                <AutoFollow
-                  lat={selectedEmp.current_lat}
-                  lng={selectedEmp.current_lng}
-                  enabled={autoFollow}
-                />
-              )}
-
-              {/* Auto-zoom to fit the polyline (or single marker) when selection changes. */}
-              {selectedId && (
-                <MapFocus
-                  points={
-                    route.length > 0
-                      ? route
-                      : selectedEmp && selectedEmp.current_lat
-                        ? [[selectedEmp.current_lat, selectedEmp.current_lng]]
-                        : []
-                  }
-                />
-              )}
-
-              {filteredEmployees.map((emp) => {
-                const status = classifyEmployee(emp);
-                const lastUpdate = emp.last_location_update ? new Date(emp.last_location_update) : null;
-                const shift = shiftsToday[emp.id];
-                const isSelected = selectedId === emp.id;
-                return (
-                  <SmoothMarker
-                    key={emp.id}
-                    position={[emp.current_lat, emp.current_lng]}
-                    icon={isMobile ? makeAvatarIcon(emp.name, status) : ICONS[status]}
-                    eventHandlers={{ click: () => selectEmployee(emp.id) }}
-                    opacity={selectedId && !isSelected ? 0.5 : 1}
-                  >
-                    <Popup className="rounded-lg">
-                      <div className="font-sans">
-                        <div className="font-bold text-base mb-1">{emp.name}</div>
-                        <div className="text-sm text-muted-foreground mb-2">{emp.role}</div>
-                        <div className="text-xs flex items-center gap-1.5 text-slate-500 mb-1">
-                          <Clock className="w-3 h-3" />
-                          {lastUpdate ? `Updated ${formatDistanceToNow(lastUpdate, { addSuffix: true })}` : 'No update yet'}
-                        </div>
-                        <div className="text-xs text-slate-600 mb-1">
-                          <span className="font-medium">Visits today:</span> {visitsToday[emp.id] || 0}
-                        </div>
-                        {shift ? (
-                          <div className="text-xs text-slate-600 flex items-center gap-1">
-                            {shift.ended_at ? (
-                              <><Square className="w-3 h-3 text-slate-500" /> Shift {format(new Date(shift.started_at), 'HH:mm')}–{format(new Date(shift.ended_at), 'HH:mm')}</>
-                            ) : (
-                              <><Play className="w-3 h-3 text-green-600" /> On shift since {format(new Date(shift.started_at), 'HH:mm')}</>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-amber-600 font-medium">No shift started today</div>
-                        )}
-                        <div className="flex items-center gap-3 mt-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); selectEmployee(emp.id); }}
-                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                          >
-                            <RouteIcon className="w-3 h-3" />
-                            {isSelected ? 'Hide route' : "Show today's route"}
-                          </button>
-                          <a
-                            href={`https://www.google.com/maps?q=${emp.current_lat},${emp.current_lng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            Google Maps
-                          </a>
-                        </div>
-                      </div>
-                    </Popup>
-                  </SmoothMarker>
-                );
-              })}
-            </MapContainer>
-
-            {/* Mobile: Re-center FAB */}
-            {isMobile && selectedId && selectedEmp && (
-              <button
-                onClick={() => setAutoFollow(true)}
-                className="absolute bottom-48 right-3 z-[1000] bg-white shadow-lg border border-border rounded-full w-11 h-11 flex items-center justify-center hover:bg-muted transition-colors"
-                title="Re-center on employee"
-              >
-                <Locate className="w-5 h-5 text-primary" />
-              </button>
-            )}
+            </>
           ) : (
             <div className="h-full flex items-center justify-center bg-slate-50">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

@@ -172,8 +172,8 @@
   animation: marker-pulse 2s infinite;
 }
 
-/* Leaflet custom marker overrides for avatar markers */
-.leaflet-marker-avatar {
+/* MapLibre custom marker overrides for avatar markers */
+.maplibre-marker-wrapper {
   background: none !important;
   border: none !important;
 }
@@ -263,18 +263,6 @@
   flex-shrink: 0;
 }
 
-/* Animated route line dashes (Zomato-style) */
-@keyframes dash-flow {
-  to {
-    stroke-dashoffset: -20;
-  }
-}
-
-.leaflet-interactive.animated-route {
-  stroke-dasharray: 10 6;
-  animation: dash-flow 1s linear infinite;
-}
-
 /* Route gradient overlay */
 .route-start-dot,
 .route-end-dot {
@@ -346,13 +334,19 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Override leaflet z-index for popups in mobile tracking mode */
+/* Override MapLibre z-index for controls in mobile tracking mode */
 @media (max-width: 1023px) {
-  .tracking-page-mobile .leaflet-popup {
+  .tracking-page-mobile .maplibregl-popup {
     z-index: 998 !important;
   }
-  .tracking-page-mobile .leaflet-control-zoom {
+  .tracking-page-mobile .maplibregl-ctrl-top-right {
     margin-right: 12px !important;
-    margin-bottom: 200px !important;
+    margin-top: 60px !important;
   }
 }
+
+/* MapLibre marker transition smoothing */
+.maplibregl-marker {
+  transition: opacity 0.3s ease;
+}
+
