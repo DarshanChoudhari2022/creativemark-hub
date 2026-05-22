@@ -12,7 +12,8 @@ import { EmployeeMovementTimeline } from '@/components/EmployeeMovementTimeline'
 import { MobileTrackingSheet } from '@/components/MobileTrackingSheet';
 
 const OLA_MAPS_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY || '';
-const OLA_STYLE_URL = `https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`;
+if (!OLA_MAPS_API_KEY) console.warn('[LiveTracking] VITE_OLA_MAPS_API_KEY is empty – map will not load.');
+const OLA_STYLE_URL = `https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json?api_key=${OLA_MAPS_API_KEY}`;
 
 interface Shift {
   id: string;
@@ -169,8 +170,8 @@ const LiveTracking = () => {
       center: [78.9629, 20.5937], // Center of India [lng, lat]
       zoom: 5,
       transformRequest: (url: string, resourceType?: string) => {
-        // Inject API key into all OLA Maps requests
-        if (url.includes('olamaps.io')) {
+        // Inject API key into all OLA Maps requests that don't already have it
+        if (url.includes('olamaps.io') && !url.includes('api_key=')) {
           const separator = url.includes('?') ? '&' : '?';
           return { url: `${url}${separator}api_key=${OLA_MAPS_API_KEY}` };
         }
