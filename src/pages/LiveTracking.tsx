@@ -11,9 +11,31 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { EmployeeMovementTimeline } from '@/components/EmployeeMovementTimeline';
 import { MobileTrackingSheet } from '@/components/MobileTrackingSheet';
 
-const OLA_MAPS_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY || '';
-if (!OLA_MAPS_API_KEY) console.warn('[LiveTracking] VITE_OLA_MAPS_API_KEY is empty – map will not load.');
-const OLA_STYLE_URL = `https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json?api_key=${OLA_MAPS_API_KEY}`;
+const MAP_STYLE: any = {
+  version: 8,
+  sources: {
+    'osm-raster-tiles': {
+      type: 'raster',
+      tiles: [
+        'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+        'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+      ],
+      tileSize: 256,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }
+  },
+  layers: [
+    {
+      id: 'osm-raster-layer',
+      type: 'raster',
+      source: 'osm-raster-tiles',
+      minzoom: 0,
+      maxzoom: 19
+    }
+  ]
+};
+
 
 interface Shift {
   id: string;
@@ -166,17 +188,9 @@ const LiveTracking = () => {
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: OLA_STYLE_URL,
+      style: MAP_STYLE,
       center: [78.9629, 20.5937], // Center of India [lng, lat]
       zoom: 5,
-      transformRequest: (url: string, resourceType?: string) => {
-        // Inject API key into all OLA Maps requests that don't already have it
-        if (url.includes('olamaps.io') && !url.includes('api_key=')) {
-          const separator = url.includes('?') ? '&' : '?';
-          return { url: `${url}${separator}api_key=${OLA_MAPS_API_KEY}` };
-        }
-        return { url };
-      },
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
