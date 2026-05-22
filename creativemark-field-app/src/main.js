@@ -662,12 +662,20 @@ async function loadMyVisits() {
   const rangeLabel = visitsRange === 'today' ? 'today' : visitsRange === 'week' ? 'this week' : 'this month';
   subtitle.textContent = `${count} societ${count === 1 ? 'y' : 'ies'} visited ${rangeLabel}`;
 
+  const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000);
+  const activeVisits = cachedVisits.filter(v => new Date(v.created_at) >= eightHoursAgo);
+
   if (count === 0) {
     list.innerHTML = '<div class="empty-state"><p>No visits logged yet.</p></div>';
     return;
   }
 
-  list.innerHTML = cachedVisits.map(v => {
+  if (activeVisits.length === 0) {
+    list.innerHTML = '<div class="empty-state"><p>Older visits are no longer visible here.</p></div>';
+    return;
+  }
+
+  list.innerHTML = activeVisits.map(v => {
     const time = new Date(v.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     const date = new Date(v.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     const vs = v.verification_status || 'pending';
@@ -690,6 +698,14 @@ async function loadMyVisits() {
 function openVisitModal(visitId) {
   const v = cachedVisits.find(x => x.id === visitId);
   if (!v) return;
+
+  const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000);
+  if (new Date(v.created_at) < eightHoursAgo) {
+    // Show a toast message if they somehow try to open it
+    showToast('Details are no longer available for older visits.', 'error');
+    return;
+  }
+
   const modal = $('#visit-modal');
   const body = $('#modal-body');
   const time = new Date(v.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -877,12 +893,20 @@ async function loadShopVisits() {
   const rangeLabel = visitsRange === 'today' ? 'today' : visitsRange === 'week' ? 'this week' : 'this month';
   subtitle.textContent = `${count} shop${count === 1 ? '' : 's'} visited ${rangeLabel}`;
 
+  const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000);
+  const activeShopVisits = cachedShopVisits.filter(v => new Date(v.created_at) >= eightHoursAgo);
+
   if (count === 0) {
     list.innerHTML = '<div class="empty-state"><p>No shop visits logged yet.</p></div>';
     return;
   }
 
-  list.innerHTML = cachedShopVisits.map(v => {
+  if (activeShopVisits.length === 0) {
+    list.innerHTML = '<div class="empty-state"><p>Older visits are no longer visible here.</p></div>';
+    return;
+  }
+
+  list.innerHTML = activeShopVisits.map(v => {
     const time = new Date(v.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     const date = new Date(v.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     const interest = v.interest_status || 'not_contacted';
