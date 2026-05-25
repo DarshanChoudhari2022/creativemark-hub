@@ -1,8 +1,12 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { PageHeader } from '@/components/shared';
 import { Card } from '@/components/ui/card';
+import { exportToCSV } from '../lib/utils';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { CapacitorHttp } from '@capacitor/core';
+
+let olaProtocolRegistered = false;
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { supabase } from '@/lib/supabase';
@@ -193,81 +197,160 @@ const LiveTracking = () => {
 
   // ── Initialize map ────────────────────────────────────────────
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    let cancelled = false;
+    let mapInstance: any = null;
 
-    // Destroy previous map if it exists
-    if (mapRef.current) {
-      markersRef.current.forEach(({ marker }) => marker.remove());
-      markersRef.current.clear();
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
+    const initMap = async () => {
+      if (!mapContainerRef.current) return;
 
-    const mapEngine = mapProvider === 'mapbox' ? mapboxgl : maplibregl;
+      // Destroy previous map if it exists
+      if (mapRef.current) {
+        markersRef.current.forEach(({ marker }) => marker.remove());
+        markersRef.current.clear();
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
 
-    if (mapProvider === 'mapbox') {
-      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
-    }
+      const mapEngine = mapProvider === 'mapbox' ? mapboxgl : maplibregl;
 
-    const mapOptions: any = {
-      container: mapContainerRef.current,
-      center: [78.9629, 20.5937], // Center of India [lng, lat]
-      zoom: 5,
+      if (mapProvider === 'mapbox') {
+        mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
+      }
+
+      const mapOptions: any = {
+        container: mapContainerRef.current,
+        center: [78.9629, 20.5937], // Center of India [lng, lat]
+        zoom: 5,
+      };
+
+      if (mapProvider === 'olamaps') {
+        const OLA_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY;
+
+        // Register custom protocol to route tile/sprite/glyph requests through
+        // the main thread. CapacitorHttp patches main-thread XMLHttpRequest to
+        // use the native Android HTTP client, which has NO Origin header and
+        // therefore bypasses Ola Maps' domain restrictions.
+        if (!olaProtocolRegistered) {
+          maplibregl.addProtocol('ola', (params: any, callback: any) => {
+            const httpsUrl = params.url.replace('ola://', 'https://');
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', httpsUrl, true);
+            xhr.responseType = 'arraybuffer';
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                callback(null, xhr.response, null, null);
+              } else {
+                callback(new Error(`HTTP ${xhr.status}`));
+              }
+            };
+            xhr.onerror = () => callback(new Error('XHR network error'));
+            xhr.send();
+            return { cancel: () => xhr.abort() };
+          });
+          olaProtocolRegistered = true;
+        }
+
+        // Pre-fetch style.json via CapacitorHttp (native HTTP – no CORS / no
+        // Origin header) and rewrite every URL inside to use our custom "ola://"
+        // protocol so subsequent tile/sprite/glyph loads also bypass CORS.
+        try {
+          const styleUrl = `https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json?api_key=${OLA_API_KEY}`;
+          const styleRes = await CapacitorHttp.get({ url: styleUrl });
+
+          if (cancelled) return; // component unmounted during fetch
+
+          const styleObj = typeof styleRes.data === 'string' ? JSON.parse(styleRes.data) : styleRes.data;
+
+          // Helper: append api_key and swap https→ola://
+          const rewriteUrl = (u: string) => {
+            if (!u || typeof u !== 'string') return u;
+            if (!u.includes('api_key=')) {
+              const sep = u.includes('?') ? '&' : '?';
+              u = `${u}${sep}api_key=${OLA_API_KEY}`;
+            }
+            return u.replace(/^https:\/\//, 'ola://');
+          };
+
+          // Rewrite sprite, glyphs, and all tile source URLs
+          if (styleObj.sprite) styleObj.sprite = rewriteUrl(styleObj.sprite);
+          if (styleObj.glyphs) styleObj.glyphs = rewriteUrl(styleObj.glyphs);
+          if (styleObj.sources) {
+            for (const src of Object.values(styleObj.sources) as any[]) {
+              if (src.tiles) src.tiles = src.tiles.map(rewriteUrl);
+              if (src.url) src.url = rewriteUrl(src.url);
+            }
+          }
+
+          mapOptions.style = styleObj;
+        } catch (err) {
+          console.error('Ola Maps style fetch failed, falling back to OSM', err);
+          mapOptions.style = MAP_STYLE; // fallback to OSM
+        }
+
+        mapOptions.transformRequest = (url: string, _resourceType: string) => {
+          if (url.includes('olamaps.io')) {
+            let newUrl = url;
+            if (!newUrl.includes('api_key=')) {
+              const sep = newUrl.includes('?') ? '&' : '?';
+              newUrl = `${newUrl}${sep}api_key=${OLA_API_KEY}`;
+            }
+            if (newUrl.startsWith('https://')) {
+              newUrl = newUrl.replace('https://', 'ola://');
+            }
+            return { url: newUrl };
+          }
+          return { url };
+        };
+      } else if (mapProvider === 'mapbox') {
+        mapOptions.style = 'mapbox://styles/mapbox/navigation-day-v1';
+      } else {
+        mapOptions.style = MAP_STYLE;
+      }
+
+      if (cancelled) return;
+
+      const map = new (mapEngine as any).Map(mapOptions);
+      mapInstance = map;
+
+      map.addControl(new (mapEngine as any).NavigationControl(), 'top-right');
+
+      map.on('load', () => {
+        // Add empty route source + layer (will be updated when employee selected)
+        map.addSource('employee-route', {
+          type: 'geojson',
+          data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
+        });
+
+        map.addLayer({
+          id: 'employee-route-line',
+          type: 'line',
+          source: 'employee-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round',
+          },
+          paint: {
+            'line-color': '#2563EB',
+            'line-width': 4,
+            'line-opacity': 0.75,
+            'line-dasharray': [3, 2],
+          },
+        });
+      });
+
+      mapRef.current = map;
     };
 
-    if (mapProvider === 'olamaps') {
-      const OLA_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY;
-      mapOptions.style = 'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json';
-      mapOptions.transformRequest = (url: string, resourceType: string) => {
-        if (url.includes("api.olamaps.io")) {
-            const separator = url.includes("?") ? "&" : "?";
-            return {
-                url: `${url}${separator}api_key=${OLA_API_KEY}`
-            };
-        }
-        return { url };
-      };
-    } else if (mapProvider === 'mapbox') {
-      mapOptions.style = 'mapbox://styles/mapbox/navigation-day-v1';
-    } else {
-      mapOptions.style = MAP_STYLE;
-    }
-
-    const map = new (mapEngine as any).Map(mapOptions);
-
-    map.addControl(new (mapEngine as any).NavigationControl(), 'top-right');
-
-    map.on('load', () => {
-      // Add empty route source + layer (will be updated when employee selected)
-      map.addSource('employee-route', {
-        type: 'geojson',
-        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
-      });
-
-      map.addLayer({
-        id: 'employee-route-line',
-        type: 'line',
-        source: 'employee-route',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
-        },
-        paint: {
-          'line-color': '#2563EB',
-          'line-width': 4,
-          'line-opacity': 0.75,
-          'line-dasharray': [3, 2],
-        },
-      });
-    });
-
-    mapRef.current = map;
+    initMap();
 
     return () => {
+      cancelled = true;
       // Cleanup markers
       markersRef.current.forEach(({ marker }) => marker.remove());
       markersRef.current.clear();
-      map.remove();
+      if (mapInstance) {
+        mapInstance.remove();
+      }
       mapRef.current = null;
     };
   }, [mapProvider]);

@@ -55,10 +55,11 @@ const Leads = () => {
   const { user } = useAuth();
   const { isShielded, withShield } = usePrivacyShield();
   const navigate = useNavigate();
-  const { data: leadsData, loading: leadsLoading, refresh: refreshLeads, insert: insertLead, update: updateLead, remove: removeLead } = useSupabaseTable<any>('leads', '*, assigned_to(name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
-  const { data: smartLeadsData, loading: smartLoading, refresh: refreshSmart } = useSupabaseTable<any>('smart_leads', '*, assigned_to(name)');
+  const { data: leadsData, loading: leadsLoading, refresh: refreshLeads, insert: insertLead, update: updateLead, remove: removeLead } = useSupabaseTable<any>('leads', '*, assigned_to(id, name), lead_services(service_name), comm_logs(*), lead_tasks(*)');
+  const { data: smartLeadsData, loading: smartLoading, refresh: refreshSmart } = useSupabaseTable<any>('smart_leads', '*, assigned_to(id, name)');
   const { data: employees } = useSupabaseTable<any>('employees', 'id, name');
-  const [view, setView] = useState<"kanban" | "table">("kanban");
+  const [view, setView] = useState<"kanban" | "table" | "day">("kanban");
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -82,6 +83,7 @@ const Leads = () => {
       ...l,
       organization: l.organization || l.company || "—",
       assignedToName: l.assigned_to?.name || "—",
+      assignedTo: l.assigned_to?.id || null,
       servicesInterested: l.lead_services?.map((s: any) => s.service_name) || [],
       commLog: l.comm_logs?.map((log: any) => ({
         ...log,
@@ -106,6 +108,7 @@ const Leads = () => {
       name: l.customer_name,
       organization: l.vehicle_interest || "Smart Lead",
       assignedToName: l.assigned_to?.name || "Unassigned",
+      assignedTo: l.assigned_to?.id || "Unassigned",
       servicesInterested: l.vehicle_interest ? [l.vehicle_interest] : [],
       commLog: [],
       tasks: [],
@@ -134,6 +137,9 @@ const Leads = () => {
       // Role-Based Access Control logic
       if (user?.role === "Employee" && l.assignedTo !== user.id) return false;
 
+      // Employee Dropdown Filter
+      if (selectedEmployee !== "all" && l.assignedTo !== selectedEmployee) return false;
+
       // Search Filtering
       if (search !== "") {
         const query = search.toLowerCase();
@@ -143,7 +149,25 @@ const Leads = () => {
       }
       return true;
     });
-  }, [leads, search, user]);
+  }, [leads, search, user, selectedEmployee]);
+
+  const dayWiseLeads = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    filtered.forEach(lead => {
+      const dateStr = lead.dateReceived ? lead.dateReceived.slice(0, 10) : new Date(lead.created_at || Date.now()).toISOString().slice(0, 10);
+      if (!groups[dateStr]) {
+        groups[dateStr] = [];
+      }
+      groups[dateStr].push(lead);
+    });
+
+    return Object.entries(groups)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, items]) => ({
+        date,
+        items
+      }));
+  }, [filtered]);
 
   // Sync detailLead with updated data when leads array changes
   useEffect(() => {
@@ -351,22 +375,118 @@ const Leads = () => {
     return Math.floor((Date.now() - created) / 86400000);
   };
 
+  const employeeStats = useMemo(() => {
+    if (!leads.length) return [];
+
+    const statsMap: Record<string, {
+      id: string;
+      name: string;
+      totalLeads: number;
+      convertedLeads: number;
+      activeValue: number;
+      earnedValue: number;
+    }> = {};
+
+    employees.forEach(emp => {
+      statsMap[emp.id] = {
+        id: emp.id,
+        name: emp.name,
+        totalLeads: 0,
+        convertedLeads: 0,
+        activeValue: 0,
+        earnedValue: 0,
+      };
+    });
+
+    statsMap["Unassigned"] = {
+      id: "Unassigned",
+      name: "Unassigned Leads",
+      totalLeads: 0,
+      convertedLeads: 0,
+      activeValue: 0,
+      earnedValue: 0,
+    };
+
+    leads.forEach(l => {
+      const empId = l.assignedTo || "Unassigned";
+      if (!statsMap[empId]) {
+        statsMap[empId] = {
+          id: empId,
+          name: l.assignedToName || "Unassigned",
+          totalLeads: 0,
+          convertedLeads: 0,
+          activeValue: 0,
+          earnedValue: 0,
+        };
+      }
+
+      const stat = statsMap[empId];
+      stat.totalLeads += 1;
+      
+      const val = Number(l.estimatedValue || 0);
+      if (l.stage === "Converted") {
+        stat.convertedLeads += 1;
+        stat.earnedValue += val;
+      } else if (l.stage !== "Lost") {
+        stat.activeValue += val;
+      }
+    });
+
+    return Object.values(statsMap).filter(s => s.totalLeads > 0 || s.id !== "Unassigned");
+  }, [leads, employees]);
+
+  const selectedStats = useMemo(() => {
+    if (selectedEmployee === "all") {
+      return {
+        name: "All Employees",
+        totalLeads: filtered.length,
+        convertedLeads: filtered.filter(l => l.stage === "Converted").length,
+        activeValue: filtered.filter(l => !["Converted", "Lost"].includes(l.stage)).reduce((s, l) => s + Number(l.estimatedValue || 0), 0),
+        earnedValue: filtered.filter(l => l.stage === "Converted").reduce((s, l) => s + Number(l.estimatedValue || 0), 0),
+      };
+    }
+    return employeeStats.find(s => s.id === selectedEmployee) || {
+      name: "Unknown Employee",
+      totalLeads: 0,
+      convertedLeads: 0,
+      activeValue: 0,
+      earnedValue: 0,
+    };
+  }, [selectedEmployee, filtered, employeeStats]);
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Leads"
         subtitle={`${leads.filter(l => !["Converted", "Lost"].includes(l.stage)).length} active leads in pipeline`}
         actions={
           <>
+            {user?.role !== "Employee" && (
+              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <SelectTrigger className="w-48 text-xs h-9 bg-background border-border">
+                  <SelectValue placeholder="All Employees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  <SelectItem value="Unassigned">Unassigned Leads</SelectItem>
+                  {employees.map(e => (
+                    <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <div className="relative">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search leads…" className="pl-9 w-52" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <div className="flex border border-border rounded-md overflow-hidden">
-              <Button size="sm" variant={view === "kanban" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("kanban")}>
+              <Button size="sm" variant={view === "kanban" ? "default" : "ghost"} className="rounded-none h-9" onClick={() => setView("kanban")} title="Kanban View">
                 <LayoutGrid className="h-4 w-4" />
               </Button>
-              <Button size="sm" variant={view === "table" ? "default" : "ghost"} className="rounded-none" onClick={() => setView("table")}>
+              <Button size="sm" variant={view === "day" ? "default" : "ghost"} className="rounded-none h-9" onClick={() => setView("day")} title="Day-wise Grouping">
+                <Calendar className="h-4 w-4" />
+              </Button>
+              <Button size="sm" variant={view === "table" ? "default" : "ghost"} className="rounded-none h-9" onClick={() => setView("table")} title="Table View">
                 <List className="h-4 w-4" />
               </Button>
             </div>
@@ -474,6 +594,82 @@ const Leads = () => {
           </>
         }
       />
+
+      {/* Earnings & Pipeline Highlight Banner */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Card className="p-4 bg-gradient-to-br from-indigo-50/50 to-white border-indigo-100 flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Active Pipeline</span>
+            <div className="text-2xl font-black text-indigo-950 mt-1">
+              <Masked placeholder="₹•••••">{formatINR(selectedStats.activeValue)}</Masked>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2">Value of open opportunities</p>
+        </Card>
+
+        <Card className="p-4 bg-gradient-to-br from-emerald-50 to-white border-emerald-200 ring-1 ring-emerald-100/50 flex flex-col justify-between shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="absolute top-0 right-0 h-16 w-16 bg-emerald-100/30 rounded-bl-full flex items-center justify-center -mr-4 -mt-4 transition-transform group-hover:scale-110">
+            <Zap className="h-6 w-6 text-emerald-600/30" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1">
+              Amount Earned
+            </span>
+            <div className="text-2xl font-black text-emerald-600 mt-1">
+              <Masked placeholder="₹•••••">{formatINR(selectedStats.earnedValue)}</Masked>
+            </div>
+          </div>
+          <p className="text-[10px] text-emerald-700/80 font-bold mt-2 flex items-center gap-1">
+            🎉 Revenue generated from converted leads
+          </p>
+        </Card>
+
+        <Card className="p-4 bg-gradient-to-br from-amber-50/50 to-white border-amber-100 flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Leads Handled</span>
+            <div className="text-2xl font-black text-amber-950 mt-1">
+              {selectedStats.totalLeads}
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2">{selectedStats.convertedLeads} successfully converted</p>
+        </Card>
+
+        <Card className="p-4 bg-gradient-to-br from-purple-50/50 to-white border-purple-100 flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">Conversion Rate</span>
+            <div className="text-2xl font-black text-purple-950 mt-1">
+              {selectedStats.totalLeads > 0 
+                ? Math.round((selectedStats.convertedLeads / selectedStats.totalLeads) * 100) 
+                : 0}%
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2">Conversion efficiency rating</p>
+        </Card>
+      </div>
+
+      {selectedEmployee === "all" && employeeStats.length > 0 && (
+        <div className="mb-6 space-y-2">
+          <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Employee Performance Breakdown</h4>
+          <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+            {employeeStats
+              .sort((a, b) => b.earnedValue - a.earnedValue)
+              .map(stat => (
+                <Card key={stat.id} className="p-3 min-w-[200px] flex-shrink-0 flex items-center justify-between border-border hover:border-emerald-200 transition-colors">
+                  <div>
+                    <div className="text-xs font-bold text-foreground truncate max-w-[120px]">{stat.name}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{stat.totalLeads} leads • {stat.convertedLeads} conv.</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-black text-emerald-600">
+                      <Masked placeholder="₹•••">{formatINR(stat.earnedValue)}</Masked>
+                    </div>
+                    <div className="text-[8px] text-muted-foreground uppercase font-bold">earned</div>
+                  </div>
+                </Card>
+              ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <Card className="p-12 text-center">
@@ -599,6 +795,128 @@ const Leads = () => {
               </div>
             );
           })}
+        </div>
+      ) : view === "day" ? (
+        <div className="space-y-6">
+          {dayWiseLeads.map(({ date, items }) => {
+            const dailyValue = items.reduce((s, l) => s + Number(l.estimatedValue || 0), 0);
+            const dailyEarned = items.filter(l => l.stage === "Converted").reduce((s, l) => s + Number(l.estimatedValue || 0), 0);
+            const dateObj = new Date(date);
+            
+            const formattedDate = dateObj.toLocaleDateString("en-IN", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric"
+            });
+
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const yesterdayObj = new Date();
+            yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+            const yesterdayStr = yesterdayObj.toISOString().slice(0, 10);
+            
+            const dateLabel = date === todayStr 
+              ? "Today" 
+              : date === yesterdayStr 
+              ? "Yesterday" 
+              : "";
+
+            return (
+              <div key={date} className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-base text-foreground">{formattedDate}</span>
+                    {dateLabel && (
+                      <Badge className="bg-primary text-primary-foreground font-bold text-[10px] px-2 py-0.5">
+                        {dateLabel}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs font-bold bg-muted/30">
+                      {items.length} {items.length === 1 ? "Lead" : "Leads"}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs font-black text-primary">
+                      Total: {formatINR(dailyValue)}
+                    </Badge>
+                    {dailyEarned > 0 && (
+                      <Badge className="text-xs font-black bg-emerald-100 text-emerald-800 border-emerald-200">
+                        Earned: {formatINR(dailyEarned)}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {items.map((lead) => {
+                    const heat = HEAT_ICONS[lead.heat as LeadHeat];
+                    const HeatIcon = heat.icon;
+                    const isOverdue = lead.nextCallDate && new Date(lead.nextCallDate) < new Date(new Date().setHours(0,0,0,0));
+                    const daysInStage = getDaysInStage(lead);
+
+                    return (
+                      <Card 
+                        key={lead.id} 
+                        className={`p-3 cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between ${
+                          isOverdue ? "ring-1 ring-red-400 bg-red-50/10" : ""
+                        }`}
+                        onClick={() => setDetailLead(lead)}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between mb-1">
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                              <div className="font-semibold text-sm truncate"><Masked>{lead.name}</Masked></div>
+                              {lead.isSmartLead && (
+                                <Badge variant="secondary" className="h-4 px-1 text-[8px] bg-purple-100 text-purple-700 border-purple-200 shrink-0">
+                                  <Zap className="h-2 w-2" />
+                                </Badge>
+                              )}
+                            </div>
+                            <HeatIcon className={`h-4 w-4 shrink-0 ${heat.color}`} />
+                          </div>
+
+                          <div className="text-xs text-muted-foreground truncate mb-2"><Masked>{lead.organization}</Masked></div>
+                        </div>
+
+                        <div className="space-y-2 mt-2">
+                          <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                            <span className="text-muted-foreground uppercase font-bold">Stage</span>
+                            <StageBadge stage={lead.stage} />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-muted-foreground uppercase font-bold">Value</span>
+                            <span className="font-bold text-primary"><Masked placeholder="₹•••••">{formatINR(lead.estimatedValue)}</Masked></span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] border-t pt-2">
+                            <span className="flex items-center gap-1 text-muted-foreground"><Briefcase className="h-2.5 w-2.5" /> {lead.assignedToName}</span>
+                            {lead.stage === "Converted" ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[8px] h-4 font-extrabold uppercase shrink-0">
+                                Converted
+                              </Badge>
+                            ) : lead.stage === "Lost" ? (
+                              <Badge className="bg-red-100 text-red-800 border-red-200 text-[8px] h-4 font-extrabold uppercase shrink-0">
+                                Lost
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground font-medium">{daysInStage}d active</span>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {dayWiseLeads.length === 0 && (
+            <Card className="p-12 text-center text-muted-foreground">
+              No leads found matching your criteria
+            </Card>
+          )}
         </div>
       ) : (
         <Card>

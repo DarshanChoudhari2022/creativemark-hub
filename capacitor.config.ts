@@ -8,6 +8,15 @@ const config: CapacitorConfig = {
   // being reachable. Any pushed web update still requires a rebuild-sync.
   android: {
     allowMixedContent: true
+  },
+  server: {
+    androidScheme: 'https',
+    hostname: 'creativemark-hub.vercel.app'
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true
+    }
   }
 };
 
