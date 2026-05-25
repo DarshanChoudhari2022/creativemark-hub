@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   ShieldCheck, ShieldAlert, ShieldX, PhoneCall, Search, MapPin, Clock,
   Image as ImageIcon, AlertTriangle, User as UserIcon, Phone, Download,
+  ChevronDown, CalendarDays, Users,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
