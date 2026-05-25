@@ -509,7 +509,7 @@ const Employees = () => {
                       </div>
                       <div className="text-center">
                         <div className="text-xs uppercase">Total Earned</div>
-                        <div className="font-semibold text-foreground"><Masked placeholder="₹•••••">{formatINR(totalEarned)}</Masked></div>
+                        <div className="font-bold text-emerald-600"><Masked placeholder="₹•••••">{formatINR(totalEarned)}</Masked></div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 pr-4">

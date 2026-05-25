@@ -6,10 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useSupabaseTable } from "@/hooks/useSupabase";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Download, MapPin, Phone, Building, Calendar, User, TrendingUp, ShieldCheck, ShieldX, Clock } from "lucide-react";
+import { Download, MapPin, Phone, Building, Calendar, User, TrendingUp, ShieldCheck, ShieldX, Clock, ChevronDown, CalendarDays, Users } from "lucide-react";
 
 export default function FieldReports() {
   const [selectedEmp, setSelectedEmp] = useState<string>("all");
+  const [view, setView] = useState<"table" | "day" | "employee">("table");
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -99,6 +101,61 @@ export default function FieldReports() {
   }, [filteredVisits, filteredShifts, activeEmployees]);
 
   const empName = (id: string) => employees.find((e: any) => e.id === id)?.name || "Unknown";
+
+  const dayWiseVisits = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    for (const v of filteredVisits) {
+      const dateKey = new Date(v.created_at).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric"
+      });
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(v);
+    }
+    return Object.entries(groups).map(([date, items]) => {
+      let real = 0, fake = 0, pending = 0;
+      for (const item of items) {
+        const st = item.verification_status || "pending";
+        if (st === "verified_real") real++;
+        else if (st === "verified_fake") fake++;
+        else pending++;
+      }
+      return {
+        date,
+        items: items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        stats: { total: items.length, real, fake, pending }
+      };
+    }).sort((a, b) => new Date(b.items[0].created_at).getTime() - new Date(a.items[0].created_at).getTime());
+  }, [filteredVisits]);
+
+  const employeeWiseVisits = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    for (const v of filteredVisits) {
+      const empId = v.employee_id || "unknown";
+      if (!groups[empId]) groups[empId] = [];
+      groups[empId].push(v);
+    }
+    return Object.entries(groups).map(([empId, items]) => {
+      let real = 0, fake = 0, pending = 0;
+      for (const item of items) {
+        const st = item.verification_status || "pending";
+        if (st === "verified_real") real++;
+        else if (st === "verified_fake") fake++;
+        else pending++;
+      }
+      return {
+        empId,
+        name: empName(empId),
+        items: items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        stats: { total: items.length, real, fake, pending }
+      };
+    }).sort((a, b) => b.items.length - a.items.length);
+  }, [filteredVisits, employees]);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const monthOptions = useMemo(() => {
     const opts = [];
@@ -248,69 +305,268 @@ export default function FieldReports() {
         </Card>
       )}
 
-      {/* Visit details table */}
+      {/* Visit details */}
       <Card className="p-4">
-        <h3 className="text-sm font-semibold mb-3">Visit Details ({filteredVisits.length})</h3>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                {selectedEmp === "all" && <TableHead>Employee</TableHead>}
-                <TableHead>Society</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead className="text-center">Flats</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredVisits.slice(0, 100).map((v: any) => {
-                const st = v.verification_status || "pending";
-                return (
-                  <TableRow key={v.id}>
-                    <TableCell className="whitespace-nowrap text-xs">
-                      {new Date(v.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                    </TableCell>
-                    {selectedEmp === "all" && (
-                      <TableCell className="text-xs font-medium">{empName(v.employee_id)}</TableCell>
-                    )}
-                    <TableCell className="font-medium">{v.name}</TableCell>
-                    <TableCell className="text-xs max-w-[180px] truncate">{v.address || "-"}</TableCell>
-                    <TableCell className="text-xs">{v.contact_person || "-"}</TableCell>
-                    <TableCell className="text-xs">{v.contact_phone || "-"}</TableCell>
-                    <TableCell className="text-center">{v.number_of_flats || "-"}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant="outline"
-                        className={
-                          st === "verified_real" ? "bg-green-50 text-green-700 border-green-200" :
-                          st === "verified_fake" ? "bg-red-50 text-red-700 border-red-200" :
-                          "bg-amber-50 text-amber-700 border-amber-200"
-                        }
-                      >
-                        {st === "verified_real" ? "Real" : st === "verified_fake" ? "Fake" : "Pending"}
-                      </Badge>
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h3 className="text-sm font-semibold">Visit Details ({filteredVisits.length})</h3>
+          <div className="flex bg-muted rounded-lg p-0.5 border text-xs font-semibold">
+            <button
+              onClick={() => setView("table")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                view === "table" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              List View
+            </button>
+            <button
+              onClick={() => setView("day")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                view === "day" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Day-wise
+            </button>
+            <button
+              onClick={() => setView("employee")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                view === "employee" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Employee-wise
+            </button>
+          </div>
+        </div>
+
+        {view === "table" ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  {selectedEmp === "all" && <TableHead>Employee</TableHead>}
+                  <TableHead>Society</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead className="text-center">Flats</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredVisits.slice(0, 100).map((v: any) => {
+                  const st = v.verification_status || "pending";
+                  return (
+                    <TableRow key={v.id}>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {new Date(v.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </TableCell>
+                      {selectedEmp === "all" && (
+                        <TableCell className="text-xs font-medium">{empName(v.employee_id)}</TableCell>
+                      )}
+                      <TableCell className="font-medium">{v.name}</TableCell>
+                      <TableCell className="text-xs max-w-[180px] truncate">{v.address || "-"}</TableCell>
+                      <TableCell className="text-xs">{v.contact_person || "-"}</TableCell>
+                      <TableCell className="text-xs">{v.contact_phone || "-"}</TableCell>
+                      <TableCell className="text-center">{v.number_of_flats || "-"}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={
+                            st === "verified_real" ? "bg-green-50 text-green-700 border-green-200" :
+                            st === "verified_fake" ? "bg-red-50 text-red-700 border-red-200" :
+                            "bg-amber-50 text-amber-700 border-amber-200"
+                          }
+                        >
+                          {st === "verified_real" ? "Real" : st === "verified_fake" ? "Fake" : "Pending"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {filteredVisits.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      No visits found for this period
                     </TableCell>
                   </TableRow>
-                );
-              })}
-              {filteredVisits.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    No visits found for this period
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          {filteredVisits.length > 100 && (
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Showing 100 of {filteredVisits.length} visits. Export CSV for full data.
-            </p>
-          )}
-        </div>
+                )}
+              </TableBody>
+            </Table>
+            {filteredVisits.length > 100 && (
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Showing 100 of {filteredVisits.length} visits. Export CSV for full data.
+              </p>
+            )}
+          </div>
+        ) : view === "day" ? (
+          <div className="space-y-4">
+            {dayWiseVisits.map(({ date, items, stats }) => {
+              const isCollapsed = collapsedGroups[date];
+              return (
+                <Card key={date} className="border-border overflow-hidden shadow-none">
+                  <div
+                    onClick={() => toggleGroup(date)}
+                    className="flex items-center justify-between p-3.5 bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      <CalendarDays className="w-4 h-4 text-primary" />
+                      <span className="font-bold text-sm text-foreground">{date}</span>
+                      <Badge variant="secondary" className="text-[10px] ml-1 bg-primary/10 text-primary hover:bg-primary/15">{stats.total} visits</Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">{stats.real} Real</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-semibold">{stats.fake} Fake</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">{stats.pending} Pending</span>
+                    </div>
+                  </div>
+                  {!isCollapsed && (
+                    <div className="p-4 border-t bg-white">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {items.map((v: any) => {
+                          const st = v.verification_status || "pending";
+                          return (
+                            <Card key={v.id} className="p-3 border-border hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between shadow-none bg-slate-50/50">
+                              <div>
+                                <div className="flex justify-between items-start gap-2 mb-1.5">
+                                  <span className="font-bold text-sm truncate">{v.name}</span>
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      st === "verified_real" ? "bg-green-50 text-green-700 border-green-200" :
+                                      st === "verified_fake" ? "bg-red-50 text-red-700 border-red-200" :
+                                      "bg-amber-50 text-amber-700 border-amber-200"
+                                    }
+                                  >
+                                    {st === "verified_real" ? "Real" : st === "verified_fake" ? "Fake" : "Pending"}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground line-clamp-2 mb-2 flex items-start gap-1">
+                                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                                  {v.address || "No address provided"}
+                                </p>
+                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted-foreground border-t pt-2 mt-2">
+                                  <div className="flex items-center gap-1 truncate">
+                                    <User className="w-3 h-3 text-muted-foreground" />
+                                    <span className="truncate">{empName(v.employee_id)}</span>
+                                  </div>
+                                  {v.contact_person && (
+                                    <div className="flex items-center gap-1 truncate col-span-2">
+                                      <Building className="w-3 h-3 text-muted-foreground" />
+                                      <span className="truncate font-medium text-foreground">{v.contact_person} {v.contact_phone && `(${v.contact_phone})`}</span>
+                                    </div>
+                                  )}
+                                  {v.number_of_flats != null && (
+                                    <div>
+                                      Flats: <span className="font-semibold text-foreground">{v.number_of_flats}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {(v.selfie_url || v.building_photo_url) && (
+                                <div className="flex gap-2 mt-3 pt-2 border-t text-[9px] text-muted-foreground font-semibold">
+                                  {v.selfie_url && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-0.5">📸 Selfie</span>}
+                                  {v.building_photo_url && <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100 flex items-center gap-0.5">🏢 Photo</span>}
+                                </div>
+                              )}
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+            {dayWiseVisits.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground text-sm">No visits found</div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {employeeWiseVisits.map(({ empId, name, items, stats }) => {
+              const isCollapsed = collapsedGroups[empId];
+              return (
+                <Card key={empId} className="border-border overflow-hidden shadow-none">
+                  <div
+                    onClick={() => toggleGroup(empId)}
+                    className="flex items-center justify-between p-3.5 bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      <Users className="w-4 h-4 text-primary" />
+                      <span className="font-bold text-sm text-foreground">{name}</span>
+                      <Badge variant="secondary" className="text-[10px] ml-1 bg-primary/10 text-primary hover:bg-primary/15">{stats.total} visits</Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">{stats.real} Real</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-semibold">{stats.fake} Fake</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">{stats.pending} Pending</span>
+                    </div>
+                  </div>
+                  {!isCollapsed && (
+                    <div className="p-4 border-t bg-white">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {items.map((v: any) => {
+                          const st = v.verification_status || "pending";
+                          return (
+                            <Card key={v.id} className="p-3 border-border hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between shadow-none bg-slate-50/50">
+                              <div>
+                                <div className="flex justify-between items-start gap-2 mb-1.5">
+                                  <span className="font-bold text-sm truncate">{v.name}</span>
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      st === "verified_real" ? "bg-green-50 text-green-700 border-green-200" :
+                                      st === "verified_fake" ? "bg-red-50 text-red-700 border-red-200" :
+                                      "bg-amber-50 text-amber-700 border-amber-200"
+                                    }
+                                  >
+                                    {st === "verified_real" ? "Real" : st === "verified_fake" ? "Fake" : "Pending"}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground line-clamp-2 mb-2 flex items-start gap-1">
+                                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                                  {v.address || "No address provided"}
+                                </p>
+                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted-foreground border-t pt-2 mt-2">
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3 text-muted-foreground" />
+                                    <span>{new Date(v.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                                  </div>
+                                  {v.contact_person && (
+                                    <div className="flex items-center gap-1 truncate col-span-2">
+                                      <Building className="w-3 h-3 text-muted-foreground" />
+                                      <span className="truncate font-medium text-foreground">{v.contact_person} {v.contact_phone && `(${v.contact_phone})`}</span>
+                                    </div>
+                                  )}
+                                  {v.number_of_flats != null && (
+                                    <div>
+                                      Flats: <span className="font-semibold text-foreground">{v.number_of_flats}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {(v.selfie_url || v.building_photo_url) && (
+                                <div className="flex gap-2 mt-3 pt-2 border-t text-[9px] text-muted-foreground font-semibold">
+                                  {v.selfie_url && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-0.5">📸 Selfie</span>}
+                                  {v.building_photo_url && <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100 flex items-center gap-0.5">🏢 Photo</span>}
+                                </div>
+                              )}
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+            {employeeWiseVisits.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground text-sm">No visits found</div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );

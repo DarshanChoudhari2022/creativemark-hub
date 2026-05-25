@@ -57,6 +57,8 @@ const Verification = () => {
   const [notesOpen, setNotesOpen] = useState<{ row: VisitRow; status: VStatus } | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [view, setView] = useState<"grid" | "day" | "employee">("grid");
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const fetchRows = async () => {
     const { data, error } = await supabase
@@ -103,6 +105,62 @@ const Verification = () => {
       return hay.includes(search.toLowerCase());
     });
   }, [rows, filter, search]);
+
+  const dayWiseVisits = useMemo(() => {
+    const groups: Record<string, VisitRow[]> = {};
+    for (const r of visible) {
+      const dateKey = new Date(r.created_at).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric"
+      });
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(r);
+    }
+    return Object.entries(groups).map(([date, items]) => {
+      let pending = 0, real = 0, fake = 0, unreachable = 0;
+      for (const item of items) {
+        const s = item.verification_status || "pending";
+        if (s === "pending") pending++;
+        else if (s === "verified_real") real++;
+        else if (s === "verified_fake") fake++;
+        else if (s === "unreachable") unreachable++;
+      }
+      return {
+        date,
+        items: items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        stats: { total: items.length, pending, real, fake, unreachable }
+      };
+    }).sort((a, b) => new Date(b.items[0].created_at).getTime() - new Date(a.items[0].created_at).getTime());
+  }, [visible]);
+
+  const employeeWiseVisits = useMemo(() => {
+    const groups: Record<string, VisitRow[]> = {};
+    for (const r of visible) {
+      const empName = r.employees?.name || "Unknown Employee";
+      if (!groups[empName]) groups[empName] = [];
+      groups[empName].push(r);
+    }
+    return Object.entries(groups).map(([name, items]) => {
+      let pending = 0, real = 0, fake = 0, unreachable = 0;
+      for (const item of items) {
+        const s = item.verification_status || "pending";
+        if (s === "pending") pending++;
+        else if (s === "verified_real") real++;
+        else if (s === "verified_fake") fake++;
+        else if (s === "unreachable") unreachable++;
+      }
+      return {
+        name,
+        items: items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        stats: { total: items.length, pending, real, fake, unreachable }
+      };
+    }).sort((a, b) => b.items.length - a.items.length);
+  }, [visible]);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const beginMark = (row: VisitRow, status: VStatus) => {
     setNotes(row.verification_notes || "");
@@ -189,6 +247,149 @@ const Verification = () => {
     document.body.removeChild(link);
   };
 
+  const renderVisitCard = (row: VisitRow) => {
+    const status = (row.verification_status || "pending") as VStatus;
+    const meta = STATUS_META[status];
+    const Icon = meta.icon;
+    const mapsHref = row.lat && row.lng ? `https://www.google.com/maps?q=${row.lat},${row.lng}` : null;
+    return (
+      <Card key={row.id} className="p-4 border-border/60 shadow-none bg-slate-50/20">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <div className="font-bold text-base truncate">{row.name}</div>
+            <div className="text-xs text-muted-foreground line-clamp-1">{row.address}</div>
+          </div>
+          <Badge variant="outline" className={meta.cls + " gap-1 shrink-0"}>
+            <Icon className="w-3 h-3" />
+            {meta.label}
+          </Badge>
+        </div>
+
+        {/* Photos + key facts */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {[
+            { url: row.selfie_url, label: "Selfie" },
+            { url: row.building_photo_url, label: "Building" },
+          ].map((p, i) => (
+            <div
+              key={i}
+              className="aspect-square bg-muted/40 rounded-md border border-border overflow-hidden relative cursor-pointer group"
+              onClick={() => p.url && setPhotoOpen(p.url)}
+            >
+              {p.url ? (
+                <img
+                  src={p.url}
+                  alt={p.label}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <ImageIcon className="w-6 h-6 opacity-40" />
+                  <span className="text-[10px] mt-1">No {p.label.toLowerCase()}</span>
+                </div>
+              )}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-2 py-0.5 font-medium">
+                {p.label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Meta grid */}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs mb-3">
+          <div className="flex items-center gap-1.5 text-muted-foreground flex-wrap">
+            <UserIcon className="w-3 h-3 text-muted-foreground" />
+            <span className="font-medium text-foreground truncate">{row.employees?.name || "Unknown"}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="w-3 h-3" />
+            {formatDistanceToNow(new Date(row.created_at), { addSuffix: true })}
+          </div>
+          {row.contact_person && (
+            <div className="flex items-center gap-1.5 text-muted-foreground col-span-2">
+              <UserIcon className="w-3 h-3 text-muted-foreground" />
+              Chairman: <span className="text-foreground font-medium">{row.contact_person}</span>
+            </div>
+          )}
+          {row.contact_phone && (
+            <a
+              href={`tel:${row.contact_phone}`}
+              className="flex items-center gap-1.5 text-primary hover:underline col-span-2"
+            >
+              <Phone className="w-3 h-3" />
+              {row.contact_phone}
+            </a>
+          )}
+          {row.number_of_flats != null && (
+            <div className="text-muted-foreground">
+              Flats: <span className="font-medium text-foreground">{row.number_of_flats}</span>
+            </div>
+          )}
+          {mapsHref && (
+            <a
+              href={mapsHref}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-primary hover:underline"
+            >
+              <MapPin className="w-3 h-3" />
+              Open in Maps
+            </a>
+          )}
+          {row.accuracy_m != null && (
+            <div className="text-muted-foreground">
+              GPS: ±{Math.round(row.accuracy_m)}m
+            </div>
+          )}
+        </div>
+
+        {/* Mock-GPS warning */}
+        {row.is_mock && (
+          <div className="flex items-center gap-2 p-2 mb-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-xs font-medium">
+            <AlertTriangle className="w-4 h-4" />
+            Mock GPS detected on this submission!
+          </div>
+        )}
+
+        {/* Existing notes */}
+        {row.verification_notes && (
+          <div className="text-xs bg-muted/40 rounded-md p-2 mb-3 border border-border/40">
+            <span className="font-semibold">Notes:</span> {row.verification_notes}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="grid grid-cols-3 gap-2">
+          <Button
+            size="sm"
+            variant={status === "verified_real" ? "default" : "outline"}
+            className={status === "verified_real" ? "bg-green-600 hover:bg-green-700" : "border-green-300 text-green-700 hover:bg-green-50"}
+            onClick={() => beginMark(row, "verified_real")}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Real
+          </Button>
+          <Button
+            size="sm"
+            variant={status === "verified_fake" ? "default" : "outline"}
+            className={status === "verified_fake" ? "bg-red-600 hover:bg-red-700" : "border-red-300 text-red-700 hover:bg-red-50"}
+            onClick={() => beginMark(row, "verified_fake")}
+          >
+            <ShieldX className="w-3.5 h-3.5 mr-1" /> Fake
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => beginMark(row, "unreachable")}
+          >
+            <PhoneCall className="w-3.5 h-3.5 mr-1" /> No Reply
+          </Button>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -223,7 +424,35 @@ const Verification = () => {
           );
         })}
         <div className="flex-1" />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View Selector */}
+          <div className="flex bg-muted rounded-lg p-0.5 border text-xs font-semibold h-9 items-center">
+            <button
+              onClick={() => setView("grid")}
+              className={`px-3 py-1 rounded-md transition-all h-8 ${
+                view === "grid" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Grid
+            </button>
+            <button
+              onClick={() => setView("day")}
+              className={`px-3 py-1 rounded-md transition-all h-8 ${
+                view === "day" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Day-wise
+            </button>
+            <button
+              onClick={() => setView("employee")}
+              className={`px-3 py-1 rounded-md transition-all h-8 ${
+                view === "employee" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Employee-wise
+            </button>
+          </div>
+
           <Button variant="outline" size="sm" onClick={exportToCSV} className="h-9 hidden sm:flex">
             <Download className="w-4 h-4 mr-2" />
             Export CSV
@@ -251,150 +480,85 @@ const Verification = () => {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {visible.map((row) => {
-          const status = (row.verification_status || "pending") as VStatus;
-          const meta = STATUS_META[status];
-          const Icon = meta.icon;
-          const mapsHref = row.lat && row.lng ? `https://www.google.com/maps?q=${row.lat},${row.lng}` : null;
-          return (
-            <Card key={row.id} className="p-4 border-border/60">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="min-w-0">
-                  <div className="font-bold text-base truncate">{row.name}</div>
-                  <div className="text-xs text-muted-foreground line-clamp-1">{row.address}</div>
+      {view === "grid" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {visible.map((row) => renderVisitCard(row))}
+        </div>
+      ) : view === "day" ? (
+        <div className="space-y-4">
+          {dayWiseVisits.map(({ date, items, stats }) => {
+            const isCollapsed = collapsedGroups[date];
+            return (
+              <Card key={date} className="border-border overflow-hidden shadow-none">
+                <div
+                  onClick={() => toggleGroup(date)}
+                  className="flex items-center justify-between p-3.5 bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                    <CalendarDays className="w-4 h-4 text-primary" />
+                    <span className="font-bold text-sm text-foreground">{date}</span>
+                    <Badge variant="secondary" className="text-[10px] ml-1 bg-primary/10 text-primary hover:bg-primary/15">{stats.total} visits</Badge>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">{stats.pending} Pending</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">{stats.real} Real</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-semibold">{stats.fake} Fake</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200 font-semibold">{stats.unreachable} No Reply</span>
+                  </div>
                 </div>
-                <Badge variant="outline" className={meta.cls + " gap-1 shrink-0"}>
-                  <Icon className="w-3 h-3" />
-                  {meta.label}
-                </Badge>
-              </div>
-
-              {/* Photos + key facts */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                {[
-                  { url: row.selfie_url, label: "Selfie" },
-                  { url: row.building_photo_url, label: "Building" },
-                ].map((p, i) => (
-                  <div
-                    key={i}
-                    className="aspect-square bg-muted/40 rounded-md border border-border overflow-hidden relative cursor-pointer group"
-                    onClick={() => p.url && setPhotoOpen(p.url)}
-                  >
-                    {p.url ? (
-                      <img
-                        src={p.url}
-                        alt={p.label}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
-                        <ImageIcon className="w-6 h-6 opacity-40" />
-                        <span className="text-[10px] mt-1">No {p.label.toLowerCase()}</span>
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-2 py-0.5 font-medium">
-                      {p.label}
+                {!isCollapsed && (
+                  <div className="p-4 border-t bg-white">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {items.map((row) => renderVisitCard(row))}
                     </div>
                   </div>
-                ))}
-              </div>
-
-              {/* Meta grid */}
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs mb-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <UserIcon className="w-3 h-3" />
-                  <span className="font-medium text-foreground truncate">{row.employees?.name || "Unknown"}</span>
+                )}
+              </Card>
+            );
+          })}
+          {dayWiseVisits.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground text-sm">No visits found</div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {employeeWiseVisits.map(({ name, items, stats }) => {
+            const isCollapsed = collapsedGroups[name];
+            return (
+              <Card key={name} className="border-border overflow-hidden shadow-none">
+                <div
+                  onClick={() => toggleGroup(name)}
+                  className="flex items-center justify-between p-3.5 bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                    <Users className="w-4 h-4 text-primary" />
+                    <span className="font-bold text-sm text-foreground">{name}</span>
+                    <Badge variant="secondary" className="text-[10px] ml-1 bg-primary/10 text-primary hover:bg-primary/15">{stats.total} visits</Badge>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">{stats.pending} Pending</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">{stats.real} Real</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-semibold">{stats.fake} Fake</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200 font-semibold">{stats.unreachable} No Reply</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  {formatDistanceToNow(new Date(row.created_at), { addSuffix: true })}
-                </div>
-                {row.contact_person && (
-                  <div className="flex items-center gap-1.5 text-muted-foreground col-span-2">
-                    <UserIcon className="w-3 h-3" />
-                    Chairman: <span className="text-foreground font-medium">{row.contact_person}</span>
+                {!isCollapsed && (
+                  <div className="p-4 border-t bg-white">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {items.map((row) => renderVisitCard(row))}
+                    </div>
                   </div>
                 )}
-                {row.contact_phone && (
-                  <a
-                    href={`tel:${row.contact_phone}`}
-                    className="flex items-center gap-1.5 text-primary hover:underline col-span-2"
-                  >
-                    <Phone className="w-3 h-3" />
-                    {row.contact_phone}
-                  </a>
-                )}
-                {row.number_of_flats != null && (
-                  <div className="text-muted-foreground">
-                    Flats: <span className="font-medium text-foreground">{row.number_of_flats}</span>
-                  </div>
-                )}
-                {mapsHref && (
-                  <a
-                    href={mapsHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1.5 text-primary hover:underline"
-                  >
-                    <MapPin className="w-3 h-3" />
-                    Open in Maps
-                  </a>
-                )}
-                {row.accuracy_m != null && (
-                  <div className="text-muted-foreground">
-                    GPS: ±{Math.round(row.accuracy_m)}m
-                  </div>
-                )}
-              </div>
-
-              {/* Mock-GPS warning */}
-              {row.is_mock && (
-                <div className="flex items-center gap-2 p-2 mb-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-xs font-medium">
-                  <AlertTriangle className="w-4 h-4" />
-                  Mock GPS detected on this submission!
-                </div>
-              )}
-
-              {/* Existing notes */}
-              {row.verification_notes && (
-                <div className="text-xs bg-muted/40 rounded-md p-2 mb-3 border border-border/40">
-                  <span className="font-semibold">Notes:</span> {row.verification_notes}
-                </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  size="sm"
-                  variant={status === "verified_real" ? "default" : "outline"}
-                  className={status === "verified_real" ? "bg-green-600 hover:bg-green-700" : "border-green-300 text-green-700 hover:bg-green-50"}
-                  onClick={() => beginMark(row, "verified_real")}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Real
-                </Button>
-                <Button
-                  size="sm"
-                  variant={status === "verified_fake" ? "default" : "outline"}
-                  className={status === "verified_fake" ? "bg-red-600 hover:bg-red-700" : "border-red-300 text-red-700 hover:bg-red-50"}
-                  onClick={() => beginMark(row, "verified_fake")}
-                >
-                  <ShieldX className="w-3.5 h-3.5 mr-1" /> Fake
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => beginMark(row, "unreachable")}
-                >
-                  <PhoneCall className="w-3.5 h-3.5 mr-1" /> No Reply
-                </Button>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+              </Card>
+            );
+          })}
+          {employeeWiseVisits.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground text-sm">No visits found</div>
+          )}
+        </div>
+      )}
 
       {/* Photo lightbox */}
       <Dialog open={!!photoOpen} onOpenChange={(o) => !o && setPhotoOpen(null)}>
