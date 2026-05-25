@@ -98,8 +98,11 @@ const LiveTracking = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [autoFollow, setAutoFollow] = useState(true);
 
-  const [useMapbox, setUseMapbox] = useState<boolean>(() => {
-    return !!import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+  type MapProvider = 'olamaps' | 'mapbox' | 'osm';
+  const [mapProvider, setMapProvider] = useState<MapProvider>(() => {
+    if (import.meta.env.VITE_OLA_MAPS_API_KEY) return 'olamaps';
+    if (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN) return 'mapbox';
+    return 'osm';
   });
 
   // Refs for map and markers
@@ -200,23 +203,37 @@ const LiveTracking = () => {
       mapRef.current = null;
     }
 
-    const mapEngine = useMapbox ? mapboxgl : maplibregl;
+    const mapEngine = mapProvider === 'mapbox' ? mapboxgl : maplibregl;
 
-    if (useMapbox && !import.meta.env.VITE_MAPBOX_ACCESS_TOKEN) {
-      // Mapbox token missing: skip map initialization, UI will show fallback overlay
-      return;
-    }
-
-    if (useMapbox) {
+    if (mapProvider === 'mapbox') {
       mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
     }
 
-    const map = new (mapEngine as any).Map({
+    const mapOptions: any = {
       container: mapContainerRef.current,
-      style: useMapbox ? 'mapbox://styles/mapbox/navigation-day-v1' : MAP_STYLE,
       center: [78.9629, 20.5937], // Center of India [lng, lat]
       zoom: 5,
-    });
+    };
+
+    if (mapProvider === 'olamaps') {
+      const OLA_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY;
+      mapOptions.style = 'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json';
+      mapOptions.transformRequest = (url: string, resourceType: string) => {
+        if (url.includes("api.olamaps.io")) {
+            const separator = url.includes("?") ? "&" : "?";
+            return {
+                url: `${url}${separator}api_key=${OLA_API_KEY}`
+            };
+        }
+        return { url };
+      };
+    } else if (mapProvider === 'mapbox') {
+      mapOptions.style = 'mapbox://styles/mapbox/navigation-day-v1';
+    } else {
+      mapOptions.style = MAP_STYLE;
+    }
+
+    const map = new (mapEngine as any).Map(mapOptions);
 
     map.addControl(new (mapEngine as any).NavigationControl(), 'top-right');
 
@@ -253,14 +270,14 @@ const LiveTracking = () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [useMapbox]);
+  }, [mapProvider]);
 
   // ── Sync markers with employees ───────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map || loading) return;
 
-    const mapEngine = useMapbox ? mapboxgl : maplibregl;
+    const mapEngine = mapProvider === 'mapbox' ? mapboxgl : maplibregl;
     const existingIds = new Set(markersRef.current.keys());
     const currentIds = new Set(employees.map(e => e.id));
 
@@ -332,7 +349,7 @@ const LiveTracking = () => {
         map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 800 });
       }
     }
-  }, [employees, loading, selectedId, useMapbox]);
+  }, [employees, loading, selectedId, mapProvider]);
 
   // ── Update route polyline ─────────────────────────────────────
   useEffect(() => {
@@ -377,7 +394,7 @@ const LiveTracking = () => {
     const map = mapRef.current;
     if (!map || !selectedId) return;
 
-    const mapEngine = useMapbox ? mapboxgl : maplibregl;
+    const mapEngine = mapProvider === 'mapbox' ? mapboxgl : maplibregl;
     const emp = employees.find(e => e.id === selectedId);
     if (!emp) return;
 
@@ -388,7 +405,7 @@ const LiveTracking = () => {
     } else if (emp.current_lat && emp.current_lng) {
       map.flyTo({ center: [emp.current_lng, emp.current_lat], zoom: Math.max(map.getZoom(), 16), duration: 800 });
     }
-  }, [selectedId, route, useMapbox]);
+  }, [selectedId, route, mapProvider]);
 
   // ── Smooth marker animation ───────────────────────────────────
   function animateMarker(
@@ -590,74 +607,45 @@ const LiveTracking = () => {
 
           {!loading ? (
             <>
-              {/* Mapbox / OpenStreetMap Floating Switcher */}
+              {/* Map Provider Switcher */}
               <div className="absolute top-3 right-12 z-[10] flex gap-2">
                 <div className="bg-card/90 backdrop-blur-md border border-border shadow-md rounded-full px-1.5 py-1 flex items-center gap-1">
+                  {import.meta.env.VITE_OLA_MAPS_API_KEY && (
+                    <button
+                      onClick={() => setMapProvider('olamaps')}
+                      className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                        mapProvider === 'olamaps'
+                          ? 'bg-slate-900 text-white shadow-sm' 
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Ola Maps
+                    </button>
+                  )}
                   <button
-                    onClick={() => setUseMapbox(true)}
+                    onClick={() => setMapProvider('osm')}
                     className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
-                      useMapbox 
-                        ? 'bg-slate-900 text-white shadow-sm' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Mapbox GL
-                  </button>
-                  <button
-                    onClick={() => setUseMapbox(false)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
-                      !useMapbox 
+                      mapProvider === 'osm'
                         ? 'bg-slate-900 text-white shadow-sm' 
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     OpenStreetMap
                   </button>
+                  {import.meta.env.VITE_MAPBOX_ACCESS_TOKEN && (
+                    <button
+                      onClick={() => setMapProvider('mapbox')}
+                      className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+                        mapProvider === 'mapbox'
+                          ? 'bg-slate-900 text-white shadow-sm' 
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Mapbox GL
+                    </button>
+                  )}
                 </div>
               </div>
-
-              {/* Mapbox Token Missing Overlay */}
-              {useMapbox && !import.meta.env.VITE_MAPBOX_ACCESS_TOKEN && (
-                <div className="absolute inset-0 z-[20] flex flex-col items-center justify-center bg-slate-950/65 backdrop-blur-sm text-center p-6 text-foreground">
-                  <div className="bg-card/95 border border-border p-6 rounded-2xl max-w-md shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-                    <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center animate-pulse">
-                      <AlertTriangle className="w-6 h-6" />
-                    </div>
-                    <div className="space-y-1">
-                      <h4 className="font-semibold text-base text-card-foreground">Mapbox Access Token Required</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed px-2">
-                        To render Mapbox GL, you need to add your personal Mapbox Access Token. This key is used to load premium vector map tiles.
-                      </p>
-                    </div>
-                    
-                    <div className="bg-muted/80 border border-border rounded-lg p-2.5 text-[11px] font-mono text-muted-foreground w-full select-all text-left">
-                      VITE_MAPBOX_ACCESS_TOKEN=your_token_here
-                    </div>
-
-                    <p className="text-[10px] text-muted-foreground leading-normal">
-                      Add this variable to your <code className="bg-muted px-1 py-0.5 rounded">.env</code> file locally or inside the Vercel project settings dashboard.
-                    </p>
-
-                    <div className="flex gap-2 w-full mt-2">
-                      <button
-                        onClick={() => setUseMapbox(false)}
-                        className="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
-                      >
-                        Use OpenStreetMap
-                      </button>
-                      <a
-                        href="https://account.mapbox.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 px-3 py-2 bg-primary hover:bg-primary-hover active:bg-primary text-white rounded-lg text-xs font-semibold text-center transition-colors inline-flex items-center justify-center gap-1.5"
-                      >
-                        Get Free Token
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
 
