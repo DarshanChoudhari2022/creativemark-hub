@@ -144,10 +144,23 @@ export default function FieldReports() {
         else if (st === "verified_fake") fake++;
         else pending++;
       }
+      // Sub-group by day
+      const dayMap: Record<string, any[]> = {};
+      for (const item of items) {
+        const dateKey = new Date(item.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        if (!dayMap[dateKey]) dayMap[dateKey] = [];
+        dayMap[dateKey].push(item);
+      }
+      const days = Object.entries(dayMap).map(([date, dayItems]) => ({
+        date,
+        items: dayItems.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        count: dayItems.length
+      })).sort((a, b) => new Date(b.items[0].created_at).getTime() - new Date(a.items[0].created_at).getTime());
       return {
         empId,
         name: empName(empId),
         items: items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        days,
         stats: { total: items.length, real, fake, pending }
       };
     }).sort((a, b) => b.items.length - a.items.length);
@@ -505,58 +518,77 @@ export default function FieldReports() {
                     </div>
                   </div>
                   {!isCollapsed && (
-                    <div className="p-4 border-t bg-white">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {items.map((v: any) => {
-                          const st = v.verification_status || "pending";
-                          return (
-                            <Card key={v.id} className="p-3 border-border hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between shadow-none bg-slate-50/50">
-                              <div>
-                                <div className="flex justify-between items-start gap-2 mb-1.5">
-                                  <span className="font-bold text-sm truncate">{v.name}</span>
-                                  <Badge
-                                    variant="outline"
-                                    className={
-                                      st === "verified_real" ? "bg-green-50 text-green-700 border-green-200" :
-                                      st === "verified_fake" ? "bg-red-50 text-red-700 border-red-200" :
-                                      "bg-amber-50 text-amber-700 border-amber-200"
-                                    }
-                                  >
-                                    {st === "verified_real" ? "Real" : st === "verified_fake" ? "Fake" : "Pending"}
-                                  </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground line-clamp-2 mb-2 flex items-start gap-1">
-                                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                                  {v.address || "No address provided"}
-                                </p>
-                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted-foreground border-t pt-2 mt-2">
-                                  <div className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3 text-muted-foreground" />
-                                    <span>{new Date(v.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                                  </div>
-                                  {v.contact_person && (
-                                    <div className="flex items-center gap-1 truncate col-span-2">
-                                      <Building className="w-3 h-3 text-muted-foreground" />
-                                      <span className="truncate font-medium text-foreground">{v.contact_person} {v.contact_phone && `(${v.contact_phone})`}</span>
-                                    </div>
-                                  )}
-                                  {v.number_of_flats != null && (
-                                    <div>
-                                      Flats: <span className="font-semibold text-foreground">{v.number_of_flats}</span>
-                                    </div>
-                                  )}
+                    <div className="border-t bg-white">
+                      {(employeeWiseVisits.find(e => e.empId === empId)?.days || []).map(({ date, items: dayItems, count }: any) => {
+                        const dayKey = `${empId}__${date}`;
+                        const isDayCollapsed = collapsedGroups[dayKey];
+                        return (
+                          <div key={dayKey}>
+                            <div
+                              onClick={(e) => { e.stopPropagation(); toggleGroup(dayKey); }}
+                              className="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 hover:bg-slate-100 cursor-pointer transition-colors border-b border-border/40"
+                            >
+                              <div className="flex items-center gap-2">
+                                <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isDayCollapsed ? "-rotate-90" : ""}`} />
+                                <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
+                                <span className="font-semibold text-xs text-foreground">{date}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-semibold">{count} visits</span>
+                              </div>
+                            </div>
+                            {!isDayCollapsed && (
+                              <div className="p-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {dayItems.map((v: any) => {
+                                    const st = v.verification_status || "pending";
+                                    return (
+                                      <Card key={v.id} className="p-3 border-border hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between shadow-none bg-slate-50/50">
+                                        <div>
+                                          <div className="flex justify-between items-start gap-2 mb-1.5">
+                                            <span className="font-bold text-sm truncate">{v.name}</span>
+                                            <Badge
+                                              variant="outline"
+                                              className={
+                                                st === "verified_real" ? "bg-green-50 text-green-700 border-green-200" :
+                                                st === "verified_fake" ? "bg-red-50 text-red-700 border-red-200" :
+                                                "bg-amber-50 text-amber-700 border-amber-200"
+                                              }
+                                            >
+                                              {st === "verified_real" ? "Real" : st === "verified_fake" ? "Fake" : "Pending"}
+                                            </Badge>
+                                          </div>
+                                          <p className="text-xs text-muted-foreground line-clamp-2 mb-2 flex items-start gap-1">
+                                            <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                                            {v.address || "No address provided"}
+                                          </p>
+                                          <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted-foreground border-t pt-2 mt-2">
+                                            {v.contact_person && (
+                                              <div className="flex items-center gap-1 truncate col-span-2">
+                                                <Building className="w-3 h-3 text-muted-foreground" />
+                                                <span className="truncate font-medium text-foreground">{v.contact_person} {v.contact_phone && `(${v.contact_phone})`}</span>
+                                              </div>
+                                            )}
+                                            {v.number_of_flats != null && (
+                                              <div>
+                                                Flats: <span className="font-semibold text-foreground">{v.number_of_flats}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {(v.selfie_url || v.building_photo_url) && (
+                                          <div className="flex gap-2 mt-3 pt-2 border-t text-[9px] text-muted-foreground font-semibold">
+                                            {v.selfie_url && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-0.5">📸 Selfie</span>}
+                                            {v.building_photo_url && <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100 flex items-center gap-0.5">🏢 Photo</span>}
+                                          </div>
+                                        )}
+                                      </Card>
+                                    );
+                                  })}
                                 </div>
                               </div>
-                              {(v.selfie_url || v.building_photo_url) && (
-                                <div className="flex gap-2 mt-3 pt-2 border-t text-[9px] text-muted-foreground font-semibold">
-                                  {v.selfie_url && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-0.5">📸 Selfie</span>}
-                                  {v.building_photo_url && <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100 flex items-center gap-0.5">🏢 Photo</span>}
-                                </div>
-                              )}
-                            </Card>
-                          );
-                        })}
-                      </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </Card>

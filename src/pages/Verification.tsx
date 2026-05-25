@@ -151,9 +151,22 @@ const Verification = () => {
         else if (s === "verified_fake") fake++;
         else if (s === "unreachable") unreachable++;
       }
+      // Sub-group by day
+      const dayMap: Record<string, VisitRow[]> = {};
+      for (const item of items) {
+        const dateKey = new Date(item.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        if (!dayMap[dateKey]) dayMap[dateKey] = [];
+        dayMap[dateKey].push(item);
+      }
+      const days = Object.entries(dayMap).map(([date, dayItems]) => ({
+        date,
+        items: dayItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        count: dayItems.length
+      })).sort((a, b) => new Date(b.items[0].created_at).getTime() - new Date(a.items[0].created_at).getTime());
       return {
         name,
         items: items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        days,
         stats: { total: items.length, pending, real, fake, unreachable }
       };
     }).sort((a, b) => b.items.length - a.items.length);
@@ -546,10 +559,33 @@ const Verification = () => {
                   </div>
                 </div>
                 {!isCollapsed && (
-                  <div className="p-4 border-t bg-white">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      {items.map((row) => renderVisitCard(row))}
-                    </div>
+                  <div className="border-t bg-white">
+                    {(employeeWiseVisits.find(e => e.name === name)?.days || []).map(({ date, items: dayItems, count }) => {
+                      const dayKey = `${name}__${date}`;
+                      const isDayCollapsed = collapsedGroups[dayKey];
+                      return (
+                        <div key={dayKey}>
+                          <div
+                            onClick={(e) => { e.stopPropagation(); toggleGroup(dayKey); }}
+                            className="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 hover:bg-slate-100 cursor-pointer transition-colors border-b border-border/40"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isDayCollapsed ? "-rotate-90" : ""}`} />
+                              <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
+                              <span className="font-semibold text-xs text-foreground">{date}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-semibold">{count} visits</span>
+                            </div>
+                          </div>
+                          {!isDayCollapsed && (
+                            <div className="p-4">
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                {dayItems.map((row) => renderVisitCard(row))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </Card>
