@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ShieldCheck, ShieldAlert, ShieldX, PhoneCall, Search, MapPin, Clock,
-  Image as ImageIcon, AlertTriangle, User as UserIcon, Phone,
+  Image as ImageIcon, AlertTriangle, User as UserIcon, Phone, Download,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -122,15 +122,71 @@ const Verification = () => {
         verified_by: user?.id || null,
       })
       .eq("id", row.id);
-    setSaving(false);
+      
     if (error) {
       toast.error("Failed to update: " + error.message);
+      setSaving(false);
       return;
     }
-    toast.success(`Visit marked ${STATUS_META[status].label}`);
+
+    if (status === "verified_real") {
+      const leadData = {
+        name: row.contact_person || row.name,
+        organization: row.name,
+        category: "Society",
+        phone: row.contact_phone || "",
+        whatsapp: row.contact_phone ? row.contact_phone.replace(/[^0-9+]/g, "") : "",
+        source: "Field Visit",
+        heat: "Warm",
+        stage: "New",
+        quotation_status: "Not Sent",
+        payment_status: "Not Due",
+        lifecycle_stage: "Lead",
+        notes: notes || "Created automatically from verified field visit.",
+        assigned_to: row.employee_id
+      };
+      
+      const { error: leadError } = await supabase.from("leads").insert(leadData);
+      if (leadError) {
+         toast.error("Verified, but failed to create Lead: " + leadError.message);
+      } else {
+         toast.success("Visit marked Real and shifted to Leads tab!");
+      }
+    } else {
+      toast.success(`Visit marked ${STATUS_META[status].label}`);
+    }
+
+    setSaving(false);
     setNotesOpen(null);
     setNotes("");
     fetchRows();
+  };
+
+  const exportToCSV = () => {
+    const headers = ["Society Name", "Address", "Contact Person", "Phone", "Flats", "Employee", "Status", "Notes", "Date"];
+    const csvContent = [
+      headers.join(","),
+      ...visible.map(r => [
+        `"${(r.name || '').replace(/"/g, '""')}"`,
+        `"${(r.address || '').replace(/"/g, '""')}"`,
+        `"${(r.contact_person || '').replace(/"/g, '""')}"`,
+        `"${r.contact_phone || ''}"`,
+        `"${r.number_of_flats || ''}"`,
+        `"${(r.employees?.name || '').replace(/"/g, '""')}"`,
+        `"${STATUS_META[(r.verification_status || "pending") as VStatus]?.label || ''}"`,
+        `"${(r.verification_notes || '').replace(/"/g, '""')}"`,
+        `"${new Date(r.created_at).toLocaleString()}"`
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Verifications_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -167,14 +223,20 @@ const Verification = () => {
           );
         })}
         <div className="flex-1" />
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search society, address, employee, phone..."
-            className="pl-9 w-72"
-          />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportToCSV} className="h-9 hidden sm:flex">
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search society, address, employee, phone..."
+              className="pl-9 w-64 md:w-72 h-9"
+            />
+          </div>
         </div>
       </div>
 
